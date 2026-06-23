@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { font-size: 14px; }
+  body { background: #F5F6FA; color: #1a1a2e; }
+}
+
+@layer components {
+  .btn-navy {
+    @apply bg-[#0D1B35] text-white px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-[#152444] transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+           inline-flex items-center gap-2;
+  }
+  .btn-gold {
+    @apply bg-[#F5C072] text-[#0D1B35] px-4 py-2 rounded-lg text-sm font-medium
+           hover:bg-[#C9943A] transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+           inline-flex items-center gap-2;
+  }
+  .btn-outline {
+    @apply bg-white text-gray-600 border border-gray-200 px-3 py-2 rounded-lg text-sm
+           hover:bg-gray-50 transition-colors inline-flex items-center gap-2;
+  }
+  .card { @apply bg-white border border-gray-200 rounded-xl; }
+  .badge { @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-md; }
+  .badge-approved  { @apply bg-emerald-50  text-emerald-800; }
+  .badge-pending   { @apply bg-amber-50    text-amber-800; }
+  .badge-waiting   { @apply bg-red-50      text-red-700 ring-1 ring-red-200; }
+  .badge-closed    { @apply bg-gray-100    text-gray-600; }
+  .badge-exported  { @apply bg-blue-50     text-blue-800; }
+  .badge-rg        { @apply bg-blue-50     text-blue-800; }
+  .badge-ot        { @apply bg-orange-50   text-orange-800; }
+}
