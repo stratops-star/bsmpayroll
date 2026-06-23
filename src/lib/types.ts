@@ -1,11 +1,12 @@
 export type Tier = 'T1' | 'T2' | 'T3'
 export type ApprovalStatus = 'open' | 'approved' | 'pending' | 'waiting' | 'closed' | 'exported'
-export type EntryType = 'cover' | 'extra_hours'
+export type EntryType = 'cover' | 'extra_hours' | 'billable'
 
 export interface PorterEntry {
   id: string
   tier: Tier
   entryType: EntryType
+  entryTypeLabel?: string
   employeeNumber: string
   porterName: string
   manager: string
@@ -15,6 +16,7 @@ export interface PorterEntry {
   hoursType: string
   property: string
   propertyAddress: string
+  jobCode: string
   asanaLink: string
   asanaId: string
   rate: string
@@ -23,6 +25,18 @@ export interface PorterEntry {
   approvalStatus: ApprovalStatus
   isLastMinute: boolean
   closedReason?: string
+  porterStatus?: string
+  buildingStatus?: string
+  buildingMaxRate?: string
+  totalPay?: string
+  totalCharge?: string
+  isApartmentCleaned?: string
+  apartmentNumber?: string
+  extraDetails?: string
+  screenshotUrl?: string
+  service?: string
+  earning?: string
+  reasonForCoverage?: string
 }
 
 export interface ExportRecord {
