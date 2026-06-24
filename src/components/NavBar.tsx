@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 
@@ -17,9 +17,12 @@ interface NavBarProps {
 
 export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount }: NavBarProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const dir = TRANSLATIONS[lang].dir
+
+  const isDashboard = pathname === '/dashboard'
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -37,9 +40,17 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
     <header className="bg-[#0D1B35] h-[48px] px-4 flex items-center justify-between gap-3 relative z-50" dir={dir}>
       <div className="flex items-center gap-3 flex-shrink-0">
         <button onClick={() => router.push('/dashboard')}
-          className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0">B</button>
+          className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0"
+          title="Go to dashboard">B</button>
         <div className="w-px h-4 bg-white/15 hidden sm:block" />
-        <span className="text-white/50 text-xs hidden sm:block">{t(lang, 'nav_dashboard')}</span>
+        {isDashboard ? (
+          <span className="text-white/50 text-xs hidden sm:block">{t(lang, 'nav_dashboard')}</span>
+        ) : (
+          <button onClick={() => router.push('/dashboard')}
+            className="text-white/60 text-xs hover:text-white transition-colors hidden sm:flex items-center gap-1">
+            ← {t(lang, 'nav_dashboard')}
+          </button>
+        )}
       </div>
 
       {/* Desktop nav */}
@@ -71,7 +82,7 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
 
         {links.map(link => (
           <button key={link.href} onClick={() => router.push(link.href)}
-            className="text-white/55 text-xs hover:text-white transition-colors flex items-center gap-1.5">
+            className={`text-xs transition-colors flex items-center gap-1.5 ${pathname === link.href ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
             {link.label}
             {link.badge > 0 && (
               <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded">{link.badge}</span>
@@ -81,9 +92,7 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
 
         <div className="w-px h-4 bg-white/15" />
         <span className="text-white/35 text-xs truncate max-w-[120px]">{userEmail}</span>
-        <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">
-          {t(lang, 'nav_signout')}
-        </button>
+        <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">{t(lang, 'nav_signout')}</button>
       </div>
 
       {/* Mobile: lang + hamburger */}
@@ -108,19 +117,23 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
       {menuOpen && (
         <div className="absolute top-[48px] left-0 right-0 bg-[#0D1B35] border-t border-white/10 shadow-xl md:hidden z-50" dir={dir}>
           <div className="px-4 py-3 space-y-1">
+            {!isDashboard && (
+              <button onClick={() => { router.push('/dashboard'); setMenuOpen(false) }}
+                className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
+                ← {t(lang, 'nav_dashboard')}
+              </button>
+            )}
             {onRefresh && (
               <button onClick={() => { onRefresh(); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
-                <svg className={loading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                </svg>
+                <svg className={loading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
                 {t(lang, 'nav_refresh')}
                 {lastRefreshed && <span className="text-white/35 text-xs ml-auto">{lastRefreshed}</span>}
               </button>
             )}
             {links.map(link => (
               <button key={link.href} onClick={() => { router.push(link.href); setMenuOpen(false) }}
-                className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
+                className={`w-full text-left text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3 ${pathname === link.href ? 'text-[#D4A843]' : 'text-white/70 hover:text-white'}`}>
                 {link.label}
                 {link.badge > 0 && (
                   <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded ml-auto">{link.badge}</span>
