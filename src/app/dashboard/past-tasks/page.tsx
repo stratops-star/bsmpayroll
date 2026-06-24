@@ -18,12 +18,13 @@ interface ExportRow {
   rate: string
   property_address: string
   manager: string
+  asana_link: string
   entry_type: string
+  job: string
   filename: string
   period_start: string
   period_end: string
   exported_at: string
-  job: string
 }
 
 export default function PastTasksPage() {
@@ -71,7 +72,6 @@ export default function PastTasksPage() {
           }))
         }
       }
-      // Sort by exported_at descending
       allData.sort((a, b) => new Date(b.exported_at).getTime() - new Date(a.exported_at).getTime())
       setAllRows(allData)
     } catch (e) { console.error(e) }
@@ -84,19 +84,13 @@ export default function PastTasksPage() {
     r.property_address?.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Group by employee for summary
-  const employeeSummary = filtered.reduce((acc, row) => {
-    const key = row.employee_number
-    if (!acc[key]) acc[key] = { name: row.porter_name, emp: row.employee_number, count: 0, hours: 0 }
-    acc[key].count++
-    acc[key].hours += Number(row.hours || 0)
-    return acc
-  }, {} as Record<string, { name: string; emp: string; count: number; hours: number }>)
+  const employeeCount = new Set(filtered.map(r => r.employee_number)).size
+  const totalHours = filtered.reduce((s, r) => s + Number(r.hours || 0), 0)
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} />
-      <main className="max-w-5xl mx-auto px-5 py-6">
+      <main className="max-w-6xl mx-auto px-5 py-6">
         <div className="mb-5 flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-base font-semibold text-gray-900">Past Tasks</h1>
@@ -104,23 +98,21 @@ export default function PastTasksPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="bg-gray-100 px-2 py-1 rounded">{allRows.length} total entries</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">{Object.keys(employeeSummary).length} employees</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">{new Set(allRows.map(r => r.employee_number)).size} employees</span>
           </div>
         </div>
 
         {/* Search */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
-          <div className="flex gap-3">
-            <div className="flex items-center gap-2 flex-1 border border-gray-200 rounded-lg px-3 py-2">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Filter by employee name, number, or property…"
-                className="flex-1 border-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none" />
-              {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
-            </div>
+          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Filter by employee name, number, or property…"
+              className="flex-1 border-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none" />
+            {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕ Clear</button>}
           </div>
           {search && (
-            <p className="text-xs text-gray-400 mt-2">{filtered.length} result{filtered.length !== 1 ? 's' : ''} for "{search}"</p>
+            <p className="text-xs text-gray-400 mt-2">{filtered.length} result{filtered.length !== 1 ? 's' : ''} · {employeeCount} employee{employeeCount !== 1 ? 's' : ''} · {totalHours.toFixed(1)} hrs</p>
           )}
         </div>
 
@@ -145,7 +137,10 @@ export default function PastTasksPage() {
               <span className="text-sm font-medium text-gray-700">
                 {search ? `${filtered.length} entries matching "${search}"` : `All ${allRows.length} exported entries`}
               </span>
-              <span className="text-xs text-gray-400">🔒 Read only</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">Total hrs: <strong>{totalHours.toFixed(1)}</strong></span>
+                <span className="text-xs text-gray-400">🔒 Read only</span>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
@@ -158,6 +153,8 @@ export default function PastTasksPage() {
                     <th className="text-right text-xs font-medium text-gray-500 px-4 py-2.5">Hours</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Rate</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Type</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Job Code</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Asana</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Manager</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Export</th>
                   </tr>
@@ -169,13 +166,13 @@ export default function PastTasksPage() {
                         <div className="text-xs font-medium text-gray-900">{r.porter_name || '—'}</div>
                         <div className="text-xs text-gray-400 font-mono">#{r.employee_number}</div>
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">
-                        {r.period_start} → {r.period_end}
-                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{r.period_start} → {r.period_end}</td>
                       <td className="px-4 py-2.5 text-xs text-gray-600">{r.date_worked}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[160px] truncate">{r.property_address || '—'}</td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{r.property_address || '—'}</td>
                       <td className="px-4 py-2.5 text-xs text-right font-medium">{r.hours}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600">{r.rate ? `$${r.rate}/hr` : <span className="text-red-400">—</span>}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {r.rate ? <span className="text-gray-700 font-medium">${r.rate}/hr</span> : <span className="text-red-400">—</span>}
+                      </td>
                       <td className="px-4 py-2.5 text-xs">
                         <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
                           ${r.entry_type === 'billable' ? 'bg-purple-50 text-purple-700'
@@ -183,6 +180,12 @@ export default function PastTasksPage() {
                           : 'bg-blue-50 text-blue-700'}`}>
                           {r.entry_type === 'billable' ? 'Billable' : r.entry_type === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
                         </span>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{r.job || '—'}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {r.asana_link
+                          ? <a href={r.asana_link} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
+                          : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-gray-600">{r.manager || '—'}</td>
                       <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[120px] truncate">{r.filename}</td>
