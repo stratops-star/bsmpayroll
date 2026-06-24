@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import NavBar from '@/components/NavBar'
+import { Lang } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase-browser'
 
 const SECTIONS = [
@@ -74,11 +76,71 @@ Employee receives: Base Rate + Holiday Premium (1.5×) + Supplement
 Verify holiday calculations before payroll approval.` },
   { id:'svpto', title:'7. PTO, Sick & Vacation Payouts', content:`Payouts are processed on the 1st and 15th of the Month.
 
-Payroll Specialist Responsibilities:
-- Verify balances
-- Verify approvals
-- Process payout
-- Document payout` },
+─── ELIGIBILITY ───────────────────────────────
+Prevailing Wage employees become eligible for Vacation and Sick benefits 60 days after their Start Date.
+
+Example:
+  Start Date:         January 1, 2026
+  Eligibility Begins: March 1, 2026
+
+─── 10-MONTH PAYMENT RULE ─────────────────────
+Once eligible, Vacation and Sick benefits are paid for 10 consecutive months.
+
+Eligible months (using Jan 1 start):
+  March · April · May · June · July
+  August · September · October · November · December
+
+No payments during: January · February
+
+─── ANNUAL RESET ──────────────────────────────
+The benefit cycle resets each year based on the employee's original Start Date.
+
+  Year 1: March 2026 – December 2026
+  Year 2: March 2027 – December 2027
+  Year 3: March 2028 – December 2028
+
+─── PTO ELIGIBILITY ───────────────────────────
+PTO follows a different rule — employees become eligible after completing TWO years of employment.
+
+Example:
+  Start Date:        January 1, 2026
+  PTO Eligibility:   January 1, 2028
+
+Once eligible, PTO payments are calculated based on contracted hours and follow the employee's eligibility schedule.
+
+─── PAYROLL SPECIALIST VERIFICATION ───────────
+Step 1: Verify employee is Prevailing Wage
+Step 2: Verify building participation requirements
+Step 3: Verify employee Start Date
+Step 4: Determine employee's current eligibility month
+Step 5: Confirm employee is within their annual 10-month payment period
+Step 6: Verify contracted hours
+Step 7: Calculate payable benefit hours
+Step 8: Process payment
+Step 9: Document any exceptions
+
+Eligibility is driven by: Start Date · Prevailing Wage Status · Contracted Hours · Building Participation · Length of Service
+
+Always calculate eligibility from the employee's original Start Date.
+
+─── EARNINGS CODES ────────────────────────────
+MANUAL BENEFIT ENTRIES:
+  SK       Manual Sick           — Manual sick payment adjustment or correction
+  VA       Manual Vacation       — Manual vacation payment adjustment or correction
+  PTO|PW   PTO Prevailing Wage   — Prevailing wage PTO payment
+
+AUTOMATIC BENEFIT ENTRIES:
+  SK1      Auto First Sick       — Generated when employee first becomes eligible
+  VA1      Auto First Vacation   — Generated when employee first becomes eligible
+  SK115    Sick 1st & 15th       — For buildings using 1st & 15th payment structure
+  VA115    Vacation 1st & 15th   — For buildings using 1st & 15th payment structure
+  PTO115   PTO 1st & 15th        — For buildings using 1st & 15th payment structure
+
+SK1 and VA1 are used ONLY for the employee's initial benefit payment after becoming eligible.
+After the initial payment, employee moves to recurring benefit schedule based on:
+  Building participation · Contract hours · Start Date · Benefit type · Eligibility rules
+
+Always verify the employee's eligibility before processing any manual benefit adjustment.` },
   { id:'onboarding', title:'8. Employee Onboarding', content:`Employee Setup Includes:
 1. Accounting Allocation
 2. Profile Controls
@@ -179,6 +241,12 @@ export default function RulesPage() {
   const supabase = createClient()
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
+  const [search, setSearch] = useState('')
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('bsm_lang') as Lang) || 'en'
+    return 'en'
+  })
+  function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -195,52 +263,75 @@ export default function RulesPage() {
     setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
 
+  const filtered = SECTIONS.filter(s =>
+    !search.trim() ||
+    s.title.toLowerCase().includes(search.toLowerCase()) ||
+    s.content.toLowerCase().includes(search.toLowerCase())
+  )
+
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <header className="bg-[#0D1B35] h-[48px] px-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs">B</div>
-          <div className="w-px h-4 bg-white/15" />
-          <span className="text-white/50 text-xs">Payroll Rules & Questions</span>
-        </div>
-        <button onClick={() => router.push('/dashboard')} className="text-white/55 text-xs hover:text-white">← Dashboard</button>
-      </header>
+      <NavBar lang={lang} onLangChange={switchLang} />
       <main className="max-w-5xl mx-auto px-5 py-6">
-        <div className="mb-6">
+        <div className="mb-5">
           <h1 className="text-lg font-semibold text-gray-900">Payroll Rules & Questions</h1>
           <p className="text-sm text-gray-500 mt-1">BSM Facility Solutions — Payroll Specialist Training Manual v1.0</p>
         </div>
-        <div className="grid grid-cols-[220px_1fr] gap-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-4 h-fit sticky top-6">
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search rules… (e.g. overtime, holiday, prevailing wage, SK1, cover pay)"
+            className="flex-1 border-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none" />
+          {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕ Clear</button>}
+          {search && <span className="text-xs text-gray-400">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 h-fit md:sticky top-6">
             <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Sections</div>
             <nav className="space-y-0.5">
               {SECTIONS.map(s => (
-                <a key={s.id} href={`#${s.id}`} className="block text-xs text-gray-600 hover:text-[#0D1B35] py-1.5 px-2 rounded-lg hover:bg-gray-50 transition-colors">{s.title}</a>
+                <a key={s.id} href={`#${s.id}`}
+                  className={`block text-xs py-1.5 px-2 rounded-lg transition-colors ${
+                    search && (s.title.toLowerCase().includes(search.toLowerCase()) || s.content.toLowerCase().includes(search.toLowerCase()))
+                      ? 'text-[#D4A843] font-medium bg-amber-50'
+                      : 'text-gray-600 hover:text-[#0D1B35] hover:bg-gray-50'
+                  }`}>{s.title}
+                </a>
               ))}
               <a href="#notes" className="block text-xs text-[#D4A843] font-medium py-1.5 px-2 rounded-lg hover:bg-amber-50 transition-colors mt-2">📝 My Notes</a>
             </nav>
           </div>
           <div className="space-y-4">
-            {SECTIONS.map(section => (
-              <div key={section.id} id={section.id} className="bg-white border border-gray-200 rounded-xl p-6">
+            {filtered.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+                <div className="text-2xl mb-2">🔍</div>
+                <div className="text-sm text-gray-500">No results for "{search}"</div>
+                <button onClick={() => setSearch('')} className="text-xs text-[#D4A843] mt-2 hover:underline">Clear search</button>
+              </div>
+            ) : filtered.map(section => (
+              <div key={section.id} id={section.id} className={`bg-white border rounded-xl p-6 ${
+                search && (section.title.toLowerCase().includes(search.toLowerCase()) || section.content.toLowerCase().includes(search.toLowerCase()))
+                  ? 'border-[#D4A843]/40 bg-amber-50/20' : 'border-gray-200'}`}>
                 <h2 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-100">{section.title}</h2>
                 <pre className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap font-sans">{section.content}</pre>
               </div>
             ))}
-            <div id="notes" className="bg-white border border-[#D4A843]/40 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-900">📝 My Personal Notes & Reminders</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">Private notes visible only to you</p>
+            {!search && (
+              <div id="notes" className="bg-white border border-[#D4A843]/40 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900">📝 My Personal Notes & Reminders</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Private notes visible only to you</p>
+                  </div>
+                  <button onClick={saveNote} className="bg-[#D4A843] text-[#0D1B35] px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#C49A38]">
+                    {saved ? '✓ Saved!' : 'Save notes'}
+                  </button>
                 </div>
-                <button onClick={saveNote} className="bg-[#D4A843] text-[#0D1B35] px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#C49A38]">
-                  {saved ? '✓ Saved!' : 'Save notes'}
-                </button>
+                <textarea value={note} onChange={e => setNote(e.target.value)}
+                  placeholder="Add your personal notes, reminders, special cases, or anything you want to remember here…"
+                  className="w-full h-40 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#D4A843]/30 focus:border-[#D4A843] resize-none leading-relaxed" />
               </div>
-              <textarea value={note} onChange={e => setNote(e.target.value)}
-                placeholder="Add your personal notes, reminders, special cases, or anything you want to remember here…"
-                className="w-full h-40 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#D4A843]/30 focus:border-[#D4A843] resize-none leading-relaxed" />
-            </div>
+            )}
           </div>
         </div>
       </main>
