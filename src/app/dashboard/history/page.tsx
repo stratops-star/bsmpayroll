@@ -40,7 +40,10 @@ export default function HistoryPage() {
     const res = await fetch(`/api/history/${exp.id}`, { headers: { Authorization: `Bearer ${token}` } })
     if (res.ok) {
       const blob = await res.blob()
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = exp.filename; a.click()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = exp.filename
+      a.click()
     }
     setDownloading(null)
   }
@@ -51,17 +54,24 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} />
-
       <main className="px-5 py-5 max-w-5xl mx-auto">
-        <div className="flex items-start justify-between mb-5">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
             <h1 className="text-base font-semibold text-gray-900">Fingercheck export history</h1>
-            <p className="text-sm text-gray-500 mt-0.5">All CSV exports — click Download to re-download any file</p>
+            <p className="text-sm text-gray-500 mt-0.5">All CSV exports — click ↓ to re-download any file</p>
           </div>
+          <button onClick={() => router.push('/dashboard')}
+            className="text-xs px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+            ← Back to Dashboard
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
-          {[['Total exports', exports.length], ['Total entries', totalEntries.toLocaleString()], ['Total hours', totalHours.toFixed(1)]].map(([label, val]) => (
+          {[
+            ['Total exports', exports.length],
+            ['Total entries', totalEntries.toLocaleString()],
+            ['Total hours', totalHours.toFixed(1)]
+          ].map(([label, val]) => (
             <div key={label} className="card p-4">
               <div className="text-xl font-semibold text-gray-900">{val}</div>
               <div className="text-xs text-gray-500 mt-1">{label}</div>
@@ -70,22 +80,31 @@ export default function HistoryPage() {
         </div>
 
         <div className="card overflow-hidden">
-          <div className="grid grid-cols-[1fr_100px_160px_110px_80px] gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+          <div className="grid grid-cols-[1fr_110px_170px_120px_70px] gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
             {['File', 'Pay period', 'Date & time (EST)', 'Entries', ''].map(h => (
               <span key={h} className="text-xs font-medium text-gray-500">{h}</span>
             ))}
           </div>
 
           {loading && <div className="py-12 text-center text-sm text-gray-400">Loading…</div>}
-          {!loading && !exports.length && <div className="py-12 text-center text-sm text-gray-400">No exports yet — they'll appear here after your first download</div>}
+          {!loading && !exports.length && (
+            <div className="py-12 text-center text-sm text-gray-400">
+              No exports yet — they'll appear here after your first download
+            </div>
+          )}
 
           {exports.map((exp, i) => {
             const exportedAt = new Date(exp.exported_at)
-            const estStr = exportedAt.toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+            const estStr = exportedAt.toLocaleString('en-US', {
+              timeZone: 'America/New_York',
+              weekday: 'short', month: 'short', day: 'numeric',
+              hour: 'numeric', minute: '2-digit', hour12: true
+            })
             const pStart = new Date(exp.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             const pEnd = new Date(exp.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             return (
-              <div key={exp.id} className={`grid grid-cols-[1fr_100px_160px_110px_80px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50 transition-colors ${i < exports.length - 1 ? 'border-b border-gray-100' : ''}`}>
+              <div key={exp.id}
+                className={`grid grid-cols-[1fr_110px_170px_120px_70px] gap-3 px-4 py-3.5 items-center hover:bg-gray-50 transition-colors ${i < exports.length - 1 ? 'border-b border-gray-100' : ''}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 bg-[#FEF6E7] border border-[#F5C072]/30 rounded-lg flex items-center justify-center flex-shrink-0">
                     <span className="text-[#C9943A] text-xs font-bold">FC</span>
@@ -100,9 +119,11 @@ export default function HistoryPage() {
                   <div className="text-xs text-gray-900">{estStr}</div>
                   <div className="text-xs text-gray-400 mt-0.5">EST</div>
                 </div>
-                <span className="text-xs font-medium px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 whitespace-nowrap">{exp.total_entries} · {Number(exp.total_hours).toFixed(1)} hrs</span>
+                <span className="text-xs font-medium px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 whitespace-nowrap">
+                  {exp.total_entries} · {Number(exp.total_hours).toFixed(1)} hrs
+                </span>
                 <button onClick={() => redownload(exp)} disabled={downloading === exp.id}
-                  className="btn-outline text-xs py-1.5 justify-center">
+                  className="btn-outline text-xs py-1.5 justify-center w-full">
                   {downloading === exp.id ? '…' : '↓'}
                 </button>
               </div>
