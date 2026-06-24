@@ -1,10 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const DOMAIN = 'bsmfacilitysolutions.com'
+
+const ALLOWED_EMAILS = [
+  'strat.ops@bsmfacilitysolutions.com',
+  'pinny@bsmfacilitysolutions.com',
+  'payroll@bsmfacilitysolutions.com',
+]
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -13,12 +19,27 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [gLoading, setGLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const err = searchParams.get('error')
+    if (err === 'unauthorized') {
+      setError('Access denied — your account is not authorized for this application.')
+    } else if (err === 'auth_failed') {
+      setError('Authentication failed — please try again.')
+    }
+  }, [searchParams])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (!email.toLowerCase().endsWith(`@${DOMAIN}`)) {
+    const emailLower = email.toLowerCase()
+    if (!emailLower.endsWith(`@${DOMAIN}`)) {
       setError(`Only @${DOMAIN} accounts are allowed.`)
+      return
+    }
+    if (!ALLOWED_EMAILS.includes(emailLower)) {
+      setError('Access denied — your account is not authorized for this application.')
       return
     }
     setLoading(true)
@@ -87,7 +108,7 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-        <p className="text-center text-xs text-gray-400 mt-5">Access restricted to @{DOMAIN} accounts only</p>
+        <p className="text-center text-xs text-gray-400 mt-5">Access restricted to authorized BSM accounts only</p>
       </div>
     </div>
   )
