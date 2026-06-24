@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
 
 const ALLOWED_EMAILS = [
   'strat.ops@bsmfacilitysolutions.com',
@@ -15,7 +15,12 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get('next') || '/dashboard'
 
   if (code) {
-    const supabase = createServerClient()
+    // Use ANON key for OAuth code exchange — service role key doesn't work here
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && data.user) {
@@ -23,7 +28,6 @@ export async function GET(request: NextRequest) {
 
       // Check whitelist
       if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
-        // Sign them out immediately
         await supabase.auth.signOut()
         return NextResponse.redirect(
           new URL('/login?error=unauthorized', request.url)
