@@ -27,16 +27,17 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
   }
 
   const links = [
-    { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks' },
-    { label: t(lang, 'nav_exported_files'), href: '/dashboard/history', badge: exportCount },
-    { label: t(lang, 'nav_tutorial'),       href: '/dashboard/help' },
-    { label: t(lang, 'nav_payroll_rules'),  href: '/dashboard/rules' },
+    { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks', badge: 0 },
+    { label: t(lang, 'nav_exported_files'), href: '/dashboard/history',    badge: exportCount && exportCount > 0 ? exportCount : 0 },
+    { label: t(lang, 'nav_tutorial'),       href: '/dashboard/help',       badge: 0 },
+    { label: t(lang, 'nav_payroll_rules'),  href: '/dashboard/rules',      badge: 0 },
   ]
 
   return (
     <header className="bg-[#0D1B35] h-[48px] px-4 flex items-center justify-between gap-3 relative z-50" dir={dir}>
       <div className="flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => router.push('/dashboard')} className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0">B</button>
+        <button onClick={() => router.push('/dashboard')}
+          className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0">B</button>
         <div className="w-px h-4 bg-white/15 hidden sm:block" />
         <span className="text-white/50 text-xs hidden sm:block">{t(lang, 'nav_dashboard')}</span>
       </div>
@@ -51,6 +52,7 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
             </button>
           ))}
         </div>
+
         {onRefresh && (
           <div className="relative group">
             <button onClick={onRefresh} disabled={loading}
@@ -66,18 +68,22 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
             )}
           </div>
         )}
+
         {links.map(link => (
           <button key={link.href} onClick={() => router.push(link.href)}
             className="text-white/55 text-xs hover:text-white transition-colors flex items-center gap-1.5">
             {link.label}
-            {link.badge && link.badge > 0 && (
+            {link.badge > 0 && (
               <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded">{link.badge}</span>
             )}
           </button>
         ))}
+
         <div className="w-px h-4 bg-white/15" />
         <span className="text-white/35 text-xs truncate max-w-[120px]">{userEmail}</span>
-        <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">{t(lang, 'nav_signout')}</button>
+        <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">
+          {t(lang, 'nav_signout')}
+        </button>
       </div>
 
       {/* Mobile: lang + hamburger */}
@@ -105,7 +111,9 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
             {onRefresh && (
               <button onClick={() => { onRefresh(); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
-                <svg className={loading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                <svg className={loading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
                 {t(lang, 'nav_refresh')}
                 {lastRefreshed && <span className="text-white/35 text-xs ml-auto">{lastRefreshed}</span>}
               </button>
@@ -114,7 +122,7 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
               <button key={link.href} onClick={() => { router.push(link.href); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
                 {link.label}
-                {link.badge && link.badge > 0 && (
+                {link.badge > 0 && (
                   <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded ml-auto">{link.badge}</span>
                 )}
               </button>
