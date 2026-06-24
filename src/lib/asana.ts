@@ -1,4 +1,8 @@
 const BASE = 'https://app.asana.com/api/1.0'
+// Billing user GID — billing@bsmfacilitysolutions.com
+// To find: go to app.asana.com, open any task assigned to billing@, 
+// click their avatar, copy the GID from the URL
+const BILLING_USER_GID = process.env.ASANA_BILLING_USER_GID || ''
 
 async function asanaRequest(path: string, method: string, body?: object) {
   const res = await fetch(`${BASE}${path}`, {
@@ -13,13 +17,30 @@ async function asanaRequest(path: string, method: string, body?: object) {
   return res.json()
 }
 
-export async function postEntered(taskId: string, start: string, end: string) {
+export async function postEntered(
+  taskId: string,
+  start: string,
+  end: string,
+  entryType: 'cover' | 'extra_hours' | 'billable' = 'cover'
+) {
   if (!taskId) return { success: false }
   try {
+    // Post "entered" comment on all entry types
     await asanaRequest(`/tasks/${taskId}/stories`, 'POST', {
       text: `entered - ${start} to ${end}`
     })
-    await asanaRequest(`/tasks/${taskId}`, 'PUT', { completed: true })
+
+    if (entryType === 'cover') {
+      // Cover: mark task complete
+      await asanaRequest(`/tasks/${taskId}`, 'PUT', { completed: true })
+    } else {
+      // Extra Hours + Billable: assign to billing, do NOT complete
+      if (BILLING_USER_GID) {
+        await asanaRequest(`/tasks/${taskId}`, 'PUT', {
+          assignee: BILLING_USER_GID
+        })
+      }
+    }
     return { success: true }
   } catch (e: any) {
     return { success: false, error: e.message }
