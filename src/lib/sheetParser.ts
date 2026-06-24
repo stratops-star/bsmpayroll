@@ -22,7 +22,10 @@ async function fetchTab(gid: string): Promise<Record<string, string>[]> {
 }
 
 function g(row: Record<string, string>, ...keys: string[]): string {
-  for (const k of keys) { const v = row[k]?.trim(); if (v) return v }
+  for (const k of keys) {
+    const v = row[k]?.trim()
+    if (v) return v
+  }
   return ''
 }
 
@@ -76,6 +79,32 @@ export async function fetchAllTiers(
     buildJobCodeMap(),
   ])
 
+  // Build T3 parent map: parentId → { asanaLink, asanaId, manager, status }
+  const t3ParentMap = new Map<string, {
+    asanaLink: string
+    asanaId: string
+    manager: string
+    status: string
+    coverDay: string
+    property: string
+    propertyAddress: string
+  }>()
+
+  for (const row of t3m) {
+    const id = g(row, 'ID')
+    if (!id) continue
+    t3ParentMap.set(id.trim(), {
+      asanaLink: g(row, 'Asana Link', 'ASANA LINK', 'asana link'),
+      asanaId: g(row, 'ASANA ID', 'Asana ID', 'asana id'),
+      manager: g(row, 'Manager', 'MANAGER'),
+      status: g(row, 'Status', 'STATUS'),
+      coverDay: g(row, 'Coverage Date', 'Coverage D', 'Date', 'Coverage Day'),
+      property: g(row, 'Property', 'PROPERTY'),
+      propertyAddress: g(row, 'Property Address', 'Full Address Info'),
+    })
+  }
+
+  // T1
   const T1: PorterEntry[] = t1.map(row => {
     const coverDay = g(row, 'Cover Day ', 'Cover Day')
     const cd = parseDate(coverDay)
@@ -119,6 +148,7 @@ export async function fetchAllTiers(
     } as PorterEntry
   }).filter((e): e is PorterEntry => !!e && inPeriod(e) && notClosed(e))
 
+  // T2
   const T2: PorterEntry[] = [...t2m, ...t2c].map(row => {
     const coverDay = g(row, 'Cover Day ', 'Cover Day')
     const cd = parseDate(coverDay)
@@ -163,43 +193,64 @@ export async function fetchAllTiers(
     } as PorterEntry
   }).filter((e): e is PorterEntry => !!e && inPeriod(e) && notClosed(e))
 
-  const T3: PorterEntry[] = [...t3m, ...t3c].map((row, i) => {
-    const isChild = i >= t3m.length
-    const coverDay = isChild ? g(row, 'Date') : g(row, 'Cover Day ', 'Cover Day')
-    const cd = parseDate(coverDay)
+  // T3 — join child rows with parent data
+  const T3: PorterEntry[] = t3c.map(row => {
+    // Get parent ID from child row column "ID"
+    const parentId = g(row, 'ID')
+    if (!parentId) return null
+
+    // Look up parent data
+    const parent = t3ParentMap.get(parentId.trim())
+
     const hrs = parseFloat(g(row, 'How many Hours?', 'How many hours?', 'Hours')) || 0
-    const porter = isChild ? g(row, 'Concierge or Security ID') : g(row, 'Porter')
+    const porter = g(row, 'Concierge or Security ID', 'Concierge or Sec')
     if (!porter || !hrs) return null
-    const subDay = g(row, 'Submission Day ', 'Submission Day')
-    const subDate = parseDate(subDay)
-    const propertyId = g(row, 'Property')
-    const entryTypeRaw = g(row, 'Is this a coverage or extra hours?', 'Is this a cover or extra hours?')
+
+    // Get date from child row first, fall back to parent
+    const coverDayRaw = g(row, 'Date') || (parent?.coverDay || '')
+    const cd = parseDate(coverDayRaw)
+
+    // Get property ID from child row for job code lookup
+    const propertyId = g(row, 'Address I', 'Address ID', 'Property')
+    const jobCode = jobCodeMap.get(propertyId) || ''
+
+    // Get address from child row
+    const propertyAddress = g(row, 'Full Address Info', 'Property Address')
+
+    // Status — if parent is closed, child is closed
+    const status = parent?.status || g(row, 'Status', 'STATUS')
+
+    const entryTypeRaw = g(row, 'Is this a coverage or extra hours?', 'Is this a cover or extra hours?', 'Reason for Coverage')
     const entryType = resolveEntryType(entryTypeRaw)
+
+    // Use parent's submission day as approximate
+    const subDate = cd
+
     return {
-      id: isChild ? g(row, 'APP ID') : g(row, 'ID') || `t3-${Math.random()}`,
+      id: g(row, 'APP ID') || `t3-${Math.random()}`,
       tier: 'T3' as Tier,
       entryType,
       entryTypeLabel: entryTypeLabel(entryType),
       employeeNumber: porter,
-      porterName: isChild ? g(row, 'Concierge or Security Full Name') : g(row, 'Porter Name', 'Who is doing the covering?'),
-      manager: isChild ? g(row, 'MANAGER') : g(row, 'Manager'),
-      coverDay: cd ? cd.toISOString().split('T')[0] : coverDay,
-      submissionDay: subDate ? subDate.toISOString().split('T')[0] : subDay,
+      porterName: g(row, 'Concierge or Security Full Name'),
+      manager: parent?.manager || g(row, 'MANAGER', 'Manager'),
+      coverDay: cd ? cd.toISOString().split('T')[0] : coverDayRaw,
+      submissionDay: cd ? cd.toISOString().split('T')[0] : coverDayRaw,
       hours: hrs,
-      hoursType: 'Regular',
+      hoursType: g(row, 'EARNING', 'Earning') === 'OT' ? 'OT' : 'Regular',
       property: propertyId,
-      propertyAddress: isChild ? g(row, 'Full Address Info') : g(row, 'Property Address'),
-      jobCode: jobCodeMap.get(propertyId) || '',
-      asanaLink: g(row, 'Asana Link'),
-      asanaId: g(row, 'ASANA ID'),
-      rate: isChild ? g(row, 'RATE') : '',
-      status: g(row, 'Status'),
+      propertyAddress,
+      jobCode,
+      // Pull Asana link and ID from PARENT row
+      asanaLink: parent?.asanaLink || '',
+      asanaId: parent?.asanaId || '',
+      rate: g(row, 'RATE', 'Rate') || '',
+      status,
       approvalStatus: 'open',
       isLastMinute: subDate ? isLastMinute(subDate, end) : false,
-      service: isChild ? g(row, 'SERVICE') : g(row, 'Which Service?'),
-      earning: isChild ? g(row, 'EARNING') : '',
-      reasonForCoverage: isChild ? g(row, 'Reason for Coverage') : '',
-      buildingMaxRate: g(row, 'Building Max Rate'),
+      service: g(row, 'SERVICE', 'Service'),
+      earning: g(row, 'EARNING', 'Earning'),
+      reasonForCoverage: g(row, 'Reason for Coverage'),
       extraDetails: g(row, 'Details', 'Extra Details'),
     } as PorterEntry
   }).filter((e): e is PorterEntry => !!e && inPeriod(e) && notClosed(e))
