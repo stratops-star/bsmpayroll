@@ -1,29 +1,246 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 import { Lang } from '@/lib/i18n'
+import { createClient } from '@/lib/supabase-browser'
 
-const STEPS = [
-  { id:'overview', title:'Overview', body:'The BSM Payroll Dashboard pulls porter cover, extra hours, and billable hours data from three Google Sheets (Tier 1, Tier 2, Tier 3), lets you review and approve entries, and exports a single Fingercheck-formatted CSV. It automatically posts comments and completes Asana tasks on approval.' },
-  { id:'login', title:'Logging in', body:'Go to bsm-payroll.vercel.app. Sign in with your @bsmfacilitysolutions.com Google account or email and password. The dashboard auto-loads the current pay period immediately after login.' },
-  { id:'loading', title:'Loading entries', body:'The app auto-loads the current pay period (Wed → Tue) on login. Change dates and click Load to view a different period. Click the ↻ icon in the nav to refresh at any time. Hover over ↻ to see last refresh time.' },
-  { id:'tiers', title:'Tier tabs', body:'Three tiers — Tier 1, Tier 2, Tier 3 — each reading from separate Google Sheet tabs. Click any mini dashboard card to switch tiers. Each tier has tabs: Approved, Pending, Waiting ⚡, Billing, Errors, Closed, Exported.' },
-  { id:'errors', title:'Errors tab', body:'Any entry missing a job code, Asana link, or rate appears in the Errors tab with a red badge. The Approve button is blocked (🚫) until all issues are fixed. Enter the rate in the accordion row and it moves out automatically.' },
-  { id:'approving', title:'Approving entries', body:'Find an entry in Pending or Waiting ⚡. Click the row to expand the accordion. Enter the rate. Click ✓ Approve. The app posts "entered — [dates]" on the Asana task AND marks it complete. Rate, job code, and Asana link are all required.' },
-  { id:'billing', title:'Billable entries', body:'Entries with type "BILLABLE EXTRA HOURS" route to the Billing tab automatically. Click ✓ Bill to approve them for billing records. These are tracked separately from regular cover entries.' },
-  { id:'closing', title:'Closing entries', body:'Click Close on any entry to exclude it from export. Enter a reason. Closed entries stay in the Closed tab permanently. Use ↩ Reopen within 14 days of approval. After 14 days entries are locked (🔒) and cannot be reopened.' },
-  { id:'exporting', title:'Exporting to Fingercheck', body:'Click Export approved. Review the T1+T2+T3 totals. Click Download CSV. Upload to Fingercheck via mass import. After export: entries move to Exported tab, Asana tasks get "entered" comment and are marked complete, a frozen snapshot saves to history.' },
-  { id:'history', title:'Exported Files', body:'Click Exported Files in the nav to see every past Fingercheck CSV. Re-download any file — the snapshot is frozen, sheet edits after export do not affect records.' },
-  { id:'past', title:'Past Tasks', body:'Click Past Tasks in the nav. Enter any employee number or name to see every pay period they appeared in, with hours, rate, job code, and export file. Read only.' },
-  { id:'banners', title:'Reminders & banners', body:'Blue banner = upcoming federal holiday pay (7 days before). Amber banner = SVPTO reminder (7 days before end of month). Amber banner = 1st & 15th Rule reminder (7 days before). All dismissible with ✕.' },
-  { id:'language', title:'Language switcher', body:'Click EN / ES / יי in the nav bar to switch between English, Spanish, and Yiddish. Your preference is saved automatically. Yiddish switches the layout to right-to-left.' },
-  { id:'rules', title:'Payroll Rules', body:'Click Payroll Rules in the nav to access the full BSM Payroll Specialist Training Manual v1.0, covering overtime rules, prevailing wage, holiday pay, cover pay rates, and more. Add personal notes at the bottom — they save automatically to your account.' },
+const SECTIONS = [
+  { id:'overview', title:'1. Role Overview', content:`The Payroll Specialist is responsible for ensuring employees are paid accurately and on time while maintaining compliance with company policies, prevailing wage requirements, payroll regulations, and client contract obligations.
+
+Primary responsibilities include:
+- Weekly payroll processing
+- Prevailing wage administration
+- New employee onboarding
+- Rate changes
+- Direct deposit updates
+- Garnishment administration
+- Earnings and deduction adjustments
+- PTO, Sick and Vacation payouts
+- Payroll documentation
+- Fingercheck administration` },
+  { id:'calendar', title:'2. Payroll Calendar & Deadlines', content:`Pay Period: Wednesday through Tuesday
+Payday: Friday
+
+Submission Deadlines:
+- Tier 1: Tuesday by 10:00 PM
+- Tier 2: Tuesday by 10:00 PM
+- Tier 3: Wednesday by 7:00 AM
+
+Failure to meet deadlines may result in payroll delays.` },
+  { id:'process', title:'3. Weekly Payroll Process', content:`Step 1: Review employee hours
+Step 2: Review missing punches
+Step 3: Review overtime
+Step 4: Review prevailing wage employees
+Step 5: Review PTO, Sick, and Vacation requests
+Step 6: Review rate changes
+Step 7: Review garnishments
+Step 8: Review direct deposit updates
+Step 9: Review earnings and deductions
+Step 10: Review holiday pay
+Step 11: Review payroll totals
+Step 12: Approve payroll before deadline` },
+  { id:'prevailing', title:'4. Prevailing Wage Administration', content:`The HR Prevailing Sheet is the source of truth for:
+- Prevailing wage assignments
+- Wage rates
+- Employee classifications
+- Building assignments
+
+Prevailing wage employees must always be paid at their assigned prevailing wage rate.
+
+Never substitute base rates, cover rates, or standard building rates unless specifically approved.` },
+  { id:'overtime', title:'5. Overtime Rules', content:`Standard overtime applies after 40 hours worked.
+
+Special OT Rule applies when an employee works both Regular Rate and Prevailing Wage Rate during the same payroll period. Use the OT Prevailing Wage Calculator.
+
+OT Rate $8.25:
+- Abel Hernandez (34)
+- Miguel Gomez (911)
+- Alianni Quinal (12)
+Formula: (Total Hours - 40) × 8.25
+
+OT Rate $10.00:
+- Freddy Arboleada (10017)
+Formula: (Total Hours - 40) × 10.00` },
+  { id:'holidays', title:'6. Holiday Pay Policy', content:`Federal Holidays: New Year's Day, MLK Jr. Day, Presidents Day, Memorial Day, Juneteenth, Independence Day, Labor Day, Columbus Day, Veterans Day, Thanksgiving Day, Christmas Day
+
+Scenario 1 — Building Closed:
+- Employee does not report
+- Employee receives scheduled hours at their assigned rate
+- Prevailing Wage employees receive their prevailing wage rate
+
+Scenario 2 — Building Open:
+Employee receives: Base Rate + Holiday Premium (1.5×) + Supplement
+
+Verify holiday calculations before payroll approval.` },
+  { id:'svpto', title:'7. PTO, Sick & Vacation Payouts', content:`Payouts are processed on the 1st and 15th of the Month.
+
+─── ELIGIBILITY ───────────────────────────────
+Prevailing Wage employees become eligible for Vacation and Sick benefits 60 days after their Start Date.
+
+Example:
+  Start Date:         January 1, 2026
+  Eligibility Begins: March 1, 2026
+
+─── 10-MONTH PAYMENT RULE ─────────────────────
+Once eligible, Vacation and Sick benefits are paid for 10 consecutive months.
+
+Eligible months (using Jan 1 start):
+  March · April · May · June · July
+  August · September · October · November · December
+
+No payments during: January · February
+
+─── ANNUAL RESET ──────────────────────────────
+The benefit cycle resets each year based on the employee's original Start Date.
+
+  Year 1: March 2026 – December 2026
+  Year 2: March 2027 – December 2027
+  Year 3: March 2028 – December 2028
+
+─── PTO ELIGIBILITY ───────────────────────────
+PTO follows a different rule — employees become eligible after completing TWO years of employment.
+
+Example:
+  Start Date:        January 1, 2026
+  PTO Eligibility:   January 1, 2028
+
+Once eligible, PTO payments are calculated based on contracted hours and follow the employee's eligibility schedule.
+
+─── PAYROLL SPECIALIST VERIFICATION ───────────
+Step 1: Verify employee is Prevailing Wage
+Step 2: Verify building participation requirements
+Step 3: Verify employee Start Date
+Step 4: Determine employee's current eligibility month
+Step 5: Confirm employee is within their annual 10-month payment period
+Step 6: Verify contracted hours
+Step 7: Calculate payable benefit hours
+Step 8: Process payment
+Step 9: Document any exceptions
+
+Eligibility is driven by: Start Date · Prevailing Wage Status · Contracted Hours · Building Participation · Length of Service
+
+Always calculate eligibility from the employee's original Start Date.
+
+─── EARNINGS CODES ────────────────────────────
+MANUAL BENEFIT ENTRIES:
+  SK       Manual Sick           — Manual sick payment adjustment or correction
+  VA       Manual Vacation       — Manual vacation payment adjustment or correction
+  PTO|PW   PTO Prevailing Wage   — Prevailing wage PTO payment
+
+AUTOMATIC BENEFIT ENTRIES:
+  SK1      Auto First Sick       — Generated when employee first becomes eligible
+  VA1      Auto First Vacation   — Generated when employee first becomes eligible
+  SK115    Sick 1st & 15th       — For buildings using 1st & 15th payment structure
+  VA115    Vacation 1st & 15th   — For buildings using 1st & 15th payment structure
+  PTO115   PTO 1st & 15th        — For buildings using 1st & 15th payment structure
+
+SK1 and VA1 are used ONLY for the employee's initial benefit payment after becoming eligible.
+After the initial payment, employee moves to recurring benefit schedule based on:
+  Building participation · Contract hours · Start Date · Benefit type · Eligibility rules
+
+Always verify the employee's eligibility before processing any manual benefit adjustment.` },
+  { id:'onboarding', title:'8. Employee Onboarding', content:`Employee Setup Includes:
+1. Accounting Allocation
+2. Profile Controls
+3. Pay Group Assignment
+4. Tax Type Assignment
+5. Wage Assignment
+6. Department Assignment
+7. Supervisor Assignment
+
+Verify: W2 or 1099, Pay Group, Starting Rate, Division Assignment` },
+  { id:'wages', title:'9. Wage Progression & Rate Changes', content:`Every employee starts with Base Rate Only — no supplement at hire.
+
+Position Milestones:
+- Porter: 3, 12, 21, 42, 43 months
+- Super: 3, 4 months
+- Security: 4, 23, 24 months
+- Concierge: 3, 12, 21, 42, 43 months
+- Concierge Security: 4, 23, 24 months
+- Handyman: 3, 4 months
+
+At the first eligible milestone, supplement is added. Payroll must monitor milestone dates monthly.` },
+  { id:'cover', title:'10. Cover Pay Rules', content:`Non-Prevailing Wage Employees:
+- Coverage 8+ Hours: $22.33/hour
+- Coverage Under 8 Hours: $17.00/hour
+
+Prevailing Wage Employees:
+Always use assigned prevailing wage rate.
+
+Building Porter Rate: Highest paid porter assigned to building
+Building Super Rate: Highest paid super assigned to building` },
+  { id:'direct', title:'11. Direct Deposit Changes', content:`Payroll Specialist Responsibilities:
+- Verify employee authorization
+- Update banking information
+- Confirm account setup
+- Document change
+
+Always verify effective date.` },
+  { id:'garnish', title:'12. Garnishments', content:`Payroll Specialist Responsibilities:
+- Enter garnishment order
+- Verify deduction amount
+- Verify withholding requirements
+- Monitor balances
+- Maintain compliance
+
+Never modify garnishments without documentation.` },
+  { id:'earnings', title:'13. Earnings & Deductions', content:`Earnings Examples:
+- Covered Pay  • Snow Labor  • Retro Pay  • Bonus
+
+Deductions Examples:
+- Overpayment Recovery  • Payroll Corrections  • Other Approved Deductions
+
+All adjustments require documentation.` },
+  { id:'fingercheck', title:'14. Creating Jobs in Fingercheck', content:`Process:
+1. Add Rate Code
+2. Add Maximum Hour Policy
+3. Add Job
+4. Create Master Profile
+5. Link Master Profile to Job
+
+All job setups must be completed before assigning employees.` },
+  { id:'fencing', title:'15. Job Fencing', content:`Policy Radius: 0.25 Miles
+Used for: Porters, Supers
+Verify job fencing is active before employee assignment.` },
+  { id:'docs', title:'16. Documentation Requirements', content:`Every payroll change must include:
+- Employee Note  • Date  • Reason
+- Supporting documentation
+- Asana Task Link (when applicable)
+
+If it is not documented, it did not happen.` },
+  { id:'exceptions', title:'17. Special Cases & Exceptions', content:`Common Exceptions:
+- Prevailing wage corrections  • Retroactive raises
+- Payroll corrections  • Emergency holiday coverage
+- Special OT calculations  • Rehires  • Promotions
+- Contract exceptions  • Legacy rates
+
+When unsure: Stop → Review documentation → Verify with management → Document decision` },
+  { id:'checklist', title:'18. Payroll Approval Checklist', content:`☐ Hours reviewed
+☐ Missing punches resolved
+☐ Overtime reviewed
+☐ Prevailing wage verified
+☐ Rate changes reviewed
+☐ Direct deposit updates reviewed
+☐ Garnishments reviewed
+☐ PTO reviewed
+☐ Vacation reviewed
+☐ Sick time reviewed
+☐ Earnings reviewed
+☐ Deductions reviewed
+☐ Holiday pay reviewed
+☐ Payroll totals reviewed
+☐ Payroll approved before deadline
+
+Remember: Payroll accuracy is more important than payroll speed.` },
 ]
 
-export default function HelpPage() {
+export default function RulesPage() {
   const router = useRouter()
+  const supabase = createClient()
+  const [note, setNote] = useState('')
+  const [saved, setSaved] = useState(false)
   const [search, setSearch] = useState('')
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window !== 'undefined') return (localStorage.getItem('bsm_lang') as Lang) || 'en'
@@ -31,41 +248,57 @@ export default function HelpPage() {
   })
   function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
 
-  const filtered = STEPS.filter(s =>
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { router.push('/login'); return }
+      const { data: nd } = await supabase.from('payroll_notes').select('note').eq('user_email', data.user.email).single()
+      if (nd) setNote(nd.note)
+    })
+  }, [])
+
+  async function saveNote() {
+    const { data: ud } = await supabase.auth.getUser()
+    if (!ud.user) return
+    await supabase.from('payroll_notes').upsert({ user_email: ud.user.email, note, updated_at: new Date().toISOString() }, { onConflict: 'user_email' })
+    setSaved(true); setTimeout(() => setSaved(false), 2000)
+  }
+
+  const filtered = SECTIONS.filter(s =>
     !search.trim() ||
     s.title.toLowerCase().includes(search.toLowerCase()) ||
-    s.body.toLowerCase().includes(search.toLowerCase())
+    s.content.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <NavBar lang={lang} onLangChange={switchLang} />
-      <main className="max-w-4xl mx-auto px-5 py-6">
+      <main className="max-w-5xl mx-auto px-5 py-6">
         <div className="mb-5">
-          <h1 className="text-lg font-semibold text-gray-900">BSM Payroll — Tutorial & Help</h1>
-          <p className="text-sm text-gray-500 mt-1">Complete guide to using the payroll dashboard</p>
+          <h1 className="text-lg font-semibold text-gray-900">Payroll Rules & Questions</h1>
+          <p className="text-sm text-gray-500 mt-1">BSM Facility Solutions — Payroll Specialist Training Manual v1.0</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-5 flex items-center gap-3">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search the guide… (e.g. approve, export, holiday, rate)"
+            placeholder="Search rules… (e.g. overtime, holiday, prevailing wage, SK1, cover pay)"
             className="flex-1 border-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none" />
           {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕ Clear</button>}
           {search && <span className="text-xs text-gray-400">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">
           <div className="bg-white border border-gray-200 rounded-xl p-4 h-fit md:sticky top-6">
             <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Sections</div>
-            <nav className="space-y-1">
-              {STEPS.map(s => (
+            <nav className="space-y-0.5">
+              {SECTIONS.map(s => (
                 <a key={s.id} href={`#${s.id}`}
                   className={`block text-xs py-1.5 px-2 rounded-lg transition-colors ${
-                    search && (s.title.toLowerCase().includes(search.toLowerCase()) || s.body.toLowerCase().includes(search.toLowerCase()))
+                    search && (s.title.toLowerCase().includes(search.toLowerCase()) || s.content.toLowerCase().includes(search.toLowerCase()))
                       ? 'text-[#D4A843] font-medium bg-amber-50'
                       : 'text-gray-600 hover:text-[#0D1B35] hover:bg-gray-50'
                   }`}>{s.title}
                 </a>
               ))}
+              <a href="#notes" className="block text-xs text-[#D4A843] font-medium py-1.5 px-2 rounded-lg hover:bg-amber-50 transition-colors mt-2">📝 My Notes</a>
             </nav>
           </div>
           <div className="space-y-4">
@@ -75,36 +308,28 @@ export default function HelpPage() {
                 <div className="text-sm text-gray-500">No results for "{search}"</div>
                 <button onClick={() => setSearch('')} className="text-xs text-[#D4A843] mt-2 hover:underline">Clear search</button>
               </div>
-            ) : filtered.map(s => (
-              <div key={s.id} id={s.id} className={`bg-white border rounded-xl p-6 ${
-                search && (s.title.toLowerCase().includes(search.toLowerCase()) || s.body.toLowerCase().includes(search.toLowerCase()))
+            ) : filtered.map(section => (
+              <div key={section.id} id={section.id} className={`bg-white border rounded-xl p-6 ${
+                search && (section.title.toLowerCase().includes(search.toLowerCase()) || section.content.toLowerCase().includes(search.toLowerCase()))
                   ? 'border-[#D4A843]/40 bg-amber-50/20' : 'border-gray-200'}`}>
-                <h2 className="text-sm font-semibold text-gray-900 mb-2 pb-2 border-b border-gray-100">{s.title}</h2>
-                <p className="text-sm text-gray-600 leading-relaxed">{s.body}</p>
+                <h2 className="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-100">{section.title}</h2>
+                <pre className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap font-sans">{section.content}</pre>
               </div>
             ))}
             {!search && (
-              <div className="bg-white border border-[#D4A843]/30 rounded-xl p-6">
-                <h2 className="text-sm font-semibold text-gray-900 mb-3">Video walkthrough script</h2>
-                <div className="space-y-3">
-                  {[
-                    ['0:00','Hi, this is the BSM Payroll Dashboard — how we process porter cover entries and extra hours for Fingercheck payroll each week.'],
-                    ['0:20','The current pay period loads automatically on login. You can see all three tiers and how many entries are in each mini dashboard card.'],
-                    ['0:40','Check the Errors tab first. Any entry with a missing job code, Asana link, or rate is blocked here. Enter the rate in the accordion row and it moves to Pending automatically.'],
-                    ['1:00','In the Waiting ⚡ tab you\'ll find last-minute submissions — within 24 hours of the Tuesday cutoff. Review these urgently.'],
-                    ['1:20','To approve: click the row to expand, enter the rate, then click Approve. The app posts "entered" on Asana and marks the task complete.'],
-                    ['1:40','Billable entries go to the Billing tab automatically. Click Bill to approve them for billing records.'],
-                    ['2:00','To close: click Close, enter a reason, confirm. You can reopen within 14 days. After that it\'s locked 🔒.'],
-                    ['2:20','Click Export approved, review T1+T2+T3 totals, download CSV, upload to Fingercheck mass import.'],
-                    ['2:50','Check Exported Files for all past exports. Use Past Tasks to search any employee\'s full payroll history.'],
-                    ['3:10','Watch for banners — blue for upcoming holiday pay, amber for SVPTO and 1st & 15th reminders. Switch languages with EN / ES / יי in the nav.'],
-                  ].map(([time, text]) => (
-                    <div key={time} className="flex gap-3 text-sm">
-                      <span className="font-mono text-xs text-[#C9943A] flex-shrink-0 mt-0.5 w-12">{time}</span>
-                      <p className="text-gray-700 leading-relaxed">{text}</p>
-                    </div>
-                  ))}
+              <div id="notes" className="bg-white border border-[#D4A843]/40 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900">📝 My Personal Notes & Reminders</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Private notes visible only to you</p>
+                  </div>
+                  <button onClick={saveNote} className="bg-[#D4A843] text-[#0D1B35] px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#C49A38]">
+                    {saved ? '✓ Saved!' : 'Save notes'}
+                  </button>
                 </div>
+                <textarea value={note} onChange={e => setNote(e.target.value)}
+                  placeholder="Add your personal notes, reminders, special cases, or anything you want to remember here…"
+                  className="w-full h-40 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#D4A843]/30 focus:border-[#D4A843] resize-none leading-relaxed" />
               </div>
             )}
           </div>
