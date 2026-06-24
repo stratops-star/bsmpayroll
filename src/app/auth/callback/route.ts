@@ -1,33 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@/lib/supabase-server'
+
+const ALLOWED_EMAILS = [
+  'strat.ops@bsmfacilitysolutions.com',
+  'pinny@bsmfacilitysolutions.com',
+  'payroll@bsmfacilitysolutions.com',
+]
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  if (!code) return NextResponse.redirect(`${origin}/login?error=missing_code`)
+  const next = searchParams.get('next') || '/dashboard'
 
-  const response = NextResponse.redirect(`${origin}/dashboard`)
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return request.cookies.get(name)?.value },
-        set(name: string, value: string, options: CookieOptions) { response.cookies.set({ name, value, ...options }) },
-        remove(name: string, options: CookieOptions) { response.cookies.set({ name, value: '', ...options }) },
-      },
+  if (code) {
+    const supabase = createServerClient()
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error && data.user) {
+      const email = data.user.email?.toLowerCase() || ''
+
+      // Check whitelist
+      if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
+        // Sign them out immediately
+        await supabase.auth.signOut()
+        return NextResponse.redirect(
+          new URL('/login?error=unauthorized', request.url)
+        )
+      }
+
+      return NextResponse.redirect(new URL(next, request.url))
     }
-  )
-
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-  if (error || !data.user) return NextResponse.redirect(`${origin}/login?error=auth_failed`)
-
-  const email = data.user.email || ''
-  if (!email.toLowerCase().endsWith('@bsmfacilitysolutions.com')) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(`${origin}/login?error=unauthorized_domain`)
   }
-  return response
+
+  return NextResponse.redirect(new URL('/login?error=auth_failed', request.url))
 }
