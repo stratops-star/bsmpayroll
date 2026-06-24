@@ -37,6 +37,7 @@ export interface PorterEntry {
   service?: string
   earning?: string
   reasonForCoverage?: string
+  pastPeriod?: string
 }
 
 export interface ExportRecord {
