@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') || '/dashboard'
 
+  console.log('Auth callback hit, code present:', !!code)
+
   if (code) {
     const response = NextResponse.redirect(new URL(next, request.url))
 
@@ -22,7 +24,11 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll: () => request.cookies.getAll(),
+          getAll: () => {
+            const all = request.cookies.getAll()
+            console.log('Cookies available:', all.map(c => c.name).join(', '))
+            return all
+          },
           setAll: (cookiesToSet) => {
             cookiesToSet.forEach(({ name, value, options }) =>
               response.cookies.set(name, value, options)
@@ -33,6 +39,7 @@ export async function GET(request: NextRequest) {
     )
 
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    console.log('Exchange result - error:', error?.message, 'user:', data?.user?.email)
 
     if (!error && data.user) {
       const email = data.user.email?.toLowerCase() || ''
