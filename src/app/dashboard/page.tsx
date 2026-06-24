@@ -28,6 +28,18 @@ const FEDERAL_HOLIDAYS = [
   { name: "Christmas Day",              nameEs: 'Navidad',                      nameYi: 'קריסטמאַס',          month: 12, day: 25 },
 ]
 
+// Overlay tutorial steps
+const TOUR_STEPS = [
+  { target: 'tour-period', title: 'Pay Period', body: 'The current pay period loads automatically on login. Change dates and click Load to view a different period.' },
+  { target: 'tour-export-btn', title: 'Export Approved', body: 'When you\'re ready, click here to export all approved entries to a Fingercheck CSV file.' },
+  { target: 'tour-banners', title: 'Smart Reminders', body: 'Dismissible banners appear 7 days before SVPTO end of month, 1st & 15th rule dates, and federal holidays.' },
+  { target: 'tour-mini-cards', title: 'Tier Dashboard', body: 'Click any card to switch between Tier 1, 2, and 3. Shows approved, pending, urgent counts and approved hours.' },
+  { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number.' },
+  { target: 'tour-tabs', title: 'Entry Tabs', body: 'Approved · Pending · Waiting ⚡ (last-minute) · Billing · Errors (blocked) · Closed · Exported. Always check Errors first!' },
+  { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. Job code and Asana link must also be present.' },
+  { target: 'tour-actions', title: 'Actions', body: 'Cover entries: Approve + Close. Extra Hrs + Billable: Approve only — no close. Asana task is updated automatically on approval.' },
+]
+
 export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -54,6 +66,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('')
   const [exportCount, setExportCount] = useState(0)
   const [dismissedBanners, setDismissedBanners] = useState<string[]>([])
+  const [tourStep, setTourStep] = useState<number | null>(null)
 
   const dir = TRANSLATIONS[lang].dir
 
@@ -65,13 +78,14 @@ export default function DashboardPage() {
       setUserEmail(data.user.email || '')
       await loadEntries()
       await loadExportCount()
+      // Show tour on first visit
+      if (!localStorage.getItem('bsm_tour_done')) {
+        setTimeout(() => setTourStep(0), 1000)
+      }
     })
   }, [])
 
-  function switchLang(l: Lang) {
-    setLang(l)
-    localStorage.setItem('bsm_lang', l)
-  }
+  function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
 
   async function getToken() {
     const { data } = await supabase.auth.getSession()
@@ -87,7 +101,6 @@ export default function DashboardPage() {
     } catch {}
   }
 
-  // Get past pay periods (each Wed-Tue block before current)
   function getPastPeriods(count: number): { start: string; end: string; label: string }[] {
     const periods = []
     let endDate = new Date(periodStart)
@@ -110,8 +123,6 @@ export default function DashboardPage() {
     setStatusMsg(t(lang, 'period_loading'))
     try {
       const token = await getToken()
-
-      // Load current period
       const [sheetsRes, ratesRes] = await Promise.all([
         fetch(`/api/sheets?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/rates?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -125,12 +136,11 @@ export default function DashboardPage() {
         mapped[tier] = (data[tier] || []).map((e: PorterEntry) => ({
           ...e,
           rate: savedRates[e.id] || e.rate || '',
-          approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed'
-            : e.isLastMinute ? 'waiting' : 'pending',
+          approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending',
         }))
       }
 
-      // Load past 4 periods — carry forward any unresolved (pending/waiting/open)
+      // Load past 4 periods — carry forward unresolved entries
       const pastPeriods = getPastPeriods(4)
       for (const period of pastPeriods) {
         try {
@@ -146,13 +156,10 @@ export default function DashboardPage() {
               .map((e: PorterEntry) => ({
                 ...e,
                 rate: pastRates[e.id] || e.rate || '',
-                approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed'
-                  : e.isLastMinute ? 'waiting' : 'pending',
+                approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending',
                 pastPeriod: period.label,
               }))
-              .filter((e: PorterEntry & { pastPeriod?: string }) =>
-                ['pending','waiting','open'].includes(e.approvalStatus)
-              )
+              .filter((e: any) => ['pending','waiting','open'].includes(e.approvalStatus))
             mapped[tier] = [...mapped[tier], ...pastEntries]
           }
         } catch {}
@@ -163,9 +170,7 @@ export default function DashboardPage() {
       const now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
       setLastRefreshed(now)
       setStatusMsg(`${total} ${t(lang, 'period_loaded')}`)
-    } catch (e: any) {
-      setStatusMsg(`Error: ${e.message}`)
-    }
+    } catch (e: any) { setStatusMsg(`Error: ${e.message}`) }
     setLoading(false)
   }
 
@@ -212,17 +217,14 @@ export default function DashboardPage() {
   }
 
   function handleReopen(entry: PorterEntry) {
-    const approvedDate = new Date(entry.submissionDay)
-    const daysSince = Math.ceil((Date.now() - approvedDate.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysSince > 14) return
+    const d = new Date(entry.submissionDay)
+    if (Math.ceil((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)) > 14) return
     updateEntry(entry.id, entry.tier, { approvalStatus: 'pending', closedReason: undefined })
   }
 
   function isLocked(entry: PorterEntry): boolean {
-    if (entry.approvalStatus !== 'approved' && entry.approvalStatus !== 'exported') return false
-    const d = new Date(entry.submissionDay)
-    const daysSince = Math.ceil((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24))
-    return daysSince > 14
+    if (!['approved','exported'].includes(entry.approvalStatus)) return false
+    return Math.ceil((Date.now() - new Date(entry.submissionDay).getTime()) / (1000 * 60 * 60 * 24)) > 14
   }
 
   function canApprove(entry: PorterEntry): boolean {
@@ -230,11 +232,11 @@ export default function DashboardPage() {
   }
 
   function approveBlockReason(entry: PorterEntry): string {
-    const missing = []
-    if (!entry.rate) missing.push('rate')
-    if (!entry.asanaLink) missing.push('Asana link')
-    if (!entry.jobCode) missing.push('job code')
-    return missing.length ? `Missing: ${missing.join(', ')}` : ''
+    const m = []
+    if (!entry.rate) m.push('rate')
+    if (!entry.asanaLink) m.push('Asana link')
+    if (!entry.jobCode) m.push('job code')
+    return m.length ? `Missing: ${m.join(', ')}` : ''
   }
 
   async function handleExport() {
@@ -254,10 +256,7 @@ export default function DashboardPage() {
       a.download = `fingercheck_${periodStart}_${periodEnd}.csv`
       a.click()
       for (const tier of TIERS) {
-        setAllEntries(prev => ({
-          ...prev,
-          [tier]: prev[tier].map(e => e.approvalStatus === 'approved' ? { ...e, approvalStatus: 'exported' as const } : e)
-        }))
+        setAllEntries(prev => ({ ...prev, [tier]: prev[tier].map(e => e.approvalStatus === 'approved' ? { ...e, approvalStatus: 'exported' as const } : e) }))
       }
       setExportCount(c => c + 1)
       setStatusMsg('Exported — Asana tasks updated')
@@ -286,11 +285,7 @@ export default function DashboardPage() {
     if (typeFilter !== 'all') entries = entries.filter(x => x.entryType === typeFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
-      entries = entries.filter(x =>
-        x.porterName?.toLowerCase().includes(q) ||
-        x.employeeNumber?.toLowerCase().includes(q) ||
-        x.propertyAddress?.toLowerCase().includes(q)
-      )
+      entries = entries.filter(x => x.porterName?.toLowerCase().includes(q) || x.employeeNumber?.toLowerCase().includes(q) || x.propertyAddress?.toLowerCase().includes(q))
     }
     return [...entries].sort((a, b) => {
       let av = '', bv = ''
@@ -318,21 +313,39 @@ export default function DashboardPage() {
       }
     }
     const endOfMonth = new Date(year, month, 0)
-    const daysToEOM = Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysToEOM >= 0 && daysToEOM <= 7) {
+    if (Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `svpto-${year}-${month}`, type: 'svpto', message: `⚠️ ${t(lang,'banner_svpto')}`, sub: `${t(lang,'banner_end_of_month')}: ${endOfMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
     const first = new Date(year, month, 1)
-    const daysTo1 = Math.ceil((first.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysTo1 >= 0 && daysTo1 <= 7) {
+    if (Math.ceil((first.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `first-${year}-${month}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_1st')} ${first.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
     const fifteen = now.getDate() < 15 ? new Date(year, month - 1, 15) : new Date(year, month, 15)
-    const daysTo15 = Math.ceil((fifteen.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    if (daysTo15 >= 0 && daysTo15 <= 7) {
+    if (Math.ceil((fifteen.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `fifteen-${fifteen.getFullYear()}-${fifteen.getMonth()}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_15th')} ${fifteen.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
     return banners.filter(b => !dismissedBanners.includes(b.id))
+  }
+
+  // Group visible entries by period — current period first, then past periods
+  function groupedEntries(entries: PorterEntry[]): { period: string | null; entries: PorterEntry[] }[] {
+    const current: PorterEntry[] = []
+    const pastMap = new Map<string, PorterEntry[]>()
+    for (const e of entries) {
+      const pp = (e as any).pastPeriod as string | undefined
+      if (!pp) {
+        current.push(e)
+      } else {
+        if (!pastMap.has(pp)) pastMap.set(pp, [])
+        pastMap.get(pp)!.push(e)
+      }
+    }
+    const groups: { period: string | null; entries: PorterEntry[] }[] = []
+    if (current.length) groups.push({ period: null, entries: current })
+    for (const [period, ents] of pastMap) {
+      groups.push({ period, entries: ents })
+    }
+    return groups
   }
 
   const allApproved = TIERS.flatMap(ti => allEntries[ti]).filter(e => e.approvalStatus === 'approved')
@@ -341,6 +354,116 @@ export default function DashboardPage() {
   const hasEntries = TIERS.some(ti => allEntries[ti].length > 0)
   const visibleEntries = tabEntries(activeTier, activeTab)
   const tierLabels: Record<Tier, string> = { T1: t(lang,'tier1'), T2: t(lang,'tier2'), T3: t(lang,'tier3') }
+  const groups = groupedEntries(visibleEntries)
+
+  function renderEntryRow(entry: PorterEntry) {
+    const isApproved = entry.approvalStatus === 'approved'
+    const isClosed = entry.approvalStatus === 'closed'
+    const isExported = entry.approvalStatus === 'exported'
+    const isExpanded = expandedRow === entry.id
+    const locked = isLocked(entry)
+    const approved = canApprove(entry)
+    const blockReason = approveBlockReason(entry)
+    const payCode = entry.hoursType?.toUpperCase() === 'OT' ? 'OT' : 'RG'
+    const coverDate = entry.coverDay ? new Date(entry.coverDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
+    const propShort = (entry.propertyAddress || entry.property || '').split(',')[0]
+    const etLabel = entry.entryType === 'billable' ? t(lang,'type_billable') : entry.entryType === 'extra_hours' ? t(lang,'type_extra') : t(lang,'type_cover')
+    const etBadge = entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700' : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+
+    return (
+      <>
+        <tr key={entry.id}
+          onClick={() => setExpandedRow(isExpanded ? null : entry.id)}
+          className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors cursor-pointer
+            ${isApproved ? 'bg-emerald-50/30' : ''}
+            ${isClosed ? 'bg-gray-50/60 opacity-70' : ''}
+            ${isExpanded ? 'bg-blue-50/20' : ''}
+            ${entry.isLastMinute && !isApproved && !isClosed ? 'bg-red-50/20' : ''}`}>
+          <td className="px-2 py-2.5 text-center">
+            <span className={`text-gray-400 text-xs inline-block transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+          </td>
+          <td className="px-3 py-2.5 font-mono text-xs text-gray-500">{entry.employeeNumber}</td>
+          <td className="px-3 py-2.5 font-medium text-gray-900 truncate text-xs">{entry.porterName || '—'}</td>
+          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">{coverDate}{entry.isLastMinute && !isClosed && <span className="ml-1 text-red-500">⚡</span>}</td>
+          <td className="px-3 py-2.5 text-right font-medium text-xs">{entry.hours}</td>
+          <td className="px-3 py-2.5">
+            <div className="flex flex-col gap-0.5">
+              <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded ${payCode === 'OT' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>{payCode}</span>
+              <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded ${etBadge}`}>{etLabel}</span>
+            </div>
+          </td>
+          <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{propShort || '—'}</td>
+          <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{entry.manager || '—'}</td>
+          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+            {entry.jobCode ? <span className="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{entry.jobCode}</span> : <span className="text-xs text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{t(lang,'status_missing_job')}</span>}
+          </td>
+          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+            {entry.asanaLink ? <a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] text-xs hover:underline">↗ Task</a> : <span className="text-gray-400 text-xs">—</span>}
+          </td>
+          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+            {locked ? (
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{t(lang,'status_locked')}</span>
+            ) : isExported ? (
+              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">{t(lang,'status_exported')}</span>
+            ) : isClosed ? (
+              <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
+            ) : entry.entryType === 'billable' ? (
+              <button onClick={() => handleApprove(entry)} disabled={!approved}
+                className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
+                title={blockReason}>{!approved ? '🚫 Bill' : t(lang,'action_bill')}</button>
+            ) : entry.entryType === 'extra_hours' ? (
+              <button onClick={() => handleApprove(entry)} disabled={!approved}
+                className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-[#D4A843]/40 text-[#8B6A1A] bg-[#D4A843]/10 hover:bg-[#D4A843]/20'}`}
+                title={blockReason}>{!approved ? '🚫 Approve' : t(lang,'action_approve')}</button>
+            ) : isApproved ? (
+              <div className="flex gap-1.5">
+                <button onClick={() => handleUnapprove(entry)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">{t(lang,'action_unapprove')}</button>
+                <button onClick={() => setCloseTarget(entry)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-100">{t(lang,'action_close')}</button>
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <button onClick={() => handleApprove(entry)} disabled={!approved}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-[#D4A843]/40 text-[#8B6A1A] bg-[#D4A843]/10 hover:bg-[#D4A843]/20'}`}
+                  title={blockReason}>{!approved ? '🚫 Approve' : t(lang,'action_approve')}</button>
+                <button onClick={() => setCloseTarget(entry)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-100">{t(lang,'action_close')}</button>
+              </div>
+            )}
+          </td>
+        </tr>
+        {isExpanded && (
+          <tr key={`${entry.id}-acc`} className="border-b border-gray-100 bg-blue-50/10">
+            <td colSpan={11} className="px-5 py-4">
+              <div className="grid grid-cols-5 gap-4 text-xs">
+                <div>
+                  <div className="text-gray-400 mb-1 font-medium">{t(lang,'rate_label')}</div>
+                  <input type="number" step="0.01" value={entry.rate}
+                    onChange={e => handleRateChange(entry, e.target.value)} placeholder="0.00"
+                    className={`w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4A843] ${!entry.rate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                    onClick={e => e.stopPropagation()} disabled={isExported || isClosed} />
+                  {!entry.rate && <p className="text-red-500 text-xs mt-0.5">{t(lang,'rate_required')}</p>}
+                </div>
+                {entry.porterStatus && <div><div className="text-gray-400 mb-1">Porter status</div><div className="text-gray-800 font-medium">{entry.porterStatus}</div></div>}
+                {entry.buildingStatus && <div><div className="text-gray-400 mb-1">Building status</div><div className="text-gray-800 font-medium">{entry.buildingStatus}</div></div>}
+                {entry.buildingMaxRate && <div><div className="text-gray-400 mb-1">Building max rate</div><div className="text-gray-800 font-medium">${entry.buildingMaxRate}</div></div>}
+                {entry.totalPay && <div><div className="text-gray-400 mb-1">Total pay</div><div className="text-gray-800 font-medium">${entry.totalPay}</div></div>}
+                {entry.isApartmentCleaned && <div><div className="text-gray-400 mb-1">Apt cleaned?</div><div className="text-gray-800 font-medium">{entry.isApartmentCleaned}</div></div>}
+                {entry.apartmentNumber && <div><div className="text-gray-400 mb-1">Apt #</div><div className="text-gray-800 font-medium">{entry.apartmentNumber}</div></div>}
+                {entry.service && <div><div className="text-gray-400 mb-1">Service</div><div className="text-gray-800 font-medium">{entry.service}</div></div>}
+                {entry.earning && <div><div className="text-gray-400 mb-1">Earning</div><div className="text-gray-800 font-medium">{entry.earning}</div></div>}
+                {entry.reasonForCoverage && <div><div className="text-gray-400 mb-1">Reason</div><div className="text-gray-800 font-medium">{entry.reasonForCoverage}</div></div>}
+                <div><div className="text-gray-400 mb-1">Submitted</div><div className="text-gray-800 font-medium">{entry.submissionDay || '—'}</div></div>
+                {entry.jobCode && <div><div className="text-gray-400 mb-1">Job code</div><div className="text-gray-800 font-mono font-medium">{entry.jobCode}</div></div>}
+                {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
+                {entry.extraDetails && <div className="col-span-2"><div className="text-gray-400 mb-1">Extra details</div><div className="text-gray-800">{entry.extraDetails}</div></div>}
+                {entry.screenshotUrl && <div><div className="text-gray-400 mb-1">Screenshot</div><a href={entry.screenshotUrl} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ View</a></div>}
+                {entry.asanaLink && <div><div className="text-gray-400 mb-1">Asana task</div><a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Open in Asana</a></div>}
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]" dir={dir}>
@@ -348,7 +471,7 @@ export default function DashboardPage() {
 
       <main className="px-5 py-4 max-w-7xl mx-auto">
         {/* Period card */}
-        <div className="card p-4 mb-4">
+        <div id="tour-period" className="card p-4 mb-4">
           <div className="flex items-end gap-3 flex-wrap">
             <div>
               <p className="text-xs text-gray-500 mb-1">{t(lang,'period_label')}</p>
@@ -363,7 +486,7 @@ export default function DashboardPage() {
             <button onClick={loadEntries} disabled={loading} className="bg-[#0D1B35] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#152444] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
               {loading ? <><span className="animate-spin w-3 h-3 border border-white/30 border-t-white rounded-full" />{t(lang,'period_loading')}</> : t(lang,'period_load')}
             </button>
-            <div className="ml-auto">
+            <div id="tour-export-btn" className="ml-auto">
               <button onClick={() => setShowExport(true)} disabled={!allApproved.length} className="bg-[#D4A843] text-[#0D1B35] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#C49A38] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
                 ↓ {t(lang,'export_approved')} ({allApproved.length})
               </button>
@@ -376,19 +499,21 @@ export default function DashboardPage() {
         </div>
 
         {/* Smart banners */}
-        {getActiveBanners().map(banner => (
-          <div key={banner.id} className={`border rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3 ${banner.type === 'holiday' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
-            <div>
-              <p className={`text-sm font-semibold ${banner.type === 'holiday' ? 'text-blue-800' : 'text-amber-800'}`}>{banner.message}</p>
-              <p className={`text-xs mt-0.5 ${banner.type === 'holiday' ? 'text-blue-600' : 'text-amber-600'}`}>{banner.sub}</p>
+        <div id="tour-banners">
+          {getActiveBanners().map(banner => (
+            <div key={banner.id} className={`border rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3 ${banner.type === 'holiday' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div>
+                <p className={`text-sm font-semibold ${banner.type === 'holiday' ? 'text-blue-800' : 'text-amber-800'}`}>{banner.message}</p>
+                <p className={`text-xs mt-0.5 ${banner.type === 'holiday' ? 'text-blue-600' : 'text-amber-600'}`}>{banner.sub}</p>
+              </div>
+              <button onClick={() => setDismissedBanners(prev => [...prev, banner.id])} className={`text-lg leading-none flex-shrink-0 ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' : 'text-amber-400 hover:text-amber-600'}`}>✕</button>
             </div>
-            <button onClick={() => setDismissedBanners(prev => [...prev, banner.id])} className={`text-lg leading-none flex-shrink-0 ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' : 'text-amber-400 hover:text-amber-600'}`}>✕</button>
-          </div>
-        ))}
+          ))}
+        </div>
 
         {/* Mini dashboards */}
         {hasEntries && (
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div id="tour-mini-cards" className="grid grid-cols-3 gap-3 mb-4">
             {TIERS.map(tier => {
               const e = allEntries[tier]
               const ap = e.filter(x => x.approvalStatus === 'approved').length
@@ -416,7 +541,7 @@ export default function DashboardPage() {
         {/* Main table */}
         <div className="card overflow-hidden">
           {/* Toolbar */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
+          <div id="tour-filter-bar" className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
             <div className="flex gap-1.5">
               {([['all', t(lang,'filter_all')], ['cover', t(lang,'filter_cover')], ['extra_hours', t(lang,'filter_extra')], ['billable', t(lang,'filter_billable')]] as [EntryTypeFilter, string][]).map(([val, label]) => (
                 <button key={val} onClick={() => setTypeFilter(val)}
@@ -435,7 +560,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Inner tabs */}
-          <div className="flex border-b border-gray-200 px-1 items-center overflow-x-auto">
+          <div id="tour-tabs" className="flex border-b border-gray-200 px-1 items-center overflow-x-auto">
             {(['approved','pending','waiting','billing','errors','closed','exported'] as InnerTab[]).map(tab => {
               const count = tabEntries(activeTier, tab).length
               const labels: Record<InnerTab,string> = { approved:t(lang,'tab_approved'), pending:t(lang,'tab_pending'), waiting:t(lang,'tab_waiting'), billing:t(lang,'tab_billing'), errors:t(lang,'tab_errors'), closed:t(lang,'tab_closed'), exported:t(lang,'tab_exported') }
@@ -453,13 +578,13 @@ export default function DashboardPage() {
           </div>
 
           {activeTab === 'billing' && <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100"><p className="text-xs text-purple-700">Billable entries — approve to confirm hours. Asana task assigned to billing team.</p></div>}
-          {activeTab === 'errors' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><span className="text-red-500 flex-shrink-0">⚠️</span><p className="text-xs text-red-700"><strong>{visibleEntries.length} entries cannot be approved</strong> — fix missing rate, job code, or Asana link first</p></div>}
-          {activeTab === 'waiting' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-start gap-2"><span className="text-red-500 mt-0.5 flex-shrink-0">⚡</span><p className="text-xs text-red-700">Last-minute submissions — review before payday <strong>{paydayStr}</strong></p></div>}
+          {activeTab === 'errors' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><span className="text-red-500">⚠️</span><p className="text-xs text-red-700"><strong>{visibleEntries.length} entries cannot be approved</strong> — fix missing rate, job code, or Asana link first</p></div>}
+          {activeTab === 'waiting' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-start gap-2"><span className="text-red-500 mt-0.5">⚡</span><p className="text-xs text-red-700">Last-minute — review before payday <strong>{paydayStr}</strong></p></div>}
 
           {visibleEntries.length === 0 ? (
             <div className="py-14 text-center text-gray-400 text-sm">{t(lang,'no_entries')}</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div id="tour-table" className="overflow-x-auto">
               <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -473,154 +598,25 @@ export default function DashboardPage() {
                     <th onClick={() => handleSort('manager')} className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 w-24 cursor-pointer hover:text-gray-700">{t(lang,'col_manager')}{sortIcon('manager')}</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 w-20">{t(lang,'col_jobcode')}</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 w-16">{t(lang,'col_asana')}</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 w-28">{t(lang,'col_actions')}</th>
+                    <th id="tour-actions" className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 w-28">{t(lang,'col_actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    const rows: React.ReactNode[] = []
-                    let lastPastPeriod: string | undefined = undefined
-                    let shownCurrentSep = false
-
-                    visibleEntries.forEach(entry => {
-                      const ep = (entry as any).pastPeriod as string | undefined
-
-                      // Separator for past period entries
-                      if (ep && ep !== lastPastPeriod) {
-                        lastPastPeriod = ep
-                        rows.push(
-                          <tr key={`sep-${ep}`}>
-                            <td colSpan={11} className="px-3 py-2 bg-amber-50 border-y border-amber-100">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold text-amber-700">⚠️ Past period: {ep}</span>
-                                <span className="text-xs text-amber-600">— unresolved entries carried forward</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      }
-
-                      const isApproved = entry.approvalStatus === 'approved'
-                      const isClosed = entry.approvalStatus === 'closed'
-                      const isExported = entry.approvalStatus === 'exported'
-                      const isExpanded = expandedRow === entry.id
-                      const locked = isLocked(entry)
-                      const approved = canApprove(entry)
-                      const blockReason = approveBlockReason(entry)
-                      const payCode = entry.hoursType?.toUpperCase() === 'OT' ? 'OT' : 'RG'
-                      const coverDate = entry.coverDay ? new Date(entry.coverDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
-                      const propShort = (entry.propertyAddress || entry.property || '').split(',')[0]
-                      const etLabel = entry.entryType === 'billable' ? t(lang,'type_billable') : entry.entryType === 'extra_hours' ? t(lang,'type_extra') : t(lang,'type_cover')
-                      const etBadge = entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700' : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
-
-                      rows.push(
-                        <tr key={entry.id}
-                          onClick={() => setExpandedRow(isExpanded ? null : entry.id)}
-                          className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors cursor-pointer
-                            ${isApproved ? 'bg-emerald-50/30' : ''}
-                            ${isClosed ? 'bg-gray-50/60 opacity-70' : ''}
-                            ${isExpanded ? 'bg-blue-50/20' : ''}
-                            ${ep ? 'bg-amber-50/10' : ''}
-                            ${entry.isLastMinute && !isApproved && !isClosed ? 'bg-red-50/20' : ''}`}>
-                          <td className="px-2 py-2.5 text-center">
-                            <span className={`text-gray-400 text-xs inline-block transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
-                          </td>
-                          <td className="px-3 py-2.5 font-mono text-xs text-gray-500">{entry.employeeNumber}</td>
-                          <td className="px-3 py-2.5 font-medium text-gray-900 truncate text-xs">{entry.porterName || '—'}</td>
-                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">{coverDate}{entry.isLastMinute && !isClosed && <span className="ml-1 text-red-500">⚡</span>}</td>
-                          <td className="px-3 py-2.5 text-right font-medium text-xs">{entry.hours}</td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex flex-col gap-0.5">
-                              <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded ${payCode === 'OT' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>{payCode}</span>
-                              <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded ${etBadge}`}>{etLabel}</span>
+                  {groups.map(group => (
+                    <>
+                      {group.period && (
+                        <tr key={`sep-${group.period}`}>
+                          <td colSpan={11} className="px-3 py-2 bg-amber-50 border-y border-amber-100">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-amber-700">⚠️ Past period: {group.period}</span>
+                              <span className="text-xs text-amber-600">— {group.entries.length} unresolved {group.entries.length === 1 ? 'entry' : 'entries'} carried forward</span>
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{propShort || '—'}</td>
-                          <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{entry.manager || '—'}</td>
-                          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                            {entry.jobCode ? <span className="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{entry.jobCode}</span> : <span className="text-xs text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{t(lang,'status_missing_job')}</span>}
-                          </td>
-                          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                            {entry.asanaLink ? <a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] text-xs hover:underline">↗ Task</a> : <span className="text-gray-400 text-xs">—</span>}
-                          </td>
-                          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                            {locked ? (
-                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{t(lang,'status_locked')}</span>
-                            ) : isExported ? (
-                              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">{t(lang,'status_exported')}</span>
-                            ) : isClosed ? (
-                              <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
-                            ) : entry.entryType === 'billable' ? (
-                              // Billable: Approve only, NO close button
-                              <button onClick={() => handleApprove(entry)} disabled={!approved}
-                                className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
-                                title={blockReason}>
-                                {!approved ? '🚫 Bill' : t(lang,'action_bill')}
-                              </button>
-                            ) : entry.entryType === 'extra_hours' ? (
-                              // Extra Hours: Approve only, NO close button
-                              <button onClick={() => handleApprove(entry)} disabled={!approved}
-                                className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-[#D4A843]/40 text-[#8B6A1A] bg-[#D4A843]/10 hover:bg-[#D4A843]/20'}`}
-                                title={blockReason}>
-                                {!approved ? '🚫 Approve' : t(lang,'action_approve')}
-                              </button>
-                            ) : isApproved ? (
-                              <div className="flex gap-1.5">
-                                <button onClick={() => handleUnapprove(entry)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">{t(lang,'action_unapprove')}</button>
-                                <button onClick={() => setCloseTarget(entry)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-100">{t(lang,'action_close')}</button>
-                              </div>
-                            ) : (
-                              // Cover: Approve + Close
-                              <div className="flex gap-1.5">
-                                <button onClick={() => handleApprove(entry)} disabled={!approved}
-                                  className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-[#D4A843]/40 text-[#8B6A1A] bg-[#D4A843]/10 hover:bg-[#D4A843]/20'}`}
-                                  title={blockReason}>
-                                  {!approved ? '🚫 Approve' : t(lang,'action_approve')}
-                                </button>
-                                <button onClick={() => setCloseTarget(entry)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-100">{t(lang,'action_close')}</button>
-                              </div>
-                            )}
-                          </td>
                         </tr>
-                      )
-
-                      if (isExpanded) {
-                        rows.push(
-                          <tr key={`${entry.id}-acc`} className="border-b border-gray-100 bg-blue-50/10">
-                            <td colSpan={11} className="px-5 py-4">
-                              <div className="grid grid-cols-5 gap-4 text-xs">
-                                <div>
-                                  <div className="text-gray-400 mb-1 font-medium">{t(lang,'rate_label')}</div>
-                                  <input type="number" step="0.01" value={entry.rate}
-                                    onChange={e => handleRateChange(entry, e.target.value)}
-                                    placeholder="0.00"
-                                    className={`w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#D4A843] ${!entry.rate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
-                                    onClick={e => e.stopPropagation()} disabled={isExported || isClosed} />
-                                  {!entry.rate && <p className="text-red-500 text-xs mt-0.5">{t(lang,'rate_required')}</p>}
-                                </div>
-                                {entry.porterStatus && <div><div className="text-gray-400 mb-1">Porter status</div><div className="text-gray-800 font-medium">{entry.porterStatus}</div></div>}
-                                {entry.buildingStatus && <div><div className="text-gray-400 mb-1">Building status</div><div className="text-gray-800 font-medium">{entry.buildingStatus}</div></div>}
-                                {entry.buildingMaxRate && <div><div className="text-gray-400 mb-1">Building max rate</div><div className="text-gray-800 font-medium">${entry.buildingMaxRate}</div></div>}
-                                {entry.totalPay && <div><div className="text-gray-400 mb-1">Total pay</div><div className="text-gray-800 font-medium">${entry.totalPay}</div></div>}
-                                {entry.isApartmentCleaned && <div><div className="text-gray-400 mb-1">Apt cleaned?</div><div className="text-gray-800 font-medium">{entry.isApartmentCleaned}</div></div>}
-                                {entry.apartmentNumber && <div><div className="text-gray-400 mb-1">Apt #</div><div className="text-gray-800 font-medium">{entry.apartmentNumber}</div></div>}
-                                {entry.service && <div><div className="text-gray-400 mb-1">Service</div><div className="text-gray-800 font-medium">{entry.service}</div></div>}
-                                {entry.earning && <div><div className="text-gray-400 mb-1">Earning</div><div className="text-gray-800 font-medium">{entry.earning}</div></div>}
-                                {entry.reasonForCoverage && <div><div className="text-gray-400 mb-1">Reason</div><div className="text-gray-800 font-medium">{entry.reasonForCoverage}</div></div>}
-                                <div><div className="text-gray-400 mb-1">Submitted</div><div className="text-gray-800 font-medium">{entry.submissionDay || '—'}</div></div>
-                                {entry.jobCode && <div><div className="text-gray-400 mb-1">Job code</div><div className="text-gray-800 font-mono font-medium">{entry.jobCode}</div></div>}
-                                {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
-                                {entry.extraDetails && <div className="col-span-2"><div className="text-gray-400 mb-1">Extra details</div><div className="text-gray-800">{entry.extraDetails}</div></div>}
-                                {entry.screenshotUrl && <div><div className="text-gray-400 mb-1">Screenshot</div><a href={entry.screenshotUrl} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ View</a></div>}
-                                {entry.asanaLink && <div><div className="text-gray-400 mb-1">Asana task</div><a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Open in Asana</a></div>}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      }
-                    })
-                    return rows
-                  })()}
+                      )}
+                      {group.entries.map(entry => renderEntryRow(entry))}
+                    </>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -632,6 +628,49 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Interactive overlay tutorial */}
+      {tourStep !== null && (
+        <div className="fixed inset-0 z-[100]" onClick={() => {}}>
+          {/* Dark overlay */}
+          <div className="absolute inset-0 bg-black/60" />
+          {/* Tour card */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-[#D4A843] flex items-center justify-center text-[#0D1B35] text-xs font-bold">{tourStep + 1}</div>
+                <span className="text-xs text-gray-400">{tourStep + 1} of {TOUR_STEPS.length}</span>
+              </div>
+              <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }} className="text-gray-400 hover:text-gray-600 text-sm">✕ Skip</button>
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{TOUR_STEPS[tourStep].title}</h3>
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">{TOUR_STEPS[tourStep].body}</p>
+            <div className="flex items-center justify-between">
+              <button onClick={() => setTourStep(s => s !== null && s > 0 ? s - 1 : s)}
+                disabled={tourStep === 0}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+                ← Back
+              </button>
+              <div className="flex gap-1">
+                {TOUR_STEPS.map((_, i) => (
+                  <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === tourStep ? 'bg-[#D4A843]' : 'bg-gray-200'}`} />
+                ))}
+              </div>
+              {tourStep < TOUR_STEPS.length - 1 ? (
+                <button onClick={() => setTourStep(s => s !== null ? s + 1 : s)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[#0D1B35] text-white hover:bg-[#152444]">
+                  Next →
+                </button>
+              ) : (
+                <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[#D4A843] text-[#0D1B35] font-semibold hover:bg-[#C49A38]">
+                  Done ✓
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Close modal */}
       {closeTarget && (
