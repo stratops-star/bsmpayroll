@@ -1,18 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const DOMAIN = 'bsmfacilitysolutions.com'
-
 const ALLOWED_EMAILS = [
   'strat.ops@bsmfacilitysolutions.com',
   'pinny@bsmfacilitysolutions.com',
   'payroll@bsmfacilitysolutions.com',
 ]
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -23,11 +22,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     const err = searchParams.get('error')
-    if (err === 'unauthorized') {
-      setError('Access denied — your account is not authorized for this application.')
-    } else if (err === 'auth_failed') {
-      setError('Authentication failed — please try again.')
-    }
+    if (err === 'unauthorized') setError('Access denied — your account is not authorized for this application.')
+    else if (err === 'auth_failed') setError('Authentication failed — please try again.')
   }, [searchParams])
 
   async function handleLogin(e: React.FormEvent) {
@@ -111,5 +107,13 @@ export default function LoginPage() {
         <p className="text-center text-xs text-gray-400 mt-5">Access restricted to authorized BSM accounts only</p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]"><div className="animate-spin w-6 h-6 border-2 border-[#D4A843] border-t-transparent rounded-full" /></div>}>
+      <LoginForm />
+    </Suspense>
   )
 }
