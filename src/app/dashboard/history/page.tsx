@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { ExportRecord } from '@/lib/types'
+import NavBar from '@/components/NavBar'
+import { Lang } from '@/lib/i18n'
 
 export default function HistoryPage() {
   const router = useRouter()
@@ -12,6 +14,11 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState('')
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('bsm_lang') as Lang) || 'en'
+    return 'en'
+  })
+  function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -43,19 +50,7 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <header className="bg-[#0D1B35] h-[50px] px-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#F5C072] flex items-center justify-center font-bold text-[#0D1B35] text-sm">B</div>
-          <div className="w-px h-5 bg-white/15" />
-          <span className="text-white/50 text-sm">Export history</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/dashboard')} className="text-white/55 text-xs hover:text-white">← Dashboard</button>
-          <div className="w-px h-4 bg-white/15" />
-          <span className="text-white/40 text-xs">{userEmail}</span>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} className="text-white/40 text-xs hover:text-white">Sign out</button>
-        </div>
-      </header>
+      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} />
 
       <main className="px-5 py-5 max-w-5xl mx-auto">
         <div className="flex items-start justify-between mb-5">
@@ -63,7 +58,6 @@ export default function HistoryPage() {
             <h1 className="text-base font-semibold text-gray-900">Fingercheck export history</h1>
             <p className="text-sm text-gray-500 mt-0.5">All CSV exports — click Download to re-download any file</p>
           </div>
-          <button onClick={() => router.push('/dashboard')} className="btn-navy text-xs py-1.5">← Dashboard</button>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
