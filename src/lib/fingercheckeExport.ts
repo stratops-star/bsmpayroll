@@ -12,6 +12,9 @@ const COLS = [
 export function buildCSV(entries: PorterEntry[], start: string, end: string): string {
   const rows = entries.map(e => {
     const payCode = e.hoursType?.toUpperCase() === 'OT' ? 'OT' : 'RG'
+    const entryLabel = e.entryType === 'billable' ? 'Billable' : e.entryType === 'extra_hours' ? 'Extra Hrs' : 'Cover'
+    const propShort = (e.propertyAddress || e.property || '').split(',')[0]
+    const stubMsg = e.extraDetails || `${entryLabel} - ${propShort}`.trim()
     const row: Record<string, string> = {
       EmployeeNumber: e.employeeNumber,
       PayNumber: '1',
@@ -26,9 +29,13 @@ export function buildCSV(entries: PorterEntry[], start: string, end: string): st
       Task: '',
       PeriodBegin: start ? fmtSlash(new Date(start)) : '',
       PeriodEnd: end ? fmtSlash(new Date(end)) : '',
-      JobMapCode: '', RecordType: '', CheckType: '',
+      JobMapCode: '',
+      RecordType: 'E',
+      CheckType: '',
       DateWorked: e.coverDay ? fmtSlash(new Date(e.coverDay)) : '',
-      EntryType: '', StubMessage: '', TaxLocation: '',
+      EntryType: '',
+      StubMessage: stubMsg.substring(0, 100),
+      TaxLocation: '',
     }
     return COLS.map(c => escapeCSV(row[c] || '')).join(',')
   })
