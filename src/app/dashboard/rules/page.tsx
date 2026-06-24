@@ -10,23 +10,23 @@ const SECTIONS = [
   { id:'overview', title:'1. Role Overview', content:`The Payroll Specialist is responsible for ensuring employees are paid accurately and on time while maintaining compliance with company policies, prevailing wage requirements, payroll regulations, and client contract obligations.
 
 Primary responsibilities include:
-- Weekly payroll processing
-- Prevailing wage administration
-- New employee onboarding
-- Rate changes
-- Direct deposit updates
-- Garnishment administration
-- Earnings and deduction adjustments
-- PTO, Sick and Vacation payouts
-- Payroll documentation
-- Fingercheck administration` },
+• Weekly payroll processing
+• Prevailing wage administration
+• New employee onboarding
+• Rate changes
+• Direct deposit updates
+• Garnishment administration
+• Earnings and deduction adjustments
+• PTO, Sick and Vacation payouts
+• Payroll documentation
+• Fingercheck administration` },
   { id:'calendar', title:'2. Payroll Calendar & Deadlines', content:`Pay Period: Wednesday through Tuesday
 Payday: Friday
 
 Submission Deadlines:
-- Tier 1: Tuesday by 10:00 PM
-- Tier 2: Tuesday by 10:00 PM
-- Tier 3: Wednesday by 7:00 AM
+• Tier 1: Tuesday by 10:00 PM
+• Tier 2: Tuesday by 10:00 PM
+• Tier 3: Wednesday by 7:00 AM
 
 Failure to meet deadlines may result in payroll delays.` },
   { id:'process', title:'3. Weekly Payroll Process', content:`Step 1: Review employee hours
@@ -42,10 +42,10 @@ Step 10: Review holiday pay
 Step 11: Review payroll totals
 Step 12: Approve payroll before deadline` },
   { id:'prevailing', title:'4. Prevailing Wage Administration', content:`The HR Prevailing Sheet is the source of truth for:
-- Prevailing wage assignments
-- Wage rates
-- Employee classifications
-- Building assignments
+• Prevailing wage assignments
+• Wage rates
+• Employee classifications
+• Building assignments
 
 Prevailing wage employees must always be paid at their assigned prevailing wage rate.
 
@@ -55,20 +55,20 @@ Never substitute base rates, cover rates, or standard building rates unless spec
 Special OT Rule applies when an employee works both Regular Rate and Prevailing Wage Rate during the same payroll period. Use the OT Prevailing Wage Calculator.
 
 OT Rate $8.25:
-- Abel Hernandez (34)
-- Miguel Gomez (911)
-- Alianni Quinal (12)
+• Abel Hernandez (34)
+• Miguel Gomez (911)
+• Alianni Quinal (12)
 Formula: (Total Hours - 40) × 8.25
 
 OT Rate $10.00:
-- Freddy Arboleada (10017)
+• Freddy Arboleada (10017)
 Formula: (Total Hours - 40) × 10.00` },
   { id:'holidays', title:'6. Holiday Pay Policy', content:`Federal Holidays: New Year's Day, MLK Jr. Day, Presidents Day, Memorial Day, Juneteenth, Independence Day, Labor Day, Columbus Day, Veterans Day, Thanksgiving Day, Christmas Day
 
 Scenario 1 — Building Closed:
-- Employee does not report
-- Employee receives scheduled hours at their assigned rate
-- Prevailing Wage employees receive their prevailing wage rate
+• Employee does not report
+• Employee receives scheduled hours at their assigned rate
+• Prevailing Wage employees receive their prevailing wage rate
 
 Scenario 2 — Building Open:
 Employee receives: Base Rate + Holiday Premium (1.5×) + Supplement
@@ -123,7 +123,7 @@ Eligibility is driven by: Start Date · Prevailing Wage Status · Contracted Hou
 
 Always calculate eligibility from the employee's original Start Date.
 
-─── EARNINGS CODES ────────────────────────────
+─── EARNINGS CODES (SVPTO) ────────────────────
 MANUAL BENEFIT ENTRIES:
   SK       Manual Sick           — Manual sick payment adjustment or correction
   VA       Manual Vacation       — Manual vacation payment adjustment or correction
@@ -137,8 +137,7 @@ AUTOMATIC BENEFIT ENTRIES:
   PTO115   PTO 1st & 15th        — For buildings using 1st & 15th payment structure
 
 SK1 and VA1 are used ONLY for the employee's initial benefit payment after becoming eligible.
-After the initial payment, employee moves to recurring benefit schedule based on:
-  Building participation · Contract hours · Start Date · Benefit type · Eligibility rules
+After the initial payment, employee moves to recurring benefit schedule.
 
 Always verify the employee's eligibility before processing any manual benefit adjustment.` },
   { id:'onboarding', title:'8. Employee Onboarding', content:`Employee Setup Includes:
@@ -154,17 +153,17 @@ Verify: W2 or 1099, Pay Group, Starting Rate, Division Assignment` },
   { id:'wages', title:'9. Wage Progression & Rate Changes', content:`Every employee starts with Base Rate Only — no supplement at hire.
 
 Position Milestones:
-- Porter: 3, 12, 21, 42, 43 months
-- Super: 3, 4 months
-- Security: 4, 23, 24 months
-- Concierge: 3, 12, 21, 42, 43 months
-- Concierge Security: 4, 23, 24 months
-- Handyman: 3, 4 months
+• Porter: 3, 12, 21, 42, 43 months
+• Super: 3, 4 months
+• Security: 4, 23, 24 months
+• Concierge: 3, 12, 21, 42, 43 months
+• Concierge Security: 4, 23, 24 months
+• Handyman: 3, 4 months
 
 At the first eligible milestone, supplement is added. Payroll must monitor milestone dates monthly.` },
   { id:'cover', title:'10. Cover Pay Rules', content:`Non-Prevailing Wage Employees:
-- Coverage 8+ Hours: $22.33/hour
-- Coverage Under 8 Hours: $17.00/hour
+• Coverage 8+ Hours: $22.33/hour
+• Coverage Under 8 Hours: $17.00/hour
 
 Prevailing Wage Employees:
 Always use assigned prevailing wage rate.
@@ -172,27 +171,75 @@ Always use assigned prevailing wage rate.
 Building Porter Rate: Highest paid porter assigned to building
 Building Super Rate: Highest paid super assigned to building` },
   { id:'direct', title:'11. Direct Deposit Changes', content:`Payroll Specialist Responsibilities:
-- Verify employee authorization
-- Update banking information
-- Confirm account setup
-- Document change
+• Verify employee authorization
+• Update banking information
+• Confirm account setup
+• Document change
 
 Always verify effective date.` },
   { id:'garnish', title:'12. Garnishments', content:`Payroll Specialist Responsibilities:
-- Enter garnishment order
-- Verify deduction amount
-- Verify withholding requirements
-- Monitor balances
-- Maintain compliance
+• Enter garnishment order
+• Verify deduction amount
+• Verify withholding requirements
+• Monitor balances
+• Maintain compliance
 
 Never modify garnishments without documentation.` },
   { id:'earnings', title:'13. Earnings & Deductions', content:`Earnings Examples:
-- Covered Pay  • Snow Labor  • Retro Pay  • Bonus
+• Covered Pay  • Snow Labor  • Retro Pay  • Bonus
 
 Deductions Examples:
-- Overpayment Recovery  • Payroll Corrections  • Other Approved Deductions
+• Overpayment Recovery  • Payroll Corrections  • Other Approved Deductions
 
 All adjustments require documentation.` },
+  { id:'earnings-codes', title:'13b. Approved Earnings Codes', content:`REGULAR PAYROLL CODES:
+  RG        Regular Pay           — Regular non-prevailing wage hours
+  PW        Prevailing Wage       — Prevailing wage hours worked
+  OT        Manual Overtime       — Manual overtime adjustment
+  OT1.5     Overtime 1.5x         — Holiday or overtime premium adjustments
+  F.RG      Fixed Regular Rate    — Fixed regular rate adjustments
+  F.PW      Fixed Prevailing Wage — Fixed prevailing wage adjustments
+  FixedOT   Fixed Overtime        — Fixed overtime adjustments
+  HO        Holiday               — Holiday pay
+  CP        Covered Pay           — Coverage pay assignments
+  EH        Extra Hours           — Additional approved hours
+  BO        Bonus                 — Bonus payments
+  SL        Snow Labor            — Snow labor compensation
+
+SICK, VACATION & PTO — MANUAL:
+  SK        Manual Sick           — Manual sick payment adjustment or correction
+  VA        Manual Vacation       — Manual vacation payment adjustment or correction
+  PTO|PW    PTO Prevailing Wage   — Prevailing wage PTO payments
+
+SICK, VACATION & PTO — SCHEDULED:
+  SK1       Scheduled Sick        — First payroll sick benefit payment
+  SK115     Sick 1st & 15th       — Buildings using 1st & 15th sick payment structure
+  VA1       Scheduled Vacation    — First payroll vacation benefit payment
+  VA115     Vacation 1st & 15th   — Buildings using 1st & 15th vacation payment structure
+  PTO115    PTO 1st & 15th        — Buildings using 1st & 15th PTO payment structure
+
+SUPPLEMENTAL BENEFIT CODES:
+  SBR       Supplemental Benefit Rate     — Standard prevailing wage supplement
+  SBR 428   Supplemental Benefit Rate 428 — Contract-specific supplement
+  PW428     PW 428                        — Contract-specific prevailing wage rate
+
+REIMBURSEMENTS & OTHER:
+  Car       Monthly Car Expense           — Monthly vehicle reimbursement
+  NonTCar   Weekly Non-Tax Car Expense    — Weekly non-taxable car reimbursement
+  Tolls/Gas Weekly Non-Taxable Toll & Gas — Employee reimbursement
+  Non Tax Re Non-Taxable Reimbursement    — Approved reimbursement
+  Employee G Employee Reimbursement       — General employee reimbursement
+  Garbage Re Garbage Removal              — Garbage removal reimbursement
+  Supplies  Supplies                      — Approved supply reimbursement
+  loan      Loan                          — Loan repayment adjustment
+  Morning Ga Morning Garbage Shift        — Morning garbage shift payment
+
+DO NOT USE (inactive/outdated/testing):
+  OT2 · Porter · SA35 · Training · Christmas · Columbus Day · Election Day
+  Independence Day · Labor Day · Memorial Day · MLK/Holiday · Presidents Day
+  Thanksgiving · Gas · Car R
+
+Always use the approved earnings codes listed above.` },
   { id:'fingercheck', title:'14. Creating Jobs in Fingercheck', content:`Process:
 1. Add Rate Code
 2. Add Maximum Hour Policy
@@ -205,16 +252,16 @@ All job setups must be completed before assigning employees.` },
 Used for: Porters, Supers
 Verify job fencing is active before employee assignment.` },
   { id:'docs', title:'16. Documentation Requirements', content:`Every payroll change must include:
-- Employee Note  • Date  • Reason
-- Supporting documentation
-- Asana Task Link (when applicable)
+• Employee Note  • Date  • Reason
+• Supporting documentation
+• Asana Task Link (when applicable)
 
 If it is not documented, it did not happen.` },
   { id:'exceptions', title:'17. Special Cases & Exceptions', content:`Common Exceptions:
-- Prevailing wage corrections  • Retroactive raises
-- Payroll corrections  • Emergency holiday coverage
-- Special OT calculations  • Rehires  • Promotions
-- Contract exceptions  • Legacy rates
+• Prevailing wage corrections  • Retroactive raises
+• Payroll corrections  • Emergency holiday coverage
+• Special OT calculations  • Rehires  • Promotions
+• Contract exceptions  • Legacy rates
 
 When unsure: Stop → Review documentation → Verify with management → Document decision` },
   { id:'checklist', title:'18. Payroll Approval Checklist', content:`☐ Hours reviewed
