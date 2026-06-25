@@ -171,35 +171,46 @@ export default function DashboardPage() {
           const pastRates = (await pastRatesRes.json()).rates || {}
           if (pastData.error) continue
           for (const tier of TIERS) {
-            const pastEntries = (pastData[tier] || [])
-              .map((e: PorterEntry) => ({
-                ...e,
-                rate: pastRates[e.id] || e.rate || '',
-                approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending',
-                pastPeriod: period.label,
-              }))
-              .filter((e: any) => ['pending','waiting','open'].includes(e.approvalStatus))
-            mapped[tier] = [...mapped[tier], ...pastEntries]
+            const pastEntries = await Promise.all(
+              (pastData[tier] || [])
+                .map(async (e: PorterEntry) => {
+                  const baseStatus = e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending'
+                  // Check Asana cache for manually closed tasks
+                  let approvalStatus = baseStatus
+                  if (e.asanaId && !['closed'].includes(baseStatus)) {
+                    const isClosed = await checkAsanaClosed(e.asanaId, token)
+                    if (isClosed) approvalStatus = 'closed'
+                  }
+                  return {
+                    ...e,
+                    rate: pastRates[e.id] || e.rate || '',
+                    approvalStatus,
+                    closedReason: approvalStatus === 'closed' && baseStatus !== 'closed' ? 'Closed in Asana' : undefined,
+                    pastPeriod: period.label,
+                  }
+                })
+            )
+            // Only carry forward unresolved entries (but include Asana-closed so they show in Closed tab)
+            const unresolved = pastEntries.filter((e: any) =>
+              ['pending','waiting','open','closed'].includes(e.approvalStatus) &&
+              !(e.approvalStatus === 'closed' && !e.pastPeriod)
+            )
+            mapped[tier] = [...mapped[tier], ...unresolved]
           }
         } catch {}
       }
 
       // FIX: Check Asana for manually closed tasks — auto-move to closed tab
-      // Batch check all entries that have asanaId and are not already closed/exported
-      const allPendingEntries = TIERS.flatMap(tier =>
-        mapped[tier].filter(e => e.asanaId && !['closed','exported'].includes(e.approvalStatus))
-      )
-
-      if (allPendingEntries.length > 0) {
-        // Check in batches to avoid too many concurrent requests
+      // Runs on ALL entries including past period entries
+      for (const tier of TIERS) {
         const batchSize = 10
-        for (let i = 0; i < allPendingEntries.length; i += batchSize) {
-          const batch = allPendingEntries.slice(i, i + batchSize)
+        const pending = mapped[tier].filter(e => e.asanaId && !['closed','exported'].includes(e.approvalStatus))
+        for (let i = 0; i < pending.length; i += batchSize) {
+          const batch = pending.slice(i, i + batchSize)
           await Promise.all(
             batch.map(async (entry) => {
               const isClosed = await checkAsanaClosed(entry.asanaId!, token)
               if (isClosed) {
-                const tier = entry.tier as Tier
                 const idx = mapped[tier].findIndex(e => e.id === entry.id)
                 if (idx !== -1) {
                   mapped[tier][idx] = {
@@ -412,7 +423,7 @@ export default function DashboardPage() {
   }
 
   const allApproved = TIERS.flatMap(ti => allEntries[ti]).filter(e => e.approvalStatus === 'approved')
-  const payday = new Date(periodEnd); payday.setDate(payday.getDate() + 3)
+  const payday = new Date(periodEnd + 'T12:00:00'); payday.setDate(payday.getDate() + 3)
   const paydayStr = payday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
   const hasEntries = TIERS.some(ti => allEntries[ti].length > 0)
   const visibleEntries = tabEntries(activeTier, activeTab)
