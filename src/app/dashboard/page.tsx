@@ -497,6 +497,13 @@ export default function DashboardPage() {
       }
       return false
     })
+    else if (tab === 'errors') entries = entries.filter(x => {
+      if (['closed','exported'].includes(x.approvalStatus)) return false
+      // Exclude entries already in billing tab
+      if (x.entryType === 'billable') return false
+      if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
+      return !x.jobCode || !x.asanaLink || !x.rate
+    })
     else if (tab === 'errors') entries = entries.filter(x => !['closed','exported'].includes(x.approvalStatus) && (!x.jobCode || !x.asanaLink || !x.rate))
     else if (tab === 'closed') entries = entries.filter(x => x.approvalStatus === 'closed')
     else if (tab === 'exported') entries = entries.filter(x => x.approvalStatus === 'exported')
@@ -694,15 +701,14 @@ export default function DashboardPage() {
                 {entry.asanaId && asanaCache[entry.asanaId]?.assignee && (
                   <div>
                     <div className="text-gray-400 mb-1">Asana assignee</div>
-                    <div className="text-gray-800 font-medium flex items-center gap-1">
-                      👤 {asanaCache[entry.asanaId].assignee}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-gray-800 font-medium text-xs">
+                        👤 {asanaCache[entry.asanaId].assignee_email || asanaCache[entry.asanaId].assignee}
+                      </span>
                       {isBillingAssignee(asanaCache[entry.asanaId].assignee_email) && (
-                        <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded ml-1">Billing</span>
+                        <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded flex-shrink-0">Billing</span>
                       )}
                     </div>
-                    {asanaCache[entry.asanaId].assignee_email && (
-                      <div className="text-xs text-gray-400 mt-0.5">{asanaCache[entry.asanaId].assignee_email}</div>
-                    )}
                   </div>
                 )}
                 {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
@@ -830,7 +836,7 @@ export default function DashboardPage() {
             {(['approved','pending','waiting','billing','errors','closed','exported','general_issues','terminations'] as InnerTab[]).map(tab => {
               const isIssueTab = tab === 'general_issues' || tab === 'terminations'
               const count = isIssueTab
-                ? asanaIssues.filter(i => i.task_type === (tab === 'general_issues' ? 'general_issue' : 'termination')).length
+                ? asanaIssues.filter(i => i.task_type === (tab === 'general_issues' ? 'general_issue' : 'termination') && !i.completed).length
                 : tabEntries(activeTier, tab).length
               const labels: Record<InnerTab,string> = {
                 approved: t(lang,'tab_approved'),
@@ -885,14 +891,13 @@ export default function DashboardPage() {
           {/* General Issues tab content */}
           {activeTab === 'general_issues' && (
             <div className="divide-y divide-gray-100">
-              {asanaIssues.filter(i => i.task_type === 'general_issue').length === 0 ? (
-                <div className="py-14 text-center text-gray-400 text-sm">No general issues — sync Asana to refresh</div>
-              ) : asanaIssues.filter(i => i.task_type === 'general_issue').map(issue => (
-                <div key={issue.task_id} className={`px-4 py-3 flex items-start gap-3 ${issue.completed ? 'opacity-60' : ''}`}>
+              {asanaIssues.filter(i => i.task_type === 'general_issue' && !i.completed).length === 0 ? (
+                <div className="py-14 text-center text-gray-400 text-sm">No open general issues</div>
+              ) : asanaIssues.filter(i => i.task_type === 'general_issue' && !i.completed).map(issue => (
+                <div key={issue.task_id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/50">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-medium ${issue.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{issue.name}</span>
-                      {issue.completed && <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">✓ Resolved</span>}
+                      <span className="text-sm font-medium text-gray-900">{issue.name}</span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                       {issue.assignee && <span>👤 {issue.assignee}</span>}
@@ -909,14 +914,13 @@ export default function DashboardPage() {
           {/* Terminations tab content */}
           {activeTab === 'terminations' && (
             <div className="divide-y divide-gray-100">
-              {asanaIssues.filter(i => i.task_type === 'termination').length === 0 ? (
-                <div className="py-14 text-center text-gray-400 text-sm">No terminations — sync Asana to refresh</div>
-              ) : asanaIssues.filter(i => i.task_type === 'termination').map(issue => (
-                <div key={issue.task_id} className={`px-4 py-3 flex items-start gap-3 ${issue.completed ? 'opacity-60' : ''}`}>
+              {asanaIssues.filter(i => i.task_type === 'termination' && !i.completed).length === 0 ? (
+                <div className="py-14 text-center text-gray-400 text-sm">No open terminations</div>
+              ) : asanaIssues.filter(i => i.task_type === 'termination' && !i.completed).map(issue => (
+                <div key={issue.task_id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/50">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-medium ${issue.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{issue.name}</span>
-                      {issue.completed && <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">✓ Done</span>}
+                      <span className="text-sm font-medium text-gray-900">{issue.name}</span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                       {issue.assignee && <span>👤 {issue.assignee}</span>}
