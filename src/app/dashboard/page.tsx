@@ -8,7 +8,7 @@ import { getCurrentPeriod, getPreviousPeriod, fmtISO } from '@/lib/payPeriod'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 import NavBar from '@/components/NavBar'
 
-type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'closed' | 'exported'
+type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'closed' | 'exported' | 'general_issues' | 'terminations'
 type EntryTypeFilter = 'all' | 'cover' | 'extra_hours' | 'billable'
 interface SortState { col: string; dir: 'asc' | 'desc' }
 
@@ -76,8 +76,8 @@ export default function DashboardPage() {
   const [exportCount, setExportCount] = useState(0)
   const [dismissedBanners, setDismissedBanners] = useState<string[]>([])
   const [tourStep, setTourStep] = useState<number | null>(null)
-  const [asanaCache, setAsanaCache] = useState<Record<string, { assignee: string | null; completed: boolean }>>({})
-
+  const [asanaCache, setAsanaCache] = useState<Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }>>({})
+  const [asanaIssues, setAsanaIssues] = useState<{ task_id: string; name: string; notes: string; completed: boolean; assignee: string | null; due_on: string | null; task_type: string; updated_at: string }[]>([])
   const dir = TRANSLATIONS[lang].dir
 
   useEffect(() => {
@@ -122,12 +122,19 @@ export default function DashboardPage() {
       const supabase = createClient()
       const { data } = await supabase
         .from('asana_task_cache')
-        .select('task_id, assignee, completed')
-      const map: Record<string, { assignee: string | null; completed: boolean }> = {}
+        .select('task_id, assignee, assignee_email, completed, name, notes, due_on, task_type, updated_at')
+
+      const map: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }> = {}
+      const issues: typeof asanaIssues = []
+
       for (const row of data || []) {
-        map[row.task_id] = { assignee: row.assignee, completed: row.completed }
+        map[row.task_id] = { assignee: row.assignee, assignee_email: row.assignee_email, completed: row.completed }
+        if (row.task_type === 'general_issue' || row.task_type === 'termination') {
+          issues.push(row)
+        }
       }
       setAsanaCache(map)
+      setAsanaIssues(issues.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
       return map
     } catch {
       return {}
@@ -368,16 +375,17 @@ export default function DashboardPage() {
     else if (tab === 'billing') entries = entries.filter(x => {
       if (['closed','exported'].includes(x.approvalStatus)) return false
       if (x.entryType === 'billable') return true
-      // Also route to billing if Asana task is assigned to a billing team member
       if (x.asanaId && asanaCache[x.asanaId]) {
-        const assignee = asanaCache[x.asanaId].assignee?.toLowerCase() || ''
-        if (BILLING_ASSIGNEES.some(b => assignee.includes(b.split('@')[0]))) return true
+        const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
+        if (BILLING_ASSIGNEES.includes(email)) return true
       }
       return false
     })
     else if (tab === 'errors') entries = entries.filter(x => !['closed','exported'].includes(x.approvalStatus) && (!x.jobCode || !x.asanaLink || !x.rate))
     else if (tab === 'closed') entries = entries.filter(x => x.approvalStatus === 'closed')
     else if (tab === 'exported') entries = entries.filter(x => x.approvalStatus === 'exported')
+    // General Issues and Terminations come from asanaIssues, not entries — return empty array here
+    if (tab === 'general_issues' || tab === 'terminations') return []
     if (typeFilter !== 'all') entries = entries.filter(x => x.entryType === typeFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -572,10 +580,13 @@ export default function DashboardPage() {
                     <div className="text-gray-400 mb-1">Asana assignee</div>
                     <div className="text-gray-800 font-medium flex items-center gap-1">
                       👤 {asanaCache[entry.asanaId].assignee}
-                      {BILLING_ASSIGNEES.some(b => asanaCache[entry.asanaId].assignee?.toLowerCase().includes(b.split('@')[0])) && (
+                      {asanaCache[entry.asanaId].assignee_email && BILLING_ASSIGNEES.includes(asanaCache[entry.asanaId].assignee_email!.toLowerCase()) && (
                         <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded ml-1">Billing</span>
                       )}
                     </div>
+                    {asanaCache[entry.asanaId].assignee_email && (
+                      <div className="text-xs text-gray-400 mt-0.5">{asanaCache[entry.asanaId].assignee_email}</div>
+                    )}
                   </div>
                 )}
                 {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
@@ -700,14 +711,43 @@ export default function DashboardPage() {
 
           {/* Inner tabs */}
           <div id="tour-tabs" className="flex border-b border-gray-200 px-1 items-center overflow-x-auto">
-            {(['approved','pending','waiting','billing','errors','closed','exported'] as InnerTab[]).map(tab => {
-              const count = tabEntries(activeTier, tab).length
-              const labels: Record<InnerTab,string> = { approved:t(lang,'tab_approved'), pending:t(lang,'tab_pending'), waiting:t(lang,'tab_waiting'), billing:t(lang,'tab_billing'), errors:t(lang,'tab_errors'), closed:t(lang,'tab_closed'), exported:t(lang,'tab_exported') }
-              const colors: Record<InnerTab,string> = { approved:'bg-emerald-50 text-emerald-700', pending:'bg-amber-50 text-amber-700', waiting:'bg-red-50 text-red-700', billing:'bg-purple-50 text-purple-700', errors:'bg-red-50 text-red-700', closed:'bg-gray-100 text-gray-600', exported:'bg-blue-50 text-blue-700' }
+            {(['approved','pending','waiting','billing','errors','closed','exported','general_issues','terminations'] as InnerTab[]).map(tab => {
+              const isIssueTab = tab === 'general_issues' || tab === 'terminations'
+              const count = isIssueTab
+                ? asanaIssues.filter(i => i.task_type === (tab === 'general_issues' ? 'general_issue' : 'termination')).length
+                : tabEntries(activeTier, tab).length
+              const labels: Record<InnerTab,string> = {
+                approved: t(lang,'tab_approved'),
+                pending: t(lang,'tab_pending'),
+                waiting: t(lang,'tab_waiting'),
+                billing: t(lang,'tab_billing'),
+                errors: t(lang,'tab_errors'),
+                closed: t(lang,'tab_closed'),
+                exported: t(lang,'tab_exported'),
+                general_issues: 'General Issues',
+                terminations: 'Terminations',
+              }
+              const colors: Record<InnerTab,string> = {
+                approved:'bg-emerald-50 text-emerald-700',
+                pending:'bg-amber-50 text-amber-700',
+                waiting:'bg-red-50 text-red-700',
+                billing:'bg-purple-50 text-purple-700',
+                errors:'bg-red-50 text-red-700',
+                closed:'bg-gray-100 text-gray-600',
+                exported:'bg-blue-50 text-blue-700',
+                general_issues:'bg-amber-50 text-amber-700',
+                terminations:'bg-red-50 text-red-700',
+              }
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`px-3 py-2.5 text-xs font-medium border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap
-                    ${activeTab === tab ? tab === 'errors' ? 'border-red-500 text-red-700' : tab === 'billing' ? 'border-purple-500 text-purple-700' : 'border-[#D4A843] text-[#0D1B35]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    ${activeTab === tab
+                      ? tab === 'errors' ? 'border-red-500 text-red-700'
+                      : tab === 'billing' ? 'border-purple-500 text-purple-700'
+                      : tab === 'terminations' ? 'border-red-500 text-red-700'
+                      : tab === 'general_issues' ? 'border-amber-500 text-amber-700'
+                      : 'border-[#D4A843] text-[#0D1B35]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                   {labels[tab]}
                   <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${colors[tab]}`}>{count}</span>
                 </button>
@@ -726,7 +766,55 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {visibleEntries.length === 0 ? (
+          {/* General Issues tab content */}
+          {activeTab === 'general_issues' && (
+            <div className="divide-y divide-gray-100">
+              {asanaIssues.filter(i => i.task_type === 'general_issue').length === 0 ? (
+                <div className="py-14 text-center text-gray-400 text-sm">No general issues — sync Asana to refresh</div>
+              ) : asanaIssues.filter(i => i.task_type === 'general_issue').map(issue => (
+                <div key={issue.task_id} className={`px-4 py-3 flex items-start gap-3 ${issue.completed ? 'opacity-60' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-medium ${issue.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{issue.name}</span>
+                      {issue.completed && <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">✓ Resolved</span>}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
+                      {issue.assignee && <span>👤 {issue.assignee}</span>}
+                      {issue.due_on && <span>📅 {new Date(issue.due_on).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
+                    </div>
+                    {issue.notes && <p className="text-xs text-gray-500 mt-1 truncate">{issue.notes}</p>}
+                  </div>
+                  <a href={`https://app.asana.com/0/0/${issue.task_id}`} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] text-xs hover:underline flex-shrink-0">↗ Asana</a>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Terminations tab content */}
+          {activeTab === 'terminations' && (
+            <div className="divide-y divide-gray-100">
+              {asanaIssues.filter(i => i.task_type === 'termination').length === 0 ? (
+                <div className="py-14 text-center text-gray-400 text-sm">No terminations — sync Asana to refresh</div>
+              ) : asanaIssues.filter(i => i.task_type === 'termination').map(issue => (
+                <div key={issue.task_id} className={`px-4 py-3 flex items-start gap-3 ${issue.completed ? 'opacity-60' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-medium ${issue.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{issue.name}</span>
+                      {issue.completed && <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">✓ Done</span>}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
+                      {issue.assignee && <span>👤 {issue.assignee}</span>}
+                      {issue.due_on && <span>📅 {new Date(issue.due_on).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
+                    </div>
+                    {issue.notes && <p className="text-xs text-gray-500 mt-1 truncate">{issue.notes}</p>}
+                  </div>
+                  <a href={`https://app.asana.com/0/0/${issue.task_id}`} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] text-xs hover:underline flex-shrink-0">↗ Asana</a>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab !== 'general_issues' && activeTab !== 'terminations' && (visibleEntries.length === 0 ? (
             <div className="py-14 text-center text-gray-400 text-sm">{t(lang,'no_entries')}</div>
           ) : (
             <div id="tour-table" className="overflow-x-auto">
@@ -767,10 +855,12 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {activeTab !== 'general_issues' && activeTab !== 'terminations' && (
           <div className="px-4 py-2 border-t border-gray-100 flex justify-between">
             <span className="text-xs text-gray-400">{visibleEntries.length} {t(lang,'export_entries')} · {t(lang,'click_to_expand')}</span>
             <span className="text-xs text-gray-400">{t(lang,'period_payday')} {paydayStr}</span>
           </div>
+          )}
         </div>
       </main>
 
