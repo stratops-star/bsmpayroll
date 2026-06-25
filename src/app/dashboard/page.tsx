@@ -13,6 +13,12 @@ type EmployeeFilter = 'all' | 'new' | 'terminated' | 'missing' | 'completed'
 type EntryTypeFilter = 'all' | 'cover' | 'extra_hours' | 'billable'
 interface SortState { col: string; dir: 'asc' | 'desc' }
 
+interface EmployeeSetup {
+  max_hour_policy: boolean
+  alert_policy: boolean
+  job_fencing_policy: boolean
+}
+
 const BILLING_ASSIGNEES = [
   'rebecca@bsmfacilitysolutions.com',
   'billing@bsmfacilitysolutions.com',
@@ -43,7 +49,6 @@ const FEDERAL_HOLIDAYS = [
   { name: "Christmas Day",              nameEs: 'Navidad',                      nameYi: 'קריסטמאַס',          month: 12, day: 25 },
 ]
 
-// Overlay tutorial steps
 const TOUR_STEPS = [
   { target: 'tour-period', title: 'Pay Period', body: 'The current pay period loads automatically. Change dates and click Load to view a different period. The app syncs fresh data from Google Sheets and Asana on every load.' },
   { target: 'tour-banners', title: 'Smart Reminders', body: 'Banners appear 7 days before key dates — SVPTO end of month, Prevailing Wage updates, 1st & 15th rule, and federal holidays. Click ✕ to dismiss.' },
@@ -98,7 +103,12 @@ export default function DashboardPage() {
   const [fcExpandedEmp, setFcExpandedEmp] = useState<string | null>(null)
   const [fcSetupFilter, setFcSetupFilter] = useState<'all' | 'missing' | 'completed'>('all')
   const [fcRates, setFcRates] = useState<Record<string, any[]>>({})
+  // employee_setup table data: keyed by employee_number
+  const [empSetup, setEmpSetup] = useState<Record<string, EmployeeSetup>>({})
   const dir = TRANSLATIONS[lang].dir
+
+  // 30-days-ago date computed once
+  const thirtyDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d })()
 
   useEffect(() => {
     const saved = localStorage.getItem('bsm_lang') as Lang
@@ -106,7 +116,6 @@ export default function DashboardPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
-      // Sync Asana first to get fresh data, then load cache and entries
       setSyncingAsana(true)
       try {
         const token = await getToken()
@@ -116,9 +125,8 @@ export default function DashboardPage() {
         })
       } catch {}
       setSyncingAsana(false)
-      // Now load cache with fresh data, then entries
       await loadAsanaCache()
-      await Promise.all([loadEntries(), loadExportCount(), loadFcEmployees()])
+      await Promise.all([loadEntries(), loadExportCount(), loadFcEmployees(), loadEmpSetup()])
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
@@ -126,8 +134,82 @@ export default function DashboardPage() {
     })
   }, [])
 
+  // When fcEmployees loads, pre-fetch rates for all New 30d employees automatically
+  useEffect(() => {
+    if (fcEmployees.length === 0) return
+    const newEmps = fcEmployees.filter(e => {
+      const h = e.raw_data?._hireDate
+      return h && new Date(h) >= thirtyDaysAgo && e.status === 'Active'
+    })
+    newEmps.forEach(e => {
+      if (!fcRates[e.employee_number]) {
+        fetchEmpRates(e.employee_number)
+      }
+    })
+  }, [fcEmployees])
+
+  // ── employee_setup Supabase helpers ──────────────────────────────────────
+
+  async function loadEmpSetup() {
+    try {
+      const sb = createClient()
+      const { data } = await sb
+        .from('employee_setup')
+        .select('employee_number, max_hour_policy, alert_policy, job_fencing_policy')
+      const map: Record<string, EmployeeSetup> = {}
+      for (const row of data || []) {
+        map[row.employee_number] = {
+          max_hour_policy: row.max_hour_policy,
+          alert_policy: row.alert_policy,
+          job_fencing_policy: row.job_fencing_policy,
+        }
+      }
+      setEmpSetup(map)
+    } catch {}
+  }
+
+  async function toggleSetupPolicy(empNumber: string, field: keyof EmployeeSetup) {
+    const current = empSetup[empNumber] || { max_hour_policy: false, alert_policy: false, job_fencing_policy: false }
+    const updated = { ...current, [field]: !current[field] }
+    // Optimistic update
+    setEmpSetup(prev => ({ ...prev, [empNumber]: updated }))
+    try {
+      const sb = createClient()
+      await sb.from('employee_setup').upsert({
+        employee_number: empNumber,
+        max_hour_policy: updated.max_hour_policy,
+        alert_policy: updated.alert_policy,
+        job_fencing_policy: updated.job_fencing_policy,
+        updated_at: new Date().toISOString(),
+        updated_by: userEmail,
+      }, { onConflict: 'employee_number' })
+    } catch {
+      // Revert on failure
+      setEmpSetup(prev => ({ ...prev, [empNumber]: current }))
+    }
+  }
+
+  // ── Setup status ──────────────────────────────────────────────────────────
+
+  // Returns setup status for a New 30d employee.
+  // 'completed' = has job-specific rate code AND all 3 policies checked.
+  // 'missing'   = rates loaded but at least one requirement unmet.
+  // null        = rates not yet loaded (still fetching).
+  function getSetupStatus(empNumber: string, rates: any[] | undefined): 'missing' | 'completed' | null {
+    if (!rates) return null
+    const hasJobRate = rates.some((r: any) => {
+      const code = (r.RateCode || r.Description || r.Code || '').toLowerCase().trim()
+      return code !== 'base' && code !== ''
+    })
+    const setup = empSetup[empNumber] || { max_hour_policy: false, alert_policy: false, job_fencing_policy: false }
+    const policiesOk = setup.max_hour_policy && setup.alert_policy && setup.job_fencing_policy
+    return hasJobRate && policiesOk ? 'completed' : 'missing'
+  }
+
+  // ── Fingercheck helpers ───────────────────────────────────────────────────
+
   async function fetchEmpRates(empNumber: string) {
-    if (fcRates[empNumber]) return // already loaded
+    if (fcRates[empNumber]) return
     try {
       const token = await getToken()
       const res = await fetch(`/api/fingercheck/rates?employeeNumber=${empNumber}`, {
@@ -138,24 +220,6 @@ export default function DashboardPage() {
     } catch {
       setFcRates(prev => ({ ...prev, [empNumber]: [] }))
     }
-  }
-
-  // Returns 'completed' if employee has job-specific rate codes AND all 3 policies set.
-  // Returns 'missing' if rates loaded but requirements not met.
-  // Returns null if rates not yet loaded (row not expanded).
-  function getSetupStatus(emp: any, rates: any[] | undefined): 'missing' | 'completed' | null {
-    if (!rates) return null // not yet loaded
-    const hasJobRate = rates.some((r: any) => {
-      const code = (r.RateCode || r.Description || r.Code || '').toLowerCase().trim()
-      return code !== 'base' && code !== ''
-    })
-    // Profile policies — field names verified against GetEmployeeByEmployeeNumber response
-    const maxHour = !!(emp.raw_data?.MaximumHourPolicy || emp.raw_data?.MaxHourPolicy)
-    const alert = !!(emp.raw_data?.AlertPolicy)
-    const jobFence = !!(emp.raw_data?.JobFencingPolicy || emp.raw_data?.GeoFencingPolicy)
-    const policiesOk = maxHour && alert && jobFence
-    if (hasJobRate && policiesOk) return 'completed'
-    return 'missing'
   }
 
   async function loadFcEmployees() {
@@ -169,6 +233,8 @@ export default function DashboardPage() {
     } catch {}
   }
 
+  // ── Auth / misc ───────────────────────────────────────────────────────────
+
   async function syncAsanaInBackground() {
     try {
       setSyncingAsana(true)
@@ -178,19 +244,13 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       await loadAsanaCache()
-    } catch {
-      // Silent fail
-    } finally {
+    } catch {} finally {
       setSyncingAsana(false)
     }
   }
 
   function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
-
-  function relaunchTour() {
-    localStorage.removeItem('bsm_tour_done')
-    setTourStep(0)
-  }
+  function relaunchTour() { localStorage.removeItem('bsm_tour_done'); setTourStep(0) }
 
   async function getToken() {
     const { data } = await supabase.auth.getSession()
@@ -211,8 +271,6 @@ export default function DashboardPage() {
       const supabase = createClient()
       const map: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }> = {}
       const issues: typeof asanaIssues = []
-
-      // Paginate to get all rows past Supabase's 1000 row default limit
       let from = 0
       const pageSize = 1000
       while (true) {
@@ -220,20 +278,14 @@ export default function DashboardPage() {
           .from('asana_task_cache')
           .select('task_id, assignee, assignee_email, completed, name, notes, due_on, task_type, updated_at')
           .range(from, from + pageSize - 1)
-
         if (error || !data || data.length === 0) break
-
         for (const row of data) {
           map[row.task_id] = { assignee: row.assignee, assignee_email: row.assignee_email, completed: row.completed }
-          if (row.task_type === 'general_issue' || row.task_type === 'termination') {
-            issues.push(row)
-          }
+          if (row.task_type === 'general_issue' || row.task_type === 'termination') issues.push(row)
         }
-
         if (data.length < pageSize) break
         from += pageSize
       }
-
       setAsanaCache(map)
       setAsanaIssues(issues.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
       return map
@@ -260,13 +312,11 @@ export default function DashboardPage() {
     return periods
   }
 
-  // Check Asana closed from cache map — accepts map directly to avoid stale state
   function isAsanaClosedFromMap(asanaId: string, cache: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }>): boolean {
     if (!asanaId) return false
     return cache[asanaId]?.completed === true
   }
 
-  // Check Asana closed from local state cache
   function isAsanaClosed(asanaId: string): boolean {
     if (!asanaId) return false
     return asanaCache[asanaId]?.completed === true
@@ -298,9 +348,7 @@ export default function DashboardPage() {
         map[row.entry_id] = { status: row.approval_status, closedReason: row.closed_reason }
       }
       return map
-    } catch {
-      return {}
-    }
+    } catch { return {} }
   }
 
   async function saveAsanaClosedEntry(entry: PorterEntry) {
@@ -336,12 +384,7 @@ export default function DashboardPage() {
     setStatusMsg(t(lang, 'period_loading'))
     try {
       const token = await getToken()
-
-      // Get fresh cache map directly — don't rely on stale React state
       const freshCache = await loadAsanaCache()
-
-      // Load current period + rates in parallel
-
       const [sheetsRes, ratesRes] = await Promise.all([
         fetch(`/api/sheets?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/rates?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -350,14 +393,8 @@ export default function DashboardPage() {
       const ratesData = await ratesRes.json()
       if (data.error) throw new Error(data.error)
       const savedRates = ratesData.rates || {}
-
-      // Collect all entry IDs to load approvals
       const allIds: string[] = []
-      for (const tier of TIERS) {
-        for (const e of (data[tier] || [])) allIds.push(e.id)
-      }
-
-      // Load past 4 periods entries
+      for (const tier of TIERS) for (const e of (data[tier] || [])) allIds.push(e.id)
       const pastPeriods = getPastPeriods(4)
       const pastDataMap: Record<string, { data: any; rates: any }> = {}
       await Promise.all(pastPeriods.map(async period => {
@@ -370,19 +407,12 @@ export default function DashboardPage() {
           const pastRates = (await pastRatesRes.json()).rates || {}
           if (!pastData.error) {
             pastDataMap[period.label] = { data: pastData, rates: pastRates }
-            for (const tier of TIERS) {
-              for (const e of (pastData[tier] || [])) allIds.push(e.id)
-            }
+            for (const tier of TIERS) for (const e of (pastData[tier] || [])) allIds.push(e.id)
           }
         } catch {}
       }))
-
-      // Load all approvals in ONE query
       const approvals = await loadApprovals(allIds)
-
       const mapped: Record<Tier, PorterEntry[]> = { T1: [], T2: [], T3: [] }
-
-      // Map current period entries
       for (const tier of TIERS) {
         mapped[tier] = (data[tier] || []).map((e: PorterEntry) => {
           const saved = approvals[e.id]
@@ -406,8 +436,6 @@ export default function DashboardPage() {
           }
         })
       }
-
-      // Map past period entries
       for (const [periodLabel, { data: pastData, rates: pastRates }] of Object.entries(pastDataMap)) {
         for (const tier of TIERS) {
           const pastEntries = (pastData[tier] || []).map((e: PorterEntry) => {
@@ -435,14 +463,11 @@ export default function DashboardPage() {
           mapped[tier] = [...mapped[tier], ...pastEntries]
         }
       }
-
       setAllEntries(mapped)
       const total = TIERS.reduce((s, ti) => s + mapped[ti].length, 0)
       const now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
       setLastRefreshed(now)
       setStatusMsg(`${total} ${t(lang, 'period_loaded')}${data.fromCache ? ' (cached)' : ''}`)
-
-      // Background sync to keep Supabase cache fresh
       syncSheetsInBackground()
     } catch (e: any) { setStatusMsg(`Error: ${e.message}`) }
     setLoading(false)
@@ -458,7 +483,6 @@ export default function DashboardPage() {
       })
     } catch {}
   }
-
 
   function updateEntry(id: string, tier: Tier, patch: Partial<PorterEntry>) {
     setAllEntries(prev => ({ ...prev, [tier]: prev[tier].map(e => e.id === id ? { ...e, ...patch } : e) }))
@@ -509,9 +533,8 @@ export default function DashboardPage() {
   function handleReopen(entry: PorterEntry) {
     const d = new Date(entry.submissionDay)
     if (Math.ceil((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)) > 14) return
-    const status = 'pending'
-    updateEntry(entry.id, entry.tier, { approvalStatus: status, closedReason: undefined })
-    saveApprovalStatus(entry.id, status)
+    updateEntry(entry.id, entry.tier, { approvalStatus: 'pending', closedReason: undefined })
+    saveApprovalStatus(entry.id, 'pending')
   }
 
   function isLocked(entry: PorterEntry): boolean {
@@ -550,10 +573,7 @@ export default function DashboardPage() {
       for (const tier of TIERS) {
         setAllEntries(prev => ({ ...prev, [tier]: prev[tier].map(e => e.approvalStatus === 'approved' ? { ...e, approvalStatus: 'exported' as const } : e) }))
       }
-      // Persist exported status for all approved entries
-      for (const entry of allApproved) {
-        saveApprovalStatus(entry.id, 'exported')
-      }
+      for (const entry of allApproved) saveApprovalStatus(entry.id, 'exported')
       setExportCount(c => c + 1)
       setStatusMsg('Exported — Asana tasks updated')
     } catch (e: any) { setStatusMsg(`Error: ${e.message}`) }
@@ -577,11 +597,11 @@ export default function DashboardPage() {
       if (!x.jobCode || !x.asanaLink || !x.rate) return false
       if (x.asanaId && asanaCache[x.asanaId]) {
         const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
-        if (!email) return true // no assignee → pending
-        if (email === 'payroll@bsmfacilitysolutions.com') return true // payroll@ → pending
-        return false // has other assignee → waiting or billing
+        if (!email) return true
+        if (email === 'payroll@bsmfacilitysolutions.com') return true
+        return false
       }
-      return true // no cache entry → pending
+      return true
     })
     else if (tab === 'waiting') entries = entries.filter(x => {
       if (['approved','closed','exported'].includes(x.approvalStatus)) return false
@@ -589,17 +609,15 @@ export default function DashboardPage() {
       if (!x.jobCode || !x.asanaLink || !x.rate) return false
       if (x.asanaId && asanaCache[x.asanaId]) {
         const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
-        if (!email) return false // no assignee → pending
-        if (email === 'payroll@bsmfacilitysolutions.com') return false // payroll@ → pending
-        if (isBillingAssignee(email)) return false // billing → billing tab
-        return true // non-billing, non-payroll assignee → waiting
+        if (!email) return false
+        if (email === 'payroll@bsmfacilitysolutions.com') return false
+        if (isBillingAssignee(email)) return false
+        return true
       }
       return false
     })
     else if (tab === 'billing') entries = entries.filter(x => {
       if (x.approvalStatus === 'closed') return false
-      // Show entries assigned to billing regardless of approval status
-      // This includes: pending billing approval AND exported (awaiting billing completion)
       if (x.entryType === 'billable') return true
       if (x.asanaId && asanaCache[x.asanaId]) {
         if (isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return true
@@ -608,15 +626,12 @@ export default function DashboardPage() {
     })
     else if (tab === 'errors') entries = entries.filter(x => {
       if (['closed','exported'].includes(x.approvalStatus)) return false
-      // Exclude entries already in billing tab
       if (x.entryType === 'billable') return false
       if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
       return !x.jobCode || !x.asanaLink || !x.rate
     })
-    else if (tab === 'errors') entries = entries.filter(x => !['closed','exported'].includes(x.approvalStatus) && (!x.jobCode || !x.asanaLink || !x.rate))
     else if (tab === 'closed') entries = entries.filter(x => x.approvalStatus === 'closed')
     else if (tab === 'exported') entries = entries.filter(x => x.approvalStatus === 'exported')
-    // General Issues and Terminations come from asanaIssues, not entries — return empty array here
     if (tab === 'general_issues' || tab === 'terminations') return []
     if (typeFilter !== 'all') entries = entries.filter(x => x.entryType === typeFilter)
     if (search.trim()) {
@@ -640,8 +655,6 @@ export default function DashboardPage() {
     const year = now.getFullYear()
     const month = now.getMonth() + 1
     const banners: { id: string; type: 'holiday' | 'svpto' | 'first15' | 'prevwage'; message: string; sub: string }[] = []
-
-    // Federal holiday banners
     for (const h of FEDERAL_HOLIDAYS) {
       const hDate = new Date(year, h.month - 1, h.day)
       const diff = Math.ceil((hDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -650,51 +663,35 @@ export default function DashboardPage() {
         banners.push({ id: `holiday-${year}-${h.month}-${h.day}`, type: 'holiday', message: `⚠️ ${t(lang,'banner_holiday')} — ${hName}`, sub: hDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) })
       }
     }
-
-    // SVPTO — 7 days before end of month
     const endOfMonth = new Date(year, month, 0)
     if (Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `svpto-${year}-${month}`, type: 'svpto', message: `⚠️ ${t(lang,'banner_svpto')}`, sub: `${t(lang,'banner_end_of_month')}: ${endOfMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
-    }
-
-    // Prevailing Wages — 7 days before end of month
-    if (Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `prevwage-${year}-${month}`, type: 'prevwage', message: `💰 Remember to update all employees with Prevailing Wages.`, sub: `Due by end of month: ${endOfMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
-
-    // 1st of next month
     const first = new Date(year, month, 1)
     if (Math.ceil((first.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `first-${year}-${month}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_1st')} ${first.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
-
-    // 15th
     const fifteen = now.getDate() < 15 ? new Date(year, month - 1, 15) : new Date(year, month, 15)
     if (Math.ceil((fifteen.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `fifteen-${fifteen.getFullYear()}-${fifteen.getMonth()}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_15th')} ${fifteen.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
-
     return banners.filter(b => !dismissedBanners.includes(b.id))
   }
 
-  // Group visible entries by period — current period first, then past periods
   function groupedEntries(entries: PorterEntry[]): { period: string | null; entries: PorterEntry[] }[] {
     const current: PorterEntry[] = []
     const pastMap = new Map<string, PorterEntry[]>()
     for (const e of entries) {
       const pp = (e as any).pastPeriod as string | undefined
-      if (!pp) {
-        current.push(e)
-      } else {
+      if (!pp) { current.push(e) } else {
         if (!pastMap.has(pp)) pastMap.set(pp, [])
         pastMap.get(pp)!.push(e)
       }
     }
     const groups: { period: string | null; entries: PorterEntry[] }[] = []
     if (current.length) groups.push({ period: null, entries: current })
-    for (const [period, ents] of pastMap) {
-      groups.push({ period, entries: ents })
-    }
+    for (const [period, ents] of pastMap) groups.push({ period, entries: ents })
     return groups
   }
 
@@ -745,13 +742,13 @@ export default function DashboardPage() {
           </td>
           <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{propShort || '—'}</td>
           <td className="px-3 py-2.5 text-gray-600 truncate text-xs">{entry.manager || '—'}</td>
-          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+          <td className="px-3 py-2.5" onClick={ev => ev.stopPropagation()}>
             {entry.jobCode ? <span className="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{entry.jobCode}</span> : <span className="text-xs text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{t(lang,'status_missing_job')}</span>}
           </td>
-          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+          <td className="px-3 py-2.5" onClick={ev => ev.stopPropagation()}>
             {entry.asanaLink ? <a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] text-xs hover:underline">↗ Task</a> : <span className="text-gray-400 text-xs">—</span>}
           </td>
-          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+          <td className="px-3 py-2.5" onClick={ev => ev.stopPropagation()}>
             {locked ? (
               <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{t(lang,'status_locked')}</span>
             ) : isExported ? (
@@ -762,7 +759,6 @@ export default function DashboardPage() {
                 <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
               </div>
             ) : entry.entryType === 'billable' || (entry.asanaId && asanaCache[entry.asanaId] && isBillingAssignee(asanaCache[entry.asanaId].assignee_email)) ? (
-              // Billing entries — read only, no approve button
               isExported ? (
                 <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-medium">📋 Billing</span>
               ) : isApproved ? (
@@ -818,9 +814,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="text-gray-400 mb-1">Asana assignee</div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-gray-800 font-medium text-xs">
-                        👤 {asanaCache[entry.asanaId].assignee_email || asanaCache[entry.asanaId].assignee}
-                      </span>
+                      <span className="text-gray-800 font-medium text-xs">👤 {asanaCache[entry.asanaId].assignee_email || asanaCache[entry.asanaId].assignee}</span>
                       {isBillingAssignee(asanaCache[entry.asanaId].assignee_email) && (
                         <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded flex-shrink-0">Billing</span>
                       )}
@@ -881,20 +875,11 @@ export default function DashboardPage() {
                 banner.type === 'prevwage' ? 'bg-green-50 border-green-200' :
                 'bg-amber-50 border-amber-200'}`}>
               <div>
-                <p className={`text-sm font-semibold
-                  ${banner.type === 'holiday' ? 'text-blue-800' :
-                    banner.type === 'prevwage' ? 'text-green-800' :
-                    'text-amber-800'}`}>{banner.message}</p>
-                <p className={`text-xs mt-0.5
-                  ${banner.type === 'holiday' ? 'text-blue-600' :
-                    banner.type === 'prevwage' ? 'text-green-600' :
-                    'text-amber-600'}`}>{banner.sub}</p>
+                <p className={`text-sm font-semibold ${banner.type === 'holiday' ? 'text-blue-800' : banner.type === 'prevwage' ? 'text-green-800' : 'text-amber-800'}`}>{banner.message}</p>
+                <p className={`text-xs mt-0.5 ${banner.type === 'holiday' ? 'text-blue-600' : banner.type === 'prevwage' ? 'text-green-600' : 'text-amber-600'}`}>{banner.sub}</p>
               </div>
               <button onClick={() => setDismissedBanners(prev => [...prev, banner.id])}
-                className={`text-lg leading-none flex-shrink-0
-                  ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' :
-                    banner.type === 'prevwage' ? 'text-green-400 hover:text-green-600' :
-                    'text-amber-400 hover:text-amber-600'}`}>✕</button>
+                className={`text-lg leading-none flex-shrink-0 ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' : banner.type === 'prevwage' ? 'text-green-400 hover:text-green-600' : 'text-amber-400 hover:text-amber-600'}`}>✕</button>
             </div>
           ))}
         </div>
@@ -977,30 +962,8 @@ export default function DashboardPage() {
                 : isIssueTab
                 ? asanaIssues.filter(i => i.task_type === (tab === 'general_issues' ? 'general_issue' : 'termination') && !i.completed).length
                 : tabEntries(activeTier, tab).length
-              const labels: Record<InnerTab,string> = {
-                approved: t(lang,'tab_approved'),
-                pending: t(lang,'tab_pending'),
-                waiting: t(lang,'tab_waiting'),
-                billing: t(lang,'tab_billing'),
-                errors: t(lang,'tab_errors'),
-                closed: t(lang,'tab_closed'),
-                exported: t(lang,'tab_exported'),
-                general_issues: 'General Issues',
-                terminations: 'Terminations',
-                employees: 'Employees',
-              }
-              const colors: Record<InnerTab,string> = {
-                approved:'bg-emerald-50 text-emerald-700',
-                pending:'bg-amber-50 text-amber-700',
-                waiting:'bg-red-50 text-red-700',
-                billing:'bg-purple-50 text-purple-700',
-                errors:'bg-red-50 text-red-700',
-                closed:'bg-gray-100 text-gray-600',
-                exported:'bg-blue-50 text-blue-700',
-                general_issues:'bg-amber-50 text-amber-700',
-                terminations:'bg-red-50 text-red-700',
-                employees:'bg-[#0D1B35]/10 text-[#0D1B35]',
-              }
+              const labels: Record<InnerTab,string> = { approved: t(lang,'tab_approved'), pending: t(lang,'tab_pending'), waiting: t(lang,'tab_waiting'), billing: t(lang,'tab_billing'), errors: t(lang,'tab_errors'), closed: t(lang,'tab_closed'), exported: t(lang,'tab_exported'), general_issues: 'General Issues', terminations: 'Terminations', employees: 'Employees' }
+              const colors: Record<InnerTab,string> = { approved:'bg-emerald-50 text-emerald-700', pending:'bg-amber-50 text-amber-700', waiting:'bg-red-50 text-red-700', billing:'bg-purple-50 text-purple-700', errors:'bg-red-50 text-red-700', closed:'bg-gray-100 text-gray-600', exported:'bg-blue-50 text-blue-700', general_issues:'bg-amber-50 text-amber-700', terminations:'bg-red-50 text-red-700', employees:'bg-[#0D1B35]/10 text-[#0D1B35]' }
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`px-3 py-2.5 text-xs font-medium border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap
@@ -1030,7 +993,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* General Issues tab content */}
+          {/* General Issues */}
           {activeTab === 'general_issues' && (
             <div className="divide-y divide-gray-100">
               {asanaIssues.filter(i => i.task_type === 'general_issue' && !i.completed).length === 0 ? (
@@ -1038,9 +1001,7 @@ export default function DashboardPage() {
               ) : asanaIssues.filter(i => i.task_type === 'general_issue' && !i.completed).map(issue => (
                 <div key={issue.task_id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/50">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-gray-900">{issue.name}</span>
-                    </div>
+                    <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-gray-900">{issue.name}</span></div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                       {issue.assignee && <span>👤 {issue.assignee}</span>}
                       {issue.due_on && <span>📅 {new Date(issue.due_on).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
@@ -1053,7 +1014,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Terminations tab content */}
+          {/* Terminations */}
           {activeTab === 'terminations' && (
             <div className="divide-y divide-gray-100">
               {asanaIssues.filter(i => i.task_type === 'termination' && !i.completed).length === 0 ? (
@@ -1061,9 +1022,7 @@ export default function DashboardPage() {
               ) : asanaIssues.filter(i => i.task_type === 'termination' && !i.completed).map(issue => (
                 <div key={issue.task_id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/50">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-gray-900">{issue.name}</span>
-                    </div>
+                    <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-gray-900">{issue.name}</span></div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                       {issue.assignee && <span>👤 {issue.assignee}</span>}
                       {issue.due_on && <span>📅 {new Date(issue.due_on).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
@@ -1076,26 +1035,38 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Employees tab content */}
+          {/* ── Employees tab ─────────────────────────────────────────────────── */}
           {activeTab === 'employees' && (() => {
-            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
             const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
             const tiers = ['Tier #1','Tier #2','Tier #3','Tier #4']
 
-            let filtered = fcEmployees
-            // Department filter
-            if (fcDeptFilter !== 'all') filtered = filtered.filter(e => e.raw_data?._department === fcDeptFilter)
-            // Status filter
-            if (fcEmployeeFilter === 'new') filtered = filtered.filter(e => {
+            // isNew helper
+            const isNewEmp = (e: any) => {
               const h = e.raw_data?._hireDate
               return h && new Date(h) >= thirtyDaysAgo && e.status === 'Active'
-            })
-            else if (fcEmployeeFilter === 'terminated') filtered = filtered.filter(e => {
-              const t = e.raw_data?._termDate
-              return t && new Date(t) >= ninetyDaysAgo && e.status === 'Terminated'
-            })
-            else filtered = filtered.filter(e => e.status === 'Active')
-            // Search
+            }
+
+            let filtered = fcEmployees
+            if (fcDeptFilter !== 'all') filtered = filtered.filter(e => e.raw_data?._department === fcDeptFilter)
+
+            // Status / setup filters
+            if (fcEmployeeFilter === 'new' || fcSetupFilter !== 'all') {
+              // Both "New 30d" tab AND setup filters operate on new employees
+              filtered = filtered.filter(e => isNewEmp(e))
+              if (fcSetupFilter === 'missing') {
+                filtered = filtered.filter(e => getSetupStatus(e.employee_number, fcRates[e.employee_number]) !== 'completed')
+              } else if (fcSetupFilter === 'completed') {
+                filtered = filtered.filter(e => getSetupStatus(e.employee_number, fcRates[e.employee_number]) === 'completed')
+              }
+            } else if (fcEmployeeFilter === 'terminated') {
+              filtered = filtered.filter(e => {
+                const t = e.raw_data?._termDate
+                return t && new Date(t) >= ninetyDaysAgo && e.status === 'Terminated'
+              })
+            } else {
+              filtered = filtered.filter(e => e.status === 'Active')
+            }
+
             if (fcSearch.trim()) {
               const q = fcSearch.toLowerCase()
               filtered = filtered.filter(e =>
@@ -1104,17 +1075,7 @@ export default function DashboardPage() {
                 e.raw_data?._department?.toLowerCase().includes(q)
               )
             }
-            // Setup status filter — only filters rows where rates have been loaded
-            if (fcSetupFilter !== 'all') {
-              filtered = filtered.filter(e => {
-                const rates = fcRates[e.employee_number]
-                const status = getSetupStatus(e, rates)
-                if (fcSetupFilter === 'missing') return status !== 'completed' // missing or not yet loaded
-                if (fcSetupFilter === 'completed') return status === 'completed'
-                return true
-              })
-            }
-            // Sort
+
             filtered = [...filtered].sort((a, b) => {
               let av = '', bv = ''
               if (fcSortCol === 'number') return fcSortDir === 'asc' ? Number(a.employee_number) - Number(b.employee_number) : Number(b.employee_number) - Number(a.employee_number)
@@ -1126,45 +1087,48 @@ export default function DashboardPage() {
             })
 
             const allActive = fcEmployees.filter(e => e.status === 'Active').length
-            const newCount = fcEmployees.filter(e => { const h = e.raw_data?._hireDate; return h && new Date(h) >= thirtyDaysAgo && e.status === 'Active' }).length
+            const newCount = fcEmployees.filter(e => isNewEmp(e)).length
             const termCount = fcEmployees.filter(e => { const t = e.raw_data?._termDate; return t && new Date(t) >= ninetyDaysAgo && e.status === 'Terminated' }).length
+            const missingCount = fcEmployees.filter(e => isNewEmp(e) && getSetupStatus(e.employee_number, fcRates[e.employee_number]) === 'missing').length
+            const completedCount = fcEmployees.filter(e => isNewEmp(e) && getSetupStatus(e.employee_number, fcRates[e.employee_number]) === 'completed').length
 
             function fmtD(d: string) { if (!d) return '—'; return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
             function toggleSort(col: string) { if (fcSortCol === col) setFcSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setFcSortCol(col); setFcSortDir('asc') } }
             function si(col: string) { if (fcSortCol !== col) return ' ↕'; return fcSortDir === 'asc' ? ' ↑' : ' ↓' }
+
+            const showSetupCol = fcEmployeeFilter === 'new' || fcSetupFilter !== 'all'
+            const colSpanBase = showSetupCol ? 8 : 7
+            const colSpanFull = fcEmployeeFilter === 'terminated' ? colSpanBase + 1 : colSpanBase
 
             return (
               <div>
                 {/* FC toolbar */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
                   <div className="flex gap-1 flex-wrap">
+                    {/* Status filters */}
                     {([
                       ['all', `All Active (${allActive})`],
                       ['new', `🆕 New 30d (${newCount})`],
                       ['terminated', `Terminated 90d (${termCount})`],
                     ] as [EmployeeFilter, string][]).map(([f, label]) => (
-                      <button key={f} onClick={() => setFcEmployeeFilter(f)}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcEmployeeFilter === f ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      <button key={f}
+                        onClick={() => { setFcEmployeeFilter(f); if (f !== 'new') setFcSetupFilter('all') }}
+                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcEmployeeFilter === f && fcSetupFilter === 'all' ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
                         {label}
                       </button>
                     ))}
                     <div className="w-px h-4 bg-gray-200 self-center mx-1" />
-                    {([
-                      ['missing', '⚠️ Missing Setup'],
-                      ['completed', '✓ Completed'],
-                    ] as ['missing' | 'completed', string][]).map(([f, label]) => (
-                      <button key={f}
-                        onClick={() => setFcSetupFilter(prev => prev === f ? 'all' : f)}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                          fcSetupFilter === f
-                            ? f === 'missing'
-                              ? 'bg-amber-500 text-white border-amber-500'
-                              : 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                        }`}>
-                        {label}
-                      </button>
-                    ))}
+                    {/* Setup filters — only meaningful for New 30d */}
+                    <button
+                      onClick={() => { setFcEmployeeFilter('new'); setFcSetupFilter(prev => prev === 'missing' ? 'all' : 'missing') }}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcSetupFilter === 'missing' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+                      ⚠️ Missing Setup {missingCount > 0 && <span className="ml-1 font-semibold">({missingCount})</span>}
+                    </button>
+                    <button
+                      onClick={() => { setFcEmployeeFilter('new'); setFcSetupFilter(prev => prev === 'completed' ? 'all' : 'completed') }}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcSetupFilter === 'completed' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
+                      ✓ Setup Complete {completedCount > 0 && <span className="ml-1 font-semibold">({completedCount})</span>}
+                    </button>
                   </div>
                   <div className="w-px h-4 bg-gray-200" />
                   <div className="flex gap-1">
@@ -1181,25 +1145,14 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 flex-1 max-w-xs">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)}
-                      placeholder="Search name or number…"
-                      className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
+                    <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)} placeholder="Search name or number…" className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
                     {fcSearch && <button onClick={() => setFcSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
                   </div>
                   <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
                 </div>
 
-                {fcSetupFilter !== 'all' && (
-                  <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
-                    <span className="text-amber-500 text-xs">ℹ️</span>
-                    <p className="text-xs text-amber-700">
-                      Setup status is based on expanded rows only — expand a row to load its rates and update its status.
-                    </p>
-                  </div>
-                )}
-
                 {fcEmployees.length === 0 ? (
-                  <div className="py-10 text-center text-gray-400 text-sm">No employee data — go to Fingercheck page and sync first</div>
+                  <div className="py-10 text-center text-gray-400 text-sm">No employee data — sync Fingercheck first</div>
                 ) : filtered.length === 0 ? (
                   <div className="py-10 text-center text-gray-400 text-sm">No employees match this filter</div>
                 ) : (
@@ -1213,17 +1166,19 @@ export default function DashboardPage() {
                           <th onClick={() => toggleSort('dept')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Department{si('dept')}</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Supervisor</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Rate</th>
-                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Setup</th>
+                          {showSetupCol && <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Setup</th>}
                           <th onClick={() => toggleSort('hire')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Hire Date{si('hire')}</th>
                           {fcEmployeeFilter === 'terminated' && <th onClick={() => toggleSort('term')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Term Date{si('term')}</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {filtered.map(e => {
-                          const isNew = e.raw_data?._hireDate && new Date(e.raw_data._hireDate) >= thirtyDaysAgo && e.status === 'Active'
+                          const isNew = isNewEmp(e)
                           const isExpanded = fcExpandedEmp === e.employee_number
                           const empRates = fcRates[e.employee_number]
-                          const setupStatus = getSetupStatus(e, empRates)
+                          const setupStatus = isNew ? getSetupStatus(e.employee_number, empRates) : null
+                          const setup = empSetup[e.employee_number] || { max_hour_policy: false, alert_policy: false, job_fencing_policy: false }
+
                           return (
                             <>
                               <tr key={e.employee_number}
@@ -1240,22 +1195,24 @@ export default function DashboardPage() {
                                 <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
                                 <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?.SupervisorEmployeeNumber ? `#${e.raw_data.SupervisorEmployeeNumber}` : '—'}</td>
                                 <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
-                                <td className="px-3 py-2 text-xs">
-                                  {setupStatus === null
-                                    ? <span className="text-gray-300">—</span>
-                                    : setupStatus === 'completed'
-                                    ? <span className="text-emerald-600 font-medium">✓ Completed</span>
-                                    : <span className="text-amber-600 font-medium">⚠️ Missing</span>
-                                  }
-                                </td>
+                                {showSetupCol && (
+                                  <td className="px-3 py-2 text-xs">
+                                    {!isNew ? <span className="text-gray-300">—</span>
+                                      : setupStatus === null ? <span className="text-gray-400 flex items-center gap-1"><span className="animate-spin w-2.5 h-2.5 border border-gray-300 border-t-gray-500 rounded-full inline-block" />Loading</span>
+                                      : setupStatus === 'completed' ? <span className="text-emerald-600 font-medium">✓ Complete</span>
+                                      : <span className="text-amber-600 font-medium">⚠️ Missing</span>
+                                    }
+                                  </td>
+                                )}
                                 <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
                                 {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
                               </tr>
+
                               {isExpanded && (
                                 <tr key={`${e.employee_number}-expanded`} className="border-b border-gray-100 bg-blue-50/20">
-                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 9 : 8} className="px-6 py-4">
+                                  <td colSpan={colSpanFull} className="px-6 py-4">
                                     <div className="grid grid-cols-2 gap-6">
-                                      {/* Rates */}
+                                      {/* Rate Codes */}
                                       <div>
                                         <div className="text-xs font-semibold text-gray-700 mb-2">Rate Codes</div>
                                         {!empRates ? (
@@ -1264,7 +1221,7 @@ export default function DashboardPage() {
                                           <div className="text-xs text-gray-400">No rates found</div>
                                         ) : (
                                           <>
-                                            {empRates.some((r: any) => (r.RateCode || r.Description || r.Code || '').toLowerCase() === 'base') && 
+                                            {empRates.some((r: any) => (r.RateCode || r.Description || r.Code || '').toLowerCase() === 'base') &&
                                              ['Tier #1', 'Tier #3'].includes(e.raw_data?._department?.trim()) && (
                                               <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-xs text-amber-700 font-medium">
                                                 ⚠️ Only Base rate set — no job-specific rate codes defined
@@ -1293,7 +1250,8 @@ export default function DashboardPage() {
                                           </>
                                         )}
                                       </div>
-                                      {/* Employee info */}
+
+                                      {/* Employee Info + Profile Checklist */}
                                       <div>
                                         <div className="text-xs font-semibold text-gray-700 mb-2">Employee Info</div>
                                         <div className="space-y-1.5 text-xs">
@@ -1303,9 +1261,7 @@ export default function DashboardPage() {
                                             return (
                                               <div className="flex justify-between">
                                                 <span className="text-gray-500">Supervisor</span>
-                                                <span className="text-gray-700 font-medium">
-                                                  {sup ? `${sup.full_name} (#${supNum})` : supNum ? `#${supNum}` : '—'}
-                                                </span>
+                                                <span className="text-gray-700 font-medium">{sup ? `${sup.full_name} (#${supNum})` : supNum ? `#${supNum}` : '—'}</span>
                                               </div>
                                             )
                                           })()}
@@ -1318,9 +1274,38 @@ export default function DashboardPage() {
                                           <div className="flex justify-between"><span className="text-gray-500">Cost Center 3</span><span className="text-gray-700">{e.raw_data?.CostCenter3 || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Cost Center 4</span><span className="text-gray-700">{e.raw_data?.CostCenter4 || '—'}</span></div>
                                         </div>
+
+                                        {/* Profile Checklist — shown for ALL employees, required for New 30d setup */}
                                         <div className="mt-3 pt-3 border-t border-gray-100">
-                                          <div className="text-xs font-semibold text-gray-700 mb-1.5">Policies</div>
-                                          <p className="text-xs text-gray-400">Max Hour, Alert, and Job Fencing policies are managed in Fingercheck directly.</p>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <div className="text-xs font-semibold text-gray-700">Profile Checklist</div>
+                                            {isNew && (
+                                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${setupStatus === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                {setupStatus === 'completed' ? '✓ Complete' : '⚠️ Incomplete'}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="space-y-2">
+                                            {([
+                                              ['max_hour_policy', 'Maximum Hour Policy'],
+                                              ['alert_policy', 'Alert Policy'],
+                                              ['job_fencing_policy', 'Job Fencing Policy'],
+                                            ] as [keyof EmployeeSetup, string][]).map(([field, label]) => (
+                                              <label key={field}
+                                                className="flex items-center gap-2 cursor-pointer group"
+                                                onClick={ev => ev.stopPropagation()}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={setup[field]}
+                                                  onChange={() => toggleSetupPolicy(e.employee_number, field)}
+                                                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#D4A843] focus:ring-[#D4A843] cursor-pointer"
+                                                />
+                                                <span className={`text-xs transition-colors ${setup[field] ? 'text-gray-700 line-through text-gray-400' : 'text-gray-600 group-hover:text-gray-800'}`}>
+                                                  {label}
+                                                </span>
+                                              </label>
+                                            ))}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -1337,6 +1322,7 @@ export default function DashboardPage() {
               </div>
             )
           })()}
+
           {activeTab !== 'general_issues' && activeTab !== 'terminations' && activeTab !== 'employees' && (visibleEntries.length === 0 ? (
             <div className="py-14 text-center text-gray-400 text-sm">{t(lang,'no_entries')}</div>
           ) : (
@@ -1379,74 +1365,35 @@ export default function DashboardPage() {
           ))}
 
           {activeTab !== 'general_issues' && activeTab !== 'terminations' && activeTab !== 'employees' && (
-          <div className="px-4 py-2 border-t border-gray-100 flex justify-between">
-            <span className="text-xs text-gray-400">{visibleEntries.length} {t(lang,'export_entries')} · {t(lang,'click_to_expand')}</span>
-            <span className="text-xs text-gray-400">{t(lang,'period_payday')} {paydayStr}</span>
-          </div>
+            <div className="px-4 py-2 border-t border-gray-100 flex justify-between">
+              <span className="text-xs text-gray-400">{visibleEntries.length} {t(lang,'export_entries')} · {t(lang,'click_to_expand')}</span>
+              <span className="text-xs text-gray-400">{t(lang,'period_payday')} {paydayStr}</span>
+            </div>
           )}
         </div>
       </main>
 
-      {/* Interactive overlay tutorial with spotlight */}
+      {/* Tour overlay */}
       {tourStep !== null && (() => {
         const step = TOUR_STEPS[tourStep]
         const targetEl = document.getElementById(step.target)
         const rect = targetEl?.getBoundingClientRect()
         const hasTarget = rect && rect.width > 0
-
-        // Position card below or above target
-        const cardTop = hasTarget
-          ? Math.min(rect.bottom + 12, window.innerHeight - 220)
-          : window.innerHeight / 2 - 100
-        const cardLeft = hasTarget
-          ? Math.max(8, Math.min(rect.left, window.innerWidth - 408))
-          : window.innerWidth / 2 - 200
-
+        const cardTop = hasTarget ? Math.min(rect.bottom + 12, window.innerHeight - 220) : window.innerHeight / 2 - 100
+        const cardLeft = hasTarget ? Math.max(8, Math.min(rect.left, window.innerWidth - 408)) : window.innerWidth / 2 - 200
         return (
           <div className="fixed inset-0 z-[100]">
-            {/* Dark overlay with cutout for target */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
               <defs>
                 <mask id="spotlight-mask">
                   <rect width="100%" height="100%" fill="white" />
-                  {hasTarget && (
-                    <rect
-                      x={rect.left - 6}
-                      y={rect.top - 6}
-                      width={rect.width + 12}
-                      height={rect.height + 12}
-                      rx="8"
-                      fill="black"
-                    />
-                  )}
+                  {hasTarget && <rect x={rect.left - 6} y={rect.top - 6} width={rect.width + 12} height={rect.height + 12} rx="8" fill="black" />}
                 </mask>
               </defs>
-              <rect
-                width="100%"
-                height="100%"
-                fill="rgba(0,0,0,0.65)"
-                mask="url(#spotlight-mask)"
-              />
+              <rect width="100%" height="100%" fill="rgba(0,0,0,0.65)" mask="url(#spotlight-mask)" />
             </svg>
-
-            {/* Highlight border around target */}
-            {hasTarget && (
-              <div
-                className="absolute border-2 border-[#D4A843] rounded-lg pointer-events-none animate-pulse"
-                style={{
-                  top: rect.top - 6,
-                  left: rect.left - 6,
-                  width: rect.width + 12,
-                  height: rect.height + 12,
-                }}
-              />
-            )}
-
-            {/* Tour card */}
-            <div
-              className="absolute bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10"
-              style={{ top: cardTop, left: cardLeft }}
-            >
+            {hasTarget && <div className="absolute border-2 border-[#D4A843] rounded-lg pointer-events-none animate-pulse" style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }} />}
+            <div className="absolute bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10" style={{ top: cardTop, left: cardLeft }}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-[#D4A843] flex items-center justify-center text-[#0D1B35] text-xs font-bold">{tourStep + 1}</div>
@@ -1457,27 +1404,14 @@ export default function DashboardPage() {
               <h3 className="text-base font-semibold text-gray-900 mb-1">{step.title}</h3>
               <p className="text-sm text-gray-600 leading-relaxed mb-4">{step.body}</p>
               <div className="flex items-center justify-between">
-                <button onClick={() => setTourStep(s => s !== null && s > 0 ? s - 1 : s)}
-                  disabled={tourStep === 0}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
-                  ← Back
-                </button>
+                <button onClick={() => setTourStep(s => s !== null && s > 0 ? s - 1 : s)} disabled={tourStep === 0} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30">← Back</button>
                 <div className="flex gap-1">
-                  {TOUR_STEPS.map((_, i) => (
-                    <div key={i} onClick={() => setTourStep(i)} className={`w-1.5 h-1.5 rounded-full transition-colors cursor-pointer ${i === tourStep ? 'bg-[#D4A843]' : 'bg-gray-200 hover:bg-gray-300'}`} />
-                  ))}
+                  {TOUR_STEPS.map((_, i) => <div key={i} onClick={() => setTourStep(i)} className={`w-1.5 h-1.5 rounded-full transition-colors cursor-pointer ${i === tourStep ? 'bg-[#D4A843]' : 'bg-gray-200 hover:bg-gray-300'}`} />)}
                 </div>
-                {tourStep < TOUR_STEPS.length - 1 ? (
-                  <button onClick={() => setTourStep(s => s !== null ? s + 1 : s)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#0D1B35] text-white hover:bg-[#152444]">
-                    Next →
-                  </button>
-                ) : (
-                  <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#D4A843] text-[#0D1B35] font-semibold hover:bg-[#C49A38]">
-                    Done ✓
-                  </button>
-                )}
+                {tourStep < TOUR_STEPS.length - 1
+                  ? <button onClick={() => setTourStep(s => s !== null ? s + 1 : s)} className="text-xs px-3 py-1.5 rounded-lg bg-[#0D1B35] text-white hover:bg-[#152444]">Next →</button>
+                  : <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }} className="text-xs px-3 py-1.5 rounded-lg bg-[#D4A843] text-[#0D1B35] font-semibold hover:bg-[#C49A38]">Done ✓</button>
+                }
               </div>
             </div>
           </div>
@@ -1496,9 +1430,7 @@ export default function DashboardPage() {
             </div>
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">{t(lang,'close_reason')}</label>
-              <input type="text" value={closeReason} onChange={e => setCloseReason(e.target.value)}
-                placeholder={t(lang,'close_placeholder')}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A843]/30 focus:border-[#D4A843]" autoFocus />
+              <input type="text" value={closeReason} onChange={e => setCloseReason(e.target.value)} placeholder={t(lang,'close_placeholder')} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#D4A843]/30 focus:border-[#D4A843]" autoFocus />
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setCloseTarget(null); setCloseReason('') }} className="btn-outline">{t(lang,'export_cancel')}</button>
