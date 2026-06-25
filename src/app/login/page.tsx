@@ -51,7 +51,7 @@ function LoginForm() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-       redirectTo: `https://bsmfacilitysolutions.app/auth/callback`,
+        redirectTo: `https://bsmfacilitysolutions.app/auth/callback`,
         queryParams: { hd: DOMAIN },
       },
     })
