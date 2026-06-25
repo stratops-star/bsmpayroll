@@ -48,11 +48,11 @@ const TOUR_STEPS = [
   { target: 'tour-banners', title: 'Smart Reminders', body: 'Banners appear 7 days before key dates — SVPTO end of month, Prevailing Wage updates, 1st & 15th rule, and federal holidays. Click ✕ to dismiss.' },
   { target: 'tour-mini-cards', title: 'Tier Dashboard', body: 'Click any card to switch between Tier 1, 2, and 3. Pending = no assignee. Waiting ⚡ = assigned to manager/staff. Appr. Hrs = approved hours ready to export.' },
   { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number. Results update instantly.' },
-  { target: 'tour-tabs', title: 'Tab Priority System', body: 'Tabs follow a routing priority: Errors (blocked) → Billing (assigned to billing team) → Waiting (assigned to manager/staff) → Pending (no assignee). An entry only appears in ONE tab.' },
+  { target: 'tour-tabs', title: 'Tab Priority System', body: 'Tabs follow a routing priority: Errors (blocked) → Billing (assigned to billing team) → Waiting (assigned to manager/staff) → Pending (no assignee OR assigned to payroll@). An entry only appears in ONE tab.' },
   { target: 'tour-tabs', title: 'Errors Tab', body: 'Entries missing rate, job code, or Asana link. These CANNOT be approved until fixed. Always check Errors first before exporting.' },
   { target: 'tour-tabs', title: 'Billing Tab', body: 'Entries whose Asana task is assigned to the billing team (Rebecca, Anthony, Leah, Ella, Office, Abe). Approve to confirm hours — Asana task stays open for billing.' },
-  { target: 'tour-tabs', title: 'Waiting Tab ⚡', body: 'Entries assigned to a manager or staff member in Asana (not billing). These need review before approval. Rate must be set before approving.' },
-  { target: 'tour-tabs', title: 'General Issues & Terminations', body: 'Pulled live from Asana — shows open General Issues and Termination requests across all tiers. These are informational only and are NOT exported to Fingercheck.' },
+  { target: 'tour-tabs', title: 'Waiting Tab ⚡', body: 'Entries assigned to a manager or staff member in Asana (not billing, not payroll@). These need review before approval.' },
+  { target: 'tour-tabs', title: 'Pending Tab', body: 'Entries with no Asana assignee OR assigned to payroll@bsmfacilitysolutions.com. These are ready to review — set rate and approve.' },
   { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. The accordion shows building max rate, Asana assignee, extra details, and screenshot.' },
   { target: 'tour-actions', title: 'Actions', body: 'Cover: Approve + Close. Extra Hrs + Billable: Approve only. On approval, Asana is updated automatically — Cover tasks are completed, Extra/Billable tasks are assigned to billing.' },
   { target: 'tour-export-btn', title: 'Export to Fingercheck', body: 'When all entries are approved, click Export to download a Fingercheck CSV. Only Cover, Extra Hrs, and Billable entries are exported — never General Issues or Terminations.' },
@@ -523,20 +523,23 @@ export default function DashboardPage() {
       if (!['open','pending'].includes(x.approvalStatus) || x.isLastMinute || x.entryType === 'billable') return false
       if (!x.jobCode || !x.asanaLink || !x.rate) return false
       if (x.asanaId && asanaCache[x.asanaId]) {
-        const email = asanaCache[x.asanaId].assignee_email
-        if (email) return false // has assignee — goes to waiting or billing
+        const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
+        if (!email) return true // no assignee → pending
+        if (email === 'payroll@bsmfacilitysolutions.com') return true // payroll@ → pending
+        return false // has other assignee → waiting or billing
       }
-      return true
+      return true // no cache entry → pending
     })
     else if (tab === 'waiting') entries = entries.filter(x => {
       if (['approved','closed','exported'].includes(x.approvalStatus)) return false
       if (x.entryType === 'billable') return false
-      if (!x.jobCode || !x.asanaLink || !x.rate) return false // errors tab
+      if (!x.jobCode || !x.asanaLink || !x.rate) return false
       if (x.asanaId && asanaCache[x.asanaId]) {
-        const email = asanaCache[x.asanaId].assignee_email
-        if (!email) return false // no assignee — goes to pending
-        if (isBillingAssignee(email)) return false // billing — goes to billing tab
-        return true // has a non-billing assignee — goes to waiting
+        const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
+        if (!email) return false // no assignee → pending
+        if (email === 'payroll@bsmfacilitysolutions.com') return false // payroll@ → pending
+        if (isBillingAssignee(email)) return false // billing → billing tab
+        return true // non-billing, non-payroll assignee → waiting
       }
       return false
     })
@@ -843,7 +846,11 @@ export default function DashboardPage() {
               const pe = e.filter(x => {
                 if (!['open','pending'].includes(x.approvalStatus) || x.isLastMinute || x.entryType === 'billable') return false
                 if (!x.jobCode || !x.asanaLink || !x.rate) return false
-                if (x.asanaId && asanaCache[x.asanaId]?.assignee_email) return false
+                if (x.asanaId && asanaCache[x.asanaId]) {
+                  const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
+                  if (!email || email === 'payroll@bsmfacilitysolutions.com') return true
+                  return false
+                }
                 return true
               }).length
               const ur = e.filter(x => {
@@ -851,8 +858,8 @@ export default function DashboardPage() {
                 if (x.entryType === 'billable') return false
                 if (!x.jobCode || !x.asanaLink || !x.rate) return false
                 if (x.asanaId && asanaCache[x.asanaId]) {
-                  const email = asanaCache[x.asanaId].assignee_email
-                  if (!email) return false
+                  const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
+                  if (!email || email === 'payroll@bsmfacilitysolutions.com') return false
                   if (isBillingAssignee(email)) return false
                   return true
                 }
