@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,13 +9,16 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const newOnly = searchParams.get('new') === 'true'
 
-    const supabase = createServerClient()
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
     let query = supabase
       .from('fingercheck_employees')
       .select('*')
       .order('full_name', { ascending: true })
-      .limit(500)
+      .range(0, 1999)
 
     if (search) {
       query = query.or(`full_name.ilike.%${search}%,employee_number.ilike.%${search}%`)
