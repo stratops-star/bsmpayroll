@@ -14,9 +14,10 @@ interface NavBarProps {
   loading?: boolean
   exportCount?: number
   onRelaunchTour?: () => void
+  syncing?: boolean
 }
 
-export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour }: NavBarProps) {
+export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour, syncing }: NavBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -34,7 +35,6 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
     { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks', badge: 0 },
     { label: t(lang, 'nav_exported_files'), href: '/dashboard/history',    badge: exportCount && exportCount > 0 ? exportCount : 0 },
     { label: t(lang, 'nav_payroll_rules'),  href: '/dashboard/rules',      badge: 0 },
-    { label: 'Asana Issues',                href: '/dashboard/asana-issues', badge: 0 },
   ]
 
   return (
@@ -78,6 +78,12 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
                 {t(lang, 'nav_last_refreshed')}: {lastRefreshed}
               </div>
             )}
+          </div>
+        )}
+        {syncing && (
+          <div className="flex items-center gap-1.5 text-white/40 text-xs">
+            <span className="animate-spin w-3 h-3 border border-white/20 border-t-white/60 rounded-full" />
+            Syncing Asana…
           </div>
         )}
 
