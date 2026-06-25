@@ -5,29 +5,30 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import NavBar from '@/components/NavBar'
 
-interface AsanaTask {
-  gid: string
+interface CachedTask {
+  task_id: string
   name: string
   notes: string
   completed: boolean
-  created_at: string
-  modified_at: string
-  assignee: { name: string; email: string } | null
+  assignee: string | null
   due_on: string | null
-  tags: { name: string }[]
-  custom_fields: { name: string; display_value: string | null }[]
+  task_type: 'general_issue' | 'termination' | 'cover'
+  updated_at: string
 }
 
-type FilterType = 'all' | 'general' | 'termination'
+type FilterType = 'all' | 'general_issue' | 'termination'
 
 export default function AsanaIssuesPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [tasks, setTasks] = useState<AsanaTask[]>([])
+  const [tasks, setTasks] = useState<CachedTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
+  const [syncMsg, setSyncMsg] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
+  const [showCompleted, setShowCompleted] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedTask, setExpandedTask] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState('')
@@ -65,21 +66,29 @@ export default function AsanaIssuesPage() {
     setLoading(false)
   }
 
-  function isTermination(task: AsanaTask) {
-    return task.name.toLowerCase().includes('termination') ||
-      task.name.toLowerCase().includes('terminate') ||
-      task.tags?.some(t => t.name.toLowerCase().includes('termination'))
-  }
-
-  function isGeneralIssue(task: AsanaTask) {
-    return task.name.toLowerCase().includes('general issue') ||
-      task.name.toLowerCase().includes('general') ||
-      (!isTermination(task))
+  async function syncFromAsana() {
+    setSyncing(true)
+    setSyncMsg('')
+    setError('')
+    try {
+      const token = await getToken()
+      const res = await fetch('/api/asana-sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setSyncMsg(`Synced ${data.synced} tasks — ${data.general_issues} issues, ${data.terminations} terminations`)
+      await loadTasks()
+    } catch (e: any) {
+      setError(e.message)
+    }
+    setSyncing(false)
   }
 
   const filtered = tasks.filter(task => {
-    if (filter === 'general' && !isGeneralIssue(task)) return false
-    if (filter === 'termination' && !isTermination(task)) return false
+    if (filter !== 'all' && task.task_type !== filter) return false
+    if (!showCompleted && task.completed) return false
     if (search.trim()) {
       const q = search.toLowerCase()
       return task.name.toLowerCase().includes(q) || task.notes?.toLowerCase().includes(q)
@@ -87,12 +96,17 @@ export default function AsanaIssuesPage() {
     return true
   })
 
-  const generalCount = tasks.filter(isGeneralIssue).length
-  const terminationCount = tasks.filter(isTermination).length
+  const generalCount = tasks.filter(t => t.task_type === 'general_issue').length
+  const terminationCount = tasks.filter(t => t.task_type === 'termination').length
+  const openCount = tasks.filter(t => !t.completed).length
 
   function fmtDate(d: string | null) {
     if (!d) return '—'
     return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  function getAsanaUrl(taskId: string) {
+    return `https://app.asana.com/0/0/${taskId}`
   }
 
   return (
@@ -105,15 +119,23 @@ export default function AsanaIssuesPage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-base font-semibold text-[#0D1B35]">Asana Issues</h1>
-              <p className="text-xs text-gray-500 mt-0.5">General Issues & Terminations from Payroll Issues section</p>
+              <p className="text-xs text-gray-500 mt-0.5">General Issues & Terminations — all tiers</p>
             </div>
-            <button onClick={loadTasks} disabled={loading}
-              className="bg-[#0D1B35] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#152444] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
-              {loading
-                ? <><span className="animate-spin w-3 h-3 border border-white/30 border-t-white rounded-full" />Loading…</>
-                : '↻ Refresh'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={syncFromAsana} disabled={syncing}
+                className="bg-[#D4A843] text-[#0D1B35] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#C49A38] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
+                {syncing
+                  ? <><span className="animate-spin w-3 h-3 border border-[#0D1B35]/30 border-t-[#0D1B35] rounded-full" />Syncing…</>
+                  : '⟳ Sync from Asana'}
+              </button>
+            </div>
           </div>
+          {syncMsg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-3">{syncMsg}</p>}
+          {tasks.length > 0 && (
+            <p className="text-xs text-gray-400 mt-2">
+              Last synced: {lastRefreshed} · {tasks.length} tasks in cache
+            </p>
+          )}
         </div>
 
         {error && (
@@ -123,17 +145,21 @@ export default function AsanaIssuesPage() {
         )}
 
         {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-4 gap-3 mb-4">
           <div className="card p-4">
             <div className="text-2xl font-semibold text-[#0D1B35]">{tasks.length}</div>
-            <div className="text-xs text-gray-500 mt-0.5">Total Issues</div>
+            <div className="text-xs text-gray-500 mt-0.5">Total</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-2xl font-semibold text-red-700">{openCount}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Open</div>
           </div>
           <div className="card p-4">
             <div className="text-2xl font-semibold text-amber-700">{generalCount}</div>
             <div className="text-xs text-gray-500 mt-0.5">General Issues</div>
           </div>
           <div className="card p-4">
-            <div className="text-2xl font-semibold text-red-700">{terminationCount}</div>
+            <div className="text-2xl font-semibold text-purple-700">{terminationCount}</div>
             <div className="text-xs text-gray-500 mt-0.5">Terminations</div>
           </div>
         </div>
@@ -142,17 +168,22 @@ export default function AsanaIssuesPage() {
         <div className="card overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
             <div className="flex gap-1.5">
-              {([['all', `All (${tasks.length})`], ['general', `General (${generalCount})`], ['termination', `Terminations (${terminationCount})`]] as [FilterType, string][]).map(([val, label]) => (
+              {([['all', `All (${tasks.length})`], ['general_issue', `General (${generalCount})`], ['termination', `Terminated (${terminationCount})`]] as [FilterType, string][]).map(([val, label]) => (
                 <button key={val} onClick={() => setFilter(val)}
                   className={`text-xs px-3 py-1 rounded-full border transition-colors ${filter === val ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
                   {label}
                 </button>
               ))}
             </div>
+            <div className="w-px h-4 bg-gray-200" />
+            <button onClick={() => setShowCompleted(!showCompleted)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${showCompleted ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-gray-500 border-gray-200'}`}>
+              {showCompleted ? '✓ Showing completed' : 'Show completed'}
+            </button>
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 flex-1 max-w-xs">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search tasks…"
+                placeholder="Search by name or notes…"
                 className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
               {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
             </div>
@@ -162,40 +193,50 @@ export default function AsanaIssuesPage() {
           {loading ? (
             <div className="py-14 flex items-center justify-center gap-2 text-gray-400 text-sm">
               <span className="animate-spin w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full" />
-              Loading from Asana…
+              Loading from cache…
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="py-14 text-center">
+              <p className="text-gray-400 text-sm mb-3">No tasks in cache yet</p>
+              <button onClick={syncFromAsana} disabled={syncing}
+                className="bg-[#D4A843] text-[#0D1B35] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#C49A38] disabled:opacity-40">
+                ⟳ Sync from Asana now
+              </button>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-14 text-center text-gray-400 text-sm">No issues found</div>
+            <div className="py-14 text-center text-gray-400 text-sm">No tasks match this filter</div>
           ) : (
             <div className="divide-y divide-gray-100">
               {filtered.map(task => {
-                const isExpanded = expandedTask === task.gid
-                const isTermTask = isTermination(task)
-                const asanaUrl = `https://app.asana.com/0/0/${task.gid}`
+                const isExpanded = expandedTask === task.task_id
+                const isTermTask = task.task_type === 'termination'
 
                 return (
-                  <div key={task.gid}>
+                  <div key={task.task_id}>
                     <div
-                      onClick={() => setExpandedTask(isExpanded ? null : task.gid)}
-                      className={`px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors ${isExpanded ? 'bg-blue-50/20' : ''}`}>
+                      onClick={() => setExpandedTask(isExpanded ? null : task.task_id)}
+                      className={`px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors ${isExpanded ? 'bg-blue-50/20' : ''} ${task.completed ? 'opacity-60' : ''}`}>
                       <span className={`text-gray-400 text-xs mt-0.5 transition-transform duration-150 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-gray-900 truncate">{task.name}</span>
-                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${isTermTask ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                          <span className={`text-sm font-medium truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{task.name}</span>
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${isTermTask ? 'bg-purple-50 text-purple-700' : 'bg-amber-50 text-amber-700'}`}>
                             {isTermTask ? 'Termination' : 'General Issue'}
                           </span>
                           {task.completed && (
-                            <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded flex-shrink-0">✓ Completed</span>
+                            <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded flex-shrink-0">✓ Resolved</span>
                           )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
-                          {task.assignee && <span>👤 {task.assignee.name}</span>}
+                          {task.assignee && <span>👤 {task.assignee}</span>}
                           {task.due_on && <span>📅 Due {fmtDate(task.due_on)}</span>}
-                          <span>Created {fmtDate(task.created_at)}</span>
+                          <span>Updated {fmtDate(task.updated_at)}</span>
                         </div>
+                        {task.notes && !isExpanded && (
+                          <p className="text-xs text-gray-500 mt-1 truncate">{task.notes}</p>
+                        )}
                       </div>
-                      <a href={asanaUrl} target="_blank" rel="noopener noreferrer"
+                      <a href={getAsanaUrl(task.task_id)} target="_blank" rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
                         className="text-[#D4A843] text-xs hover:underline flex-shrink-0">
                         ↗ Asana
@@ -214,32 +255,27 @@ export default function AsanaIssuesPage() {
                           {task.assignee && (
                             <div>
                               <div className="text-gray-400 mb-1">Assignee</div>
-                              <div className="text-gray-800">{task.assignee.name}</div>
-                              {task.assignee.email && <div className="text-gray-500">{task.assignee.email}</div>}
+                              <div className="text-gray-800">{task.assignee}</div>
                             </div>
                           )}
-                          <div>
-                            <div className="text-gray-400 mb-1">Created</div>
-                            <div className="text-gray-800">{fmtDate(task.created_at)}</div>
-                          </div>
-                          <div>
-                            <div className="text-gray-400 mb-1">Last Modified</div>
-                            <div className="text-gray-800">{fmtDate(task.modified_at)}</div>
-                          </div>
                           {task.due_on && (
                             <div>
                               <div className="text-gray-400 mb-1">Due Date</div>
                               <div className="text-gray-800">{fmtDate(task.due_on)}</div>
                             </div>
                           )}
-                          {task.custom_fields?.filter(f => f.display_value).map(f => (
-                            <div key={f.name}>
-                              <div className="text-gray-400 mb-1">{f.name}</div>
-                              <div className="text-gray-800">{f.display_value}</div>
+                          <div>
+                            <div className="text-gray-400 mb-1">Status</div>
+                            <div className={task.completed ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
+                              {task.completed ? '✓ Resolved' : '● Open'}
                             </div>
-                          ))}
+                          </div>
+                          <div>
+                            <div className="text-gray-400 mb-1">Last Synced</div>
+                            <div className="text-gray-800">{fmtDate(task.updated_at)}</div>
+                          </div>
                           <div className="col-span-2">
-                            <a href={asanaUrl} target="_blank" rel="noopener noreferrer"
+                            <a href={getAsanaUrl(task.task_id)} target="_blank" rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 text-[#D4A843] hover:underline font-medium">
                               ↗ Open in Asana
                             </a>
