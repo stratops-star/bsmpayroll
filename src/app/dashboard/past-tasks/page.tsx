@@ -97,28 +97,7 @@ export default function PastTasksPage() {
         .from('closed_entries')
         .select('*')
         .order('closed_at', { ascending: false })
-
-      // Also pull completed General Issues + Terminations from asana cache
-      const { data: issueData } = await supabase
-        .from('asana_task_cache')
-        .select('task_id, name, notes, assignee, completed, task_type, updated_at')
-        .in('task_type', ['general_issue', 'termination'])
-        .eq('completed', true)
-        .limit(500)
-
-      // Convert asana issues to closed row format
-      const issueRows: ClosedRow[] = (issueData || []).map(i => ({
-        id: i.task_id,
-        entry_id: i.task_id,
-        reason: i.task_type === 'termination' ? 'Termination' : 'General Issue — Resolved',
-        closed_by: i.assignee || 'Asana',
-        closed_at: i.updated_at,
-        entry: { porterName: i.name, asanaLink: `https://app.asana.com/0/0/${i.task_id}` },
-      }))
-
-      const combined = [...(closedData || []), ...issueRows]
-        .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
-      setClosedRows(combined)
+      setClosedRows(closedData || [])
     } catch (e) { console.error(e) }
   }
 
@@ -307,11 +286,12 @@ export default function PastTasksPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Employee</th>
-                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Date Worked</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Employee / Task</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Date</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Property</th>
                           <th className="text-right text-xs font-medium text-gray-500 px-4 py-2.5">Hours</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Type</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Source</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Close Reason</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Closed By</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Closed At</th>
@@ -322,22 +302,44 @@ export default function PastTasksPage() {
                         {filteredClosed.map((r, i) => {
                           const entry = r.entry || {}
                           const isAsanaClosed = r.reason === 'Closed in Asana'
+                          const isGeneralIssue = r.reason === 'General Issue — Resolved'
+                          const isTermination = r.reason === 'Termination'
+                          const isAsanaIssue = isGeneralIssue || isTermination
                           return (
                             <tr key={r.id || i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
                               <td className="px-4 py-2.5">
-                                <div className="text-xs font-medium text-gray-900">{entry.porterName || '—'}</div>
-                                <div className="text-xs text-gray-400 font-mono">#{entry.employeeNumber}</div>
+                                <div className="text-xs font-medium text-gray-900">
+                                  {isAsanaIssue ? r.entry?.porterName || '—' : entry.porterName || '—'}
+                                </div>
+                                <div className="text-xs text-gray-400 font-mono">
+                                  {!isAsanaIssue && `#${entry.employeeNumber}`}
+                                </div>
                               </td>
-                              <td className="px-4 py-2.5 text-xs text-gray-600">{entry.coverDay || '—'}</td>
-                              <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{entry.propertyAddress || '—'}</td>
-                              <td className="px-4 py-2.5 text-xs text-right font-medium">{entry.hours || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600">{isAsanaIssue ? '—' : entry.coverDay || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{isAsanaIssue ? '—' : entry.propertyAddress || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-right font-medium">{isAsanaIssue ? '—' : entry.hours || '—'}</td>
                               <td className="px-4 py-2.5 text-xs">
-                                <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
-                                  ${entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700'
-                                  : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700'
-                                  : 'bg-blue-50 text-blue-700'}`}>
-                                  {entry.entryType === 'billable' ? 'Billable' : entry.entryType === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
-                                </span>
+                                {isTermination ? (
+                                  <span className="inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded bg-red-50 text-red-700">Termination</span>
+                                ) : isGeneralIssue ? (
+                                  <span className="inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">General Issue</span>
+                                ) : (
+                                  <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
+                                    ${entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700'
+                                    : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-blue-50 text-blue-700'}`}>
+                                    {entry.entryType === 'billable' ? 'Billable' : entry.entryType === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs">
+                                {isAsanaIssue ? (
+                                  <span className="text-xs bg-[#0D1B35]/10 text-[#0D1B35] px-1.5 py-0.5 rounded font-medium">Asana</span>
+                                ) : isAsanaClosed ? (
+                                  <span className="text-xs bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-medium">Asana</span>
+                                ) : (
+                                  <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">Dashboard</span>
+                                )}
                               </td>
                               <td className="px-4 py-2.5 text-xs">
                                 {isAsanaClosed
@@ -347,8 +349,8 @@ export default function PastTasksPage() {
                               <td className="px-4 py-2.5 text-xs text-gray-600">{r.closed_by || '—'}</td>
                               <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDate(r.closed_at)}</td>
                               <td className="px-4 py-2.5 text-xs">
-                                {entry.asanaLink
-                                  ? <a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
+                                {(entry.asanaLink || (isAsanaIssue && r.entry?.asanaLink))
+                                  ? <a href={entry.asanaLink || r.entry?.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
                                   : <span className="text-gray-400">—</span>}
                               </td>
                             </tr>
