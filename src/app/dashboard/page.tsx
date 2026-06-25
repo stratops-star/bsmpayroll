@@ -1163,7 +1163,6 @@ export default function DashboardPage() {
                           const isNew = e.raw_data?._hireDate && new Date(e.raw_data._hireDate) >= thirtyDaysAgo && e.status === 'Active'
                           const isExpanded = fcExpandedEmp === e.employee_number
                           const empRates = fcRates[e.employee_number]
-                          const fcLink = `https://app.fingercheck.com/FingerCheck/Employee/EmployeeDetail.aspx?empNo=${e.employee_number}`
                           return (
                             <>
                               <tr key={e.employee_number}
@@ -1195,37 +1194,56 @@ export default function DashboardPage() {
                                         ) : empRates.length === 0 ? (
                                           <div className="text-xs text-gray-400">No rates found</div>
                                         ) : (
-                                          <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
-                                            <thead>
-                                              <tr className="bg-gray-100">
-                                                <th className="text-left px-3 py-1.5 font-medium text-gray-600">Rate Code</th>
-                                                <th className="text-left px-3 py-1.5 font-medium text-gray-600">Effective Date</th>
-                                                <th className="text-right px-3 py-1.5 font-medium text-gray-600">Rate</th>
-                                                <th className="text-right px-3 py-1.5 font-medium text-gray-600">Est. Annual</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {empRates.map((r: any, i: number) => (
-                                                <tr key={i} className="border-t border-gray-100">
-                                                  <td className="px-3 py-1.5 text-gray-700">{r.RateCode || r.Description || r.Code || '—'}</td>
-                                                  <td className="px-3 py-1.5 text-gray-500">{r.EffectiveDate ? new Date(r.EffectiveDate).toLocaleDateString('en-US') : '—'}</td>
-                                                  <td className="px-3 py-1.5 text-right font-medium text-gray-700">${parseFloat(r.Rate || r.rate || 0).toFixed(2)}</td>
-                                                  <td className="px-3 py-1.5 text-right text-gray-500">{r.AnnualSalary ? `$${parseFloat(r.AnnualSalary).toLocaleString()}` : '—'}</td>
+                                          <>
+                                            {empRates.some((r: any) => (r.RateCode || r.Description || r.Code || '').toLowerCase() === 'base') && 
+                                             ['Tier #1', 'Tier #3'].includes(e.raw_data?._department?.trim()) && (
+                                              <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-xs text-amber-700 font-medium">
+                                                ⚠️ Only Base rate set — no job-specific rate codes defined
+                                              </div>
+                                            )}
+                                            <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                              <thead>
+                                                <tr className="bg-gray-100">
+                                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">Rate Code</th>
+                                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">Effective Date</th>
+                                                  <th className="text-right px-3 py-1.5 font-medium text-gray-600">Rate</th>
+                                                  <th className="text-right px-3 py-1.5 font-medium text-gray-600">Est. Annual</th>
                                                 </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
+                                              </thead>
+                                              <tbody>
+                                                {empRates.map((r: any, i: number) => (
+                                                  <tr key={i} className="border-t border-gray-100">
+                                                    <td className="px-3 py-1.5 text-gray-700">{r.RateCode || r.Description || r.Code || '—'}</td>
+                                                    <td className="px-3 py-1.5 text-gray-500">{r.EffectiveDate ? new Date(r.EffectiveDate).toLocaleDateString('en-US') : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right font-medium text-gray-700">${parseFloat(r.Rate || r.rate || 0).toFixed(2)}</td>
+                                                    <td className="px-3 py-1.5 text-right text-gray-500">{r.AnnualSalary ? `$${parseFloat(r.AnnualSalary).toLocaleString()}` : '—'}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </>
                                         )}
                                       </div>
-                                      {/* Employee info + policies link */}
+                                      {/* Employee info */}
                                       <div>
                                         <div className="text-xs font-semibold text-gray-700 mb-2">Employee Info</div>
                                         <div className="space-y-1.5 text-xs">
+                                          {(() => {
+                                            const supNum = e.raw_data?.SupervisorEmployeeNumber
+                                            const sup = supNum ? fcEmployees.find(x => x.employee_number === String(supNum)) : null
+                                            return (
+                                              <div className="flex justify-between">
+                                                <span className="text-gray-500">Supervisor</span>
+                                                <span className="text-gray-700 font-medium">
+                                                  {sup ? `${sup.full_name} (#${supNum})` : supNum ? `#${supNum}` : '—'}
+                                                </span>
+                                              </div>
+                                            )
+                                          })()}
                                           <div className="flex justify-between"><span className="text-gray-500">Position</span><span className="text-gray-700 font-medium">{e.raw_data?.Position || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Pay Group</span><span className="text-gray-700">{e.raw_data?.PayGroup || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Pay Type</span><span className="text-gray-700">{e.raw_data?.PayType || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Full/Part Time</span><span className="text-gray-700">{e.raw_data?.FullOrPartTime || '—'}</span></div>
-                                          <div className="flex justify-between"><span className="text-gray-500">Supervisor #</span><span className="text-gray-700">{e.raw_data?.SupervisorEmployeeNumber || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Job Code</span><span className="text-gray-700 font-mono">{e.job_code || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Address</span><span className="text-gray-700 text-right max-w-[180px]">{e.address || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Cost Center 3</span><span className="text-gray-700">{e.raw_data?.CostCenter3 || '—'}</span></div>
@@ -1233,9 +1251,7 @@ export default function DashboardPage() {
                                         </div>
                                         <div className="mt-3 pt-3 border-t border-gray-100">
                                           <div className="text-xs font-semibold text-gray-700 mb-1.5">Policies</div>
-                                          <p className="text-xs text-gray-400 mb-2">Max Hour, Alert, and Job Fencing policies are managed in Fingercheck directly.</p>
-                                          <a href={fcLink} target="_blank" rel="noopener noreferrer"
-                                            className="text-xs text-[#D4A843] hover:underline font-medium">↗ Open in Fingercheck →</a>
+                                          <p className="text-xs text-gray-400">Max Hour, Alert, and Job Fencing policies are managed in Fingercheck directly.</p>
                                         </div>
                                       </div>
                                     </div>
