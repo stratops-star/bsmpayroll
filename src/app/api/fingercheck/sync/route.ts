@@ -68,9 +68,16 @@ export async function POST(request: NextRequest) {
 
       const email = emp.Email || emp.PersonalEmail || ''
       const hireDate = emp.HireDate || emp.StartDate
+      const termDate = emp.TerminationDate || null
+      const department = emp.CostCenter1 || emp.CostCenter2 || emp.Department || ''
 
-      // isNew: hired in last 30 days AND not terminated
-      const isNew = hireDate && new Date(hireDate) >= thirtyDaysAgo && rawStatus !== 'T'
+      // isNew: hired in last 30 days AND active
+      const isNew = hireDate && new Date(hireDate) >= thirtyDaysAgo && rawStatus === 'A'
+      
+      // recentlyTerminated: terminated in last 90 days
+      const ninetyDaysAgo = new Date()
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+      const isRecentlyTerminated = termDate && new Date(termDate) >= ninetyDaysAgo && rawStatus === 'T'
 
       return {
         employee_number: employeeNumber,
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
         rate,
         company_id: FC_COMPANY_ID,
         status,
-        raw_data: { ...emp, _isNew: isNew, _hireDate: hireDate },
+        raw_data: { ...emp, _isNew: isNew, _hireDate: hireDate, _termDate: termDate, _department: department, _isRecentlyTerminated: isRecentlyTerminated },
         synced_at: new Date().toISOString(),
       }
     }).filter(r => r.employee_number)
