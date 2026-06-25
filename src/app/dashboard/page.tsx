@@ -509,14 +509,24 @@ export default function DashboardPage() {
     if (tab === 'approved') entries = entries.filter(x => x.approvalStatus === 'approved')
     else if (tab === 'pending') entries = entries.filter(x => {
       if (!['open','pending'].includes(x.approvalStatus) || x.isLastMinute || x.entryType === 'billable') return false
-      // Exclude billing-assigned entries
-      if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
+      if (!x.jobCode || !x.asanaLink || !x.rate) return false
+      if (x.asanaId && asanaCache[x.asanaId]) {
+        const email = asanaCache[x.asanaId].assignee_email
+        if (email) return false // has assignee — goes to waiting or billing
+      }
       return true
     })
     else if (tab === 'waiting') entries = entries.filter(x => {
-      // Exclude billing-assigned entries from waiting
-      if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
-      return (x.approvalStatus === 'waiting' || (x.isLastMinute && !['approved','closed','exported'].includes(x.approvalStatus))) && x.entryType !== 'billable'
+      if (['approved','closed','exported'].includes(x.approvalStatus)) return false
+      if (x.entryType === 'billable') return false
+      if (!x.jobCode || !x.asanaLink || !x.rate) return false // errors tab
+      if (x.asanaId && asanaCache[x.asanaId]) {
+        const email = asanaCache[x.asanaId].assignee_email
+        if (!email) return false // no assignee — goes to pending
+        if (isBillingAssignee(email)) return false // billing — goes to billing tab
+        return true // has a non-billing assignee — goes to waiting
+      }
+      return false
     })
     else if (tab === 'billing') entries = entries.filter(x => {
       if (['closed','exported'].includes(x.approvalStatus)) return false
