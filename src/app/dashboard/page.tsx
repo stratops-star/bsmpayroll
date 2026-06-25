@@ -95,6 +95,8 @@ export default function DashboardPage() {
   const [fcSearch, setFcSearch] = useState('')
   const [fcSortCol, setFcSortCol] = useState('name')
   const [fcSortDir, setFcSortDir] = useState<'asc' | 'desc'>('asc')
+  const [fcExpandedEmp, setFcExpandedEmp] = useState<string | null>(null)
+  const [fcRates, setFcRates] = useState<Record<string, any[]>>({})
   const dir = TRANSLATIONS[lang].dir
 
   useEffect(() => {
@@ -122,6 +124,20 @@ export default function DashboardPage() {
       }
     })
   }, [])
+
+  async function fetchEmpRates(empNumber: string) {
+    if (fcRates[empNumber]) return // already loaded
+    try {
+      const token = await getToken()
+      const res = await fetch(`/api/fingercheck/rates?employeeNumber=${empNumber}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setFcRates(prev => ({ ...prev, [empNumber]: data.rates || [] }))
+    } catch {
+      setFcRates(prev => ({ ...prev, [empNumber]: [] }))
+    }
+  }
 
   async function loadFcEmployees() {
     try {
@@ -1132,6 +1148,7 @@ export default function DashboardPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="w-6 px-2 py-2"></th>
                           <th onClick={() => toggleSort('number')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 w-14 cursor-pointer hover:text-gray-700">#{ si('number')}</th>
                           <th onClick={() => toggleSort('name')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Name{si('name')}</th>
                           <th onClick={() => toggleSort('dept')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Department{si('dept')}</th>
@@ -1145,24 +1162,88 @@ export default function DashboardPage() {
                       <tbody>
                         {filtered.map(e => {
                           const isNew = e.raw_data?._hireDate && new Date(e.raw_data._hireDate) >= thirtyDaysAgo && e.status === 'Active'
+                          const isExpanded = fcExpandedEmp === e.employee_number
+                          const empRates = fcRates[e.employee_number]
+                          const fcLink = `https://app.fingercheck.com/FingerCheck/Employee/EmployeeDetail.aspx?empNo=${e.employee_number}`
                           return (
-                            <tr key={e.employee_number} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 ${isNew ? 'bg-amber-50/20' : ''}`}>
-                              <td className="px-3 py-2 font-mono text-xs text-gray-500">{e.employee_number}</td>
-                              <td className="px-3 py-2">
-                                <div className="text-xs font-medium text-gray-900 flex items-center gap-1">
-                                  {e.full_name}
-                                  {isNew && <span className="text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded">🆕</span>}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
-                              <td className="px-3 py-2 text-xs">
-                                {e.job_code ? <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{e.job_code}</span> : <span className="text-gray-400">—</span>}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate">{e.address || '—'}</td>
-                              <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
-                              <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
-                              {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
-                            </tr>
+                            <>
+                              <tr key={e.employee_number}
+                                onClick={() => { setFcExpandedEmp(isExpanded ? null : e.employee_number); if (!isExpanded) fetchEmpRates(e.employee_number) }}
+                                className={`border-b border-gray-100 hover:bg-gray-50/50 cursor-pointer ${isNew ? 'bg-amber-50/20' : ''} ${isExpanded ? 'bg-blue-50/30' : ''}`}>
+                                <td className="px-3 py-2"><span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span></td>
+                                <td className="px-3 py-2 font-mono text-xs text-gray-500">{e.employee_number}</td>
+                                <td className="px-3 py-2">
+                                  <div className="text-xs font-medium text-gray-900 flex items-center gap-1">
+                                    {e.full_name}
+                                    {isNew && <span className="text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded">🆕</span>}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {e.job_code ? <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{e.job_code}</span> : <span className="text-gray-400">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate">{e.address || '—'}</td>
+                                <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
+                                <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
+                                {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${e.employee_number}-expanded`} className="border-b border-gray-100 bg-blue-50/20">
+                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 9 : 8} className="px-6 py-4">
+                                    <div className="grid grid-cols-2 gap-6">
+                                      {/* Rates */}
+                                      <div>
+                                        <div className="text-xs font-semibold text-gray-700 mb-2">Rate Codes</div>
+                                        {!empRates ? (
+                                          <div className="text-xs text-gray-400 flex items-center gap-1"><span className="animate-spin w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full" />Loading rates…</div>
+                                        ) : empRates.length === 0 ? (
+                                          <div className="text-xs text-gray-400">No rates found</div>
+                                        ) : (
+                                          <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                            <thead>
+                                              <tr className="bg-gray-100">
+                                                <th className="text-left px-3 py-1.5 font-medium text-gray-600">Rate Code</th>
+                                                <th className="text-left px-3 py-1.5 font-medium text-gray-600">Effective Date</th>
+                                                <th className="text-right px-3 py-1.5 font-medium text-gray-600">Rate</th>
+                                                <th className="text-right px-3 py-1.5 font-medium text-gray-600">Est. Annual</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {empRates.map((r: any, i: number) => (
+                                                <tr key={i} className="border-t border-gray-100">
+                                                  <td className="px-3 py-1.5 text-gray-700">{r.RateCode || r.Description || r.Code || '—'}</td>
+                                                  <td className="px-3 py-1.5 text-gray-500">{r.EffectiveDate ? new Date(r.EffectiveDate).toLocaleDateString('en-US') : '—'}</td>
+                                                  <td className="px-3 py-1.5 text-right font-medium text-gray-700">${parseFloat(r.Rate || r.rate || 0).toFixed(2)}</td>
+                                                  <td className="px-3 py-1.5 text-right text-gray-500">{r.AnnualSalary ? `$${parseFloat(r.AnnualSalary).toLocaleString()}` : '—'}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        )}
+                                      </div>
+                                      {/* Employee info + policies link */}
+                                      <div>
+                                        <div className="text-xs font-semibold text-gray-700 mb-2">Employee Info</div>
+                                        <div className="space-y-1.5 text-xs">
+                                          <div className="flex justify-between"><span className="text-gray-500">Position</span><span className="text-gray-700 font-medium">{e.raw_data?.Position || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Pay Group</span><span className="text-gray-700">{e.raw_data?.PayGroup || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Pay Type</span><span className="text-gray-700">{e.raw_data?.PayType || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Full/Part Time</span><span className="text-gray-700">{e.raw_data?.FullOrPartTime || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Cost Center 3</span><span className="text-gray-700">{e.raw_data?.CostCenter3 || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Cost Center 4</span><span className="text-gray-700">{e.raw_data?.CostCenter4 || '—'}</span></div>
+                                        </div>
+                                        <div className="mt-3 pt-3 border-t border-gray-100">
+                                          <div className="text-xs font-semibold text-gray-700 mb-1.5">Policies</div>
+                                          <p className="text-xs text-gray-400 mb-2">Max Hour, Alert, and Job Fencing policies are managed in Fingercheck directly.</p>
+                                          <a href={fcLink} target="_blank" rel="noopener noreferrer"
+                                            className="text-xs text-[#D4A843] hover:underline font-medium">↗ Open in Fingercheck →</a>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           )
                         })}
                       </tbody>
