@@ -12,6 +12,15 @@ type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'clo
 type EntryTypeFilter = 'all' | 'cover' | 'extra_hours' | 'billable'
 interface SortState { col: string; dir: 'asc' | 'desc' }
 
+const BILLING_ASSIGNEES = [
+  'rebecca@bsmfacilitysolutions.com',
+  'billing@bsmfacilitysolutions.com',
+  'leah@bsmfacilitysolutions.com',
+  'ella@bsmfacilitysolutions.com',
+  'office@bsmfacilitysolutions.com',
+  'abe@bsmfacilitysolutions.com',
+]
+
 const TIERS: Tier[] = ['T1', 'T2', 'T3']
 
 const FEDERAL_HOLIDAYS = [
@@ -67,6 +76,7 @@ export default function DashboardPage() {
   const [exportCount, setExportCount] = useState(0)
   const [dismissedBanners, setDismissedBanners] = useState<string[]>([])
   const [tourStep, setTourStep] = useState<number | null>(null)
+  const [asanaCache, setAsanaCache] = useState<Record<string, { assignee: string | null; completed: boolean }>>({})
 
   const dir = TRANSLATIONS[lang].dir
 
@@ -76,9 +86,9 @@ export default function DashboardPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
+      await loadAsanaCache()
       await loadEntries()
       await loadExportCount()
-      // FIX: Only show tour on first visit — check localStorage correctly
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
@@ -105,6 +115,23 @@ export default function DashboardPage() {
       const data = await res.json()
       setExportCount((data.exports || []).length)
     } catch {}
+  }
+
+  async function loadAsanaCache() {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('asana_task_cache')
+        .select('task_id, assignee, completed')
+      const map: Record<string, { assignee: string | null; completed: boolean }> = {}
+      for (const row of data || []) {
+        map[row.task_id] = { assignee: row.assignee, completed: row.completed }
+      }
+      setAsanaCache(map)
+      return map
+    } catch {
+      return {}
+    }
   }
 
   function getPastPeriods(count: number): { start: string; end: string; label: string }[] {
@@ -338,7 +365,16 @@ export default function DashboardPage() {
     if (tab === 'approved') entries = entries.filter(x => x.approvalStatus === 'approved')
     else if (tab === 'pending') entries = entries.filter(x => ['open','pending'].includes(x.approvalStatus) && !x.isLastMinute && x.entryType !== 'billable')
     else if (tab === 'waiting') entries = entries.filter(x => (x.approvalStatus === 'waiting' || (x.isLastMinute && !['approved','closed','exported'].includes(x.approvalStatus))) && x.entryType !== 'billable')
-    else if (tab === 'billing') entries = entries.filter(x => x.entryType === 'billable' && !['closed','exported'].includes(x.approvalStatus))
+    else if (tab === 'billing') entries = entries.filter(x => {
+      if (['closed','exported'].includes(x.approvalStatus)) return false
+      if (x.entryType === 'billable') return true
+      // Also route to billing if Asana task is assigned to a billing team member
+      if (x.asanaId && asanaCache[x.asanaId]) {
+        const assignee = asanaCache[x.asanaId].assignee?.toLowerCase() || ''
+        if (BILLING_ASSIGNEES.some(b => assignee.includes(b.split('@')[0]))) return true
+      }
+      return false
+    })
     else if (tab === 'errors') entries = entries.filter(x => !['closed','exported'].includes(x.approvalStatus) && (!x.jobCode || !x.asanaLink || !x.rate))
     else if (tab === 'closed') entries = entries.filter(x => x.approvalStatus === 'closed')
     else if (tab === 'exported') entries = entries.filter(x => x.approvalStatus === 'exported')
@@ -531,6 +567,17 @@ export default function DashboardPage() {
                 {entry.reasonForCoverage && <div><div className="text-gray-400 mb-1">Reason</div><div className="text-gray-800 font-medium">{entry.reasonForCoverage}</div></div>}
                 <div><div className="text-gray-400 mb-1">Submitted</div><div className="text-gray-800 font-medium">{entry.submissionDay || '—'}</div></div>
                 {entry.jobCode && <div><div className="text-gray-400 mb-1">Job code</div><div className="text-gray-800 font-mono font-medium">{entry.jobCode}</div></div>}
+                {entry.asanaId && asanaCache[entry.asanaId]?.assignee && (
+                  <div>
+                    <div className="text-gray-400 mb-1">Asana assignee</div>
+                    <div className="text-gray-800 font-medium flex items-center gap-1">
+                      👤 {asanaCache[entry.asanaId].assignee}
+                      {BILLING_ASSIGNEES.some(b => asanaCache[entry.asanaId].assignee?.toLowerCase().includes(b.split('@')[0])) && (
+                        <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded ml-1">Billing</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
                 {entry.closedReason && <div><div className="text-gray-400 mb-1">Close reason</div><div className="text-gray-800 font-medium">{entry.closedReason}</div></div>}
                 {entry.extraDetails && <div className="col-span-2"><div className="text-gray-400 mb-1">Extra details</div><div className="text-gray-800">{entry.extraDetails}</div></div>}
