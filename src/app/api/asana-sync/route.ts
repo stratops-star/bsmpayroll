@@ -10,6 +10,8 @@ function detectTaskType(name: string): string {
   const n = name.toLowerCase()
   if (n.includes('general issue')) return 'general_issue'
   if (n.includes('terminated') || n.includes('termination')) return 'termination'
+  if (n.includes('payroll notes') || n.includes('payroll note')) return 'payroll_notes'
+  if (n.includes('billable payroll')) return 'billable'
   return 'cover'
 }
 
