@@ -92,11 +92,10 @@ export default function DashboardPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
-      // Load cache first (fast — from Supabase)
+      // IMPORTANT: load cache first, then entries — entries depend on cache for closed detection
       await loadAsanaCache()
-      // Load entries and export count in parallel
       await Promise.all([loadEntries(), loadExportCount()])
-      // Auto-sync Asana in background (slow — don't await)
+      // Background sync Asana after entries are displayed
       syncAsanaInBackground()
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
@@ -184,7 +183,13 @@ export default function DashboardPage() {
     return periods
   }
 
-  // Check Asana closed from local cache — NO API calls
+  // Check Asana closed from cache map — accepts map directly to avoid stale state
+  function isAsanaClosedFromMap(asanaId: string, cache: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }>): boolean {
+    if (!asanaId) return false
+    return cache[asanaId]?.completed === true
+  }
+
+  // Check Asana closed from local state cache
   function isAsanaClosed(asanaId: string): boolean {
     if (!asanaId) return false
     return asanaCache[asanaId]?.completed === true
@@ -246,6 +251,9 @@ export default function DashboardPage() {
     try {
       const token = await getToken()
 
+      // Get fresh cache map directly — don't rely on stale React state
+      const freshCache = await loadAsanaCache()
+
       // Load current period + rates in parallel
       const [sheetsRes, ratesRes] = await Promise.all([
         fetch(`/api/sheets?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -291,13 +299,12 @@ export default function DashboardPage() {
       for (const tier of TIERS) {
         mapped[tier] = (data[tier] || []).map((e: PorterEntry) => {
           const saved = approvals[e.id]
-          // Priority: saved approval > Asana closed > sheet status > default
           let approvalStatus: string
           if (saved?.status && saved.status !== 'pending') {
             approvalStatus = saved.status
           } else if (e.status?.toUpperCase() === 'CLOSED') {
             approvalStatus = 'closed'
-          } else if (e.asanaId && isAsanaClosed(e.asanaId)) {
+          } else if (e.asanaId && isAsanaClosedFromMap(e.asanaId, freshCache)) {
             approvalStatus = 'closed'
             saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
             saveApprovalStatus(e.id, 'closed', 'Closed in Asana')
@@ -323,7 +330,7 @@ export default function DashboardPage() {
               approvalStatus = saved.status
             } else if (e.status?.toUpperCase() === 'CLOSED') {
               approvalStatus = 'closed'
-            } else if (e.asanaId && isAsanaClosed(e.asanaId)) {
+            } else if (e.asanaId && isAsanaClosedFromMap(e.asanaId, freshCache)) {
               approvalStatus = 'closed'
               saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
               saveApprovalStatus(e.id, 'closed', 'Closed in Asana')
