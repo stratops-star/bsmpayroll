@@ -152,20 +152,31 @@ export default function DashboardPage() {
   async function loadAsanaCache() {
     try {
       const supabase = createClient()
-      const { data } = await supabase
-        .from('asana_task_cache')
-        .select('task_id, assignee, assignee_email, completed, name, notes, due_on, task_type, updated_at')
-        .limit(10000)
-
       const map: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }> = {}
       const issues: typeof asanaIssues = []
 
-      for (const row of data || []) {
-        map[row.task_id] = { assignee: row.assignee, assignee_email: row.assignee_email, completed: row.completed }
-        if (row.task_type === 'general_issue' || row.task_type === 'termination') {
-          issues.push(row)
+      // Paginate to get all rows past Supabase's 1000 row default limit
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data, error } = await supabase
+          .from('asana_task_cache')
+          .select('task_id, assignee, assignee_email, completed, name, notes, due_on, task_type, updated_at')
+          .range(from, from + pageSize - 1)
+
+        if (error || !data || data.length === 0) break
+
+        for (const row of data) {
+          map[row.task_id] = { assignee: row.assignee, assignee_email: row.assignee_email, completed: row.completed }
+          if (row.task_type === 'general_issue' || row.task_type === 'termination') {
+            issues.push(row)
+          }
         }
+
+        if (data.length < pageSize) break
+        from += pageSize
       }
+
       setAsanaCache(map)
       setAsanaIssues(issues.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
       console.log('Cache loaded:', Object.keys(map).length, 'tasks,', issues.length, 'issues')
