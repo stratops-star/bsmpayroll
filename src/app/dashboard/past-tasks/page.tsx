@@ -97,7 +97,40 @@ export default function PastTasksPage() {
         .from('closed_entries')
         .select('*')
         .order('closed_at', { ascending: false })
-      setClosedRows(closedData || [])
+
+      // Paginate asana_task_cache for completed issues + terminations
+      let issueRows: ClosedRow[] = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data: issueData } = await supabase
+          .from('asana_task_cache')
+          .select('task_id, name, assignee, completed, task_type, updated_at')
+          .in('task_type', ['general_issue', 'termination'])
+          .eq('completed', true)
+          .range(from, from + pageSize - 1)
+
+        if (!issueData || issueData.length === 0) break
+
+        issueRows = [...issueRows, ...(issueData.map(i => ({
+          id: i.task_id,
+          entry_id: i.task_id,
+          reason: i.task_type === 'termination' ? 'Termination' : 'General Issue — Resolved',
+          closed_by: i.assignee || 'Asana',
+          closed_at: i.updated_at,
+          entry: {
+            porterName: i.name,
+            asanaLink: `https://app.asana.com/0/0/${i.task_id}`,
+          },
+        })))]
+
+        if (issueData.length < pageSize) break
+        from += pageSize
+      }
+
+      const combined = [...(closedData || []), ...issueRows]
+        .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
+      setClosedRows(combined)
     } catch (e) { console.error(e) }
   }
 
