@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   const approved = entries.filter(e => e.approvalStatus === 'approved')
   if (!approved.length) return NextResponse.json({ error: 'No approved entries' }, { status: 400 })
 
-  // Post to Asana — pass entryType so cover completes, extra/billable assigns to billing
+  // Post to Asana — cover completes, extra/billable assigns to billing
   await Promise.allSettled(
     approved.filter(e => e.asanaId).map(e =>
       postEntered(e.asanaId, periodStart, periodEnd, e.entryType)
@@ -39,6 +39,18 @@ export async function POST(request: NextRequest) {
     }).select().single()
 
     if (rec) {
+      // Fix: fetch saved rates from Supabase to ensure rate is populated at export time
+      const sourceIds = approved.map(e => e.id)
+      const { data: savedRates } = await supabase
+        .from('entry_rates')
+        .select('source_id, rate')
+        .in('source_id', sourceIds)
+
+      const rateMap: Record<string, string> = {}
+      for (const r of savedRates || []) {
+        rateMap[r.source_id] = r.rate
+      }
+
       await supabase.from('export_rows').insert(
         approved.map(e => ({
           export_id: rec.id,
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
           date_worked: e.coverDay,
           hours: e.hours,
           pay_code: e.hoursType?.toUpperCase() === 'OT' ? 'OT' : 'RG',
-          rate: e.rate || null,
+          rate: rateMap[e.id] || e.rate || null,  // prefer DB rate, fallback to entry rate
           property: e.property,
           property_address: e.propertyAddress,
           manager: e.manager,
