@@ -21,6 +21,11 @@ const BILLING_ASSIGNEES = [
   'abe@bsmfacilitysolutions.com',
 ]
 
+function isBillingAssignee(email: string | null): boolean {
+  if (!email) return false
+  return BILLING_ASSIGNEES.includes(email.toLowerCase())
+}
+
 const TIERS: Tier[] = ['T1', 'T2', 'T3']
 
 const FEDERAL_HOLIDAYS = [
@@ -188,6 +193,26 @@ export default function DashboardPage() {
     }
   }
 
+  async function saveAsanaClosedEntry(entry: PorterEntry) {
+    try {
+      const supabase = createClient()
+      // Check if already saved to avoid duplicates
+      const { data: existing } = await supabase
+        .from('closed_entries')
+        .select('id')
+        .eq('entry_id', entry.id)
+        .single()
+      if (existing) return
+      await supabase.from('closed_entries').insert({
+        entry_id: entry.id,
+        reason: 'Closed in Asana',
+        closed_by: 'Asana',
+        closed_at: new Date().toISOString(),
+        entry: entry,
+      })
+    } catch {}
+  }
+
   async function loadEntries() {
     setLoading(true)
     setStatusMsg(t(lang, 'period_loading'))
@@ -230,7 +255,10 @@ export default function DashboardPage() {
                   let approvalStatus = baseStatus
                   if (e.asanaId && !['closed'].includes(baseStatus)) {
                     const isClosed = await checkAsanaClosed(e.asanaId, token)
-                    if (isClosed) approvalStatus = 'closed'
+                    if (isClosed) {
+                      approvalStatus = 'closed'
+                      saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
+                    }
                   }
                   return {
                     ...e,
@@ -269,6 +297,8 @@ export default function DashboardPage() {
                     approvalStatus: 'closed',
                     closedReason: 'Closed in Asana',
                   }
+                  // Save to closed_entries so it appears in Past Tasks
+                  saveAsanaClosedEntry(mapped[tier][idx])
                 }
               }
             })
@@ -393,8 +423,7 @@ export default function DashboardPage() {
       if (['closed','exported'].includes(x.approvalStatus)) return false
       if (x.entryType === 'billable') return true
       if (x.asanaId && asanaCache[x.asanaId]) {
-        const email = asanaCache[x.asanaId].assignee_email?.toLowerCase() || ''
-        if (BILLING_ASSIGNEES.includes(email)) return true
+        if (isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return true
       }
       return false
     })
@@ -597,7 +626,7 @@ export default function DashboardPage() {
                     <div className="text-gray-400 mb-1">Asana assignee</div>
                     <div className="text-gray-800 font-medium flex items-center gap-1">
                       👤 {asanaCache[entry.asanaId].assignee}
-                      {asanaCache[entry.asanaId].assignee_email && BILLING_ASSIGNEES.includes(asanaCache[entry.asanaId].assignee_email!.toLowerCase()) && (
+                      {isBillingAssignee(asanaCache[entry.asanaId].assignee_email) && (
                         <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded ml-1">Billing</span>
                       )}
                     </div>
