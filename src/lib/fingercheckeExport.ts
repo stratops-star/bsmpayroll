@@ -9,12 +9,19 @@ const COLS = [
   'DateWorked','EntryType','StubMessage','TaxLocation'
 ]
 
+// Tier #2 always exports with this job code regardless of what's on the entry
+const T2_JOB_CODE = '203 BSM RD'
+
 export function buildCSV(entries: PorterEntry[], start: string, end: string): string {
   const rows = entries.map(e => {
     const payCode = e.hoursType?.toUpperCase() === 'OT' ? 'OT' : 'RG'
     const entryLabel = e.entryType === 'billable' ? 'Billable' : e.entryType === 'extra_hours' ? 'Extra Hrs' : 'Cover'
     const propShort = (e.propertyAddress || e.property || '').split(',')[0]
     const stubMsg = e.extraDetails || `${entryLabel} - ${propShort}`.trim()
+
+    // Tier #2 always uses the fixed T2 job code
+    const jobCode = e.tier === 'T2' ? T2_JOB_CODE : (e.jobCode || '')
+
     const row: Record<string, string> = {
       EmployeeNumber: e.employeeNumber,
       PayNumber: '1',
@@ -25,7 +32,7 @@ export function buildCSV(entries: PorterEntry[], start: string, end: string): st
       RateCode: '',
       CostCenter1: '', CostCenter2: '', CostCenter3: '',
       CostCenter4: '', CostCenter5: '',
-      Job: e.jobCode || '',
+      Job: jobCode,
       Task: '',
       PeriodBegin: start ? fmtSlash(new Date(start)) : '',
       PeriodEnd: end ? fmtSlash(new Date(end)) : '',
