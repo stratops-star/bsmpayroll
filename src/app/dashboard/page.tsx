@@ -92,11 +92,19 @@ export default function DashboardPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
-      // IMPORTANT: load cache first, then entries — entries depend on cache for closed detection
+      // Sync Asana first to get fresh data, then load cache and entries
+      setSyncingAsana(true)
+      try {
+        const token = await getToken()
+        await fetch('/api/asana-sync', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      } catch {}
+      setSyncingAsana(false)
+      // Now load cache with fresh data, then entries
       await loadAsanaCache()
       await Promise.all([loadEntries(), loadExportCount()])
-      // Background sync Asana after entries are displayed
-      syncAsanaInBackground()
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
@@ -257,6 +265,7 @@ export default function DashboardPage() {
       const freshCache = await loadAsanaCache()
 
       // Load current period + rates in parallel
+
       const [sheetsRes, ratesRes] = await Promise.all([
         fetch(`/api/sheets?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/rates?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -726,7 +735,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]" dir={dir}>
-      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={loadEntries} loading={loading} exportCount={exportCount} onRelaunchTour={relaunchTour} syncing={syncingAsana} />
+      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={async () => { syncAsanaInBackground(); await loadEntries() }} loading={loading} exportCount={exportCount} onRelaunchTour={relaunchTour} syncing={syncingAsana} />
 
       <main className="px-5 py-4 max-w-7xl mx-auto">
         {/* Period card */}
