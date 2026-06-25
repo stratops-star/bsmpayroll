@@ -35,6 +35,7 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
     { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks', badge: 0 },
     { label: t(lang, 'nav_exported_files'), href: '/dashboard/history',    badge: exportCount && exportCount > 0 ? exportCount : 0 },
     { label: t(lang, 'nav_payroll_rules'),  href: '/dashboard/rules',      badge: 0 },
+    { label: 'Fingercheck',                 href: '/dashboard/fingercheck', badge: 0 },
   ]
 
   return (
