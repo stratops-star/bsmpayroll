@@ -160,8 +160,10 @@ export default function DashboardPage() {
       }
       setAsanaCache(map)
       setAsanaIssues(issues.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
+      console.log('Cache loaded:', Object.keys(map).length, 'tasks,', issues.length, 'issues')
       return map
-    } catch {
+    } catch (err) {
+      console.error('Cache error:', err)
       return {}
     }
   }
