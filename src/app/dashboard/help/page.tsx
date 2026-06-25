@@ -24,7 +24,7 @@ const STEPS = [
   {
     id: 'tab-routing',
     title: 'Tab Priority System',
-    body: 'Every entry is routed to exactly ONE tab based on a priority system:\n\n1. Errors — missing rate, job code, or Asana link. Cannot be approved.\n2. Billing — Asana task assigned to billing team (Rebecca, Anthony, Leah, Ella, Office, Abe).\n3. Waiting ⚡ — Asana task assigned to a manager or staff member.\n4. Pending — Asana task has no assignee yet.\n\nAn entry only ever appears in one tab. Fix errors first, then work through billing and waiting.',
+    body: 'Every entry is routed to exactly ONE tab based on a priority system:\n\n1. Errors — missing rate, job code, or Asana link. Cannot be approved.\n2. Billing — Asana task assigned to billing team (Rebecca, Anthony, Leah, Ella, Office, Abe).\n3. Waiting ⚡ — Asana task assigned to a manager or staff member (not billing, not payroll@).\n4. Pending — No Asana assignee OR assigned to payroll@bsmfacilitysolutions.com.\n\nFix Errors first, then work through Billing and Waiting.',
   },
   {
     id: 'errors',
@@ -39,12 +39,12 @@ const STEPS = [
   {
     id: 'waiting',
     title: 'Waiting Tab ⚡',
-    body: 'Entries whose Asana task is assigned to a manager or staff member (Albert Arana, Gissele Ruiz, Maria Jose, etc.) appear here. These need review before approval. The assignee\'s name and email show in the accordion row. Rate must be set before approving.',
+    body: 'Entries whose Asana task is assigned to a manager or staff member (Albert Arana, Gissele Ruiz, Maria Jose, etc.) appear here. Note: entries assigned to payroll@bsmfacilitysolutions.com go to Pending instead. The assignee\'s name and email show in the accordion. Rate must be set before approving.',
   },
   {
     id: 'pending',
     title: 'Pending Tab',
-    body: 'Entries with no Asana assignee appear here. These are typically new submissions that haven\'t been reviewed by anyone yet. Review the extra details, set the rate, and approve.',
+    body: 'Entries with no Asana assignee OR assigned to payroll@bsmfacilitysolutions.com appear here. These are ready to review — set the rate and approve. New submissions typically start here.',
   },
   {
     id: 'approving',
@@ -169,7 +169,7 @@ export default function HelpPage() {
                   </div>
                   <div className="bg-white/10 rounded-lg p-3">
                     <div className="text-blue-300 font-semibold mb-1">④ Pending</div>
-                    <div className="text-white/70">No Asana assignee yet</div>
+                    <div className="text-white/70">No assignee OR payroll@ assigned</div>
                   </div>
                 </div>
                 <p className="text-white/50 text-xs mt-3">Each entry appears in ONE tab only. Fix Errors first.</p>
