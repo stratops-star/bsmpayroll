@@ -52,25 +52,25 @@ export async function POST(request: NextRequest) {
 
     // Map employees to our schema
     const rows = employees.map((emp: any) => {
-      // Fingercheck field names vary — handle common variations
-      const employeeNumber = String(
-        emp.EmployeeId || emp.employeeId || emp.Id || emp.id ||
-        emp.EmployeeNumber || emp.employeeNumber || ''
-      )
-      const fullName = emp.FullName || emp.fullName ||
-        `${emp.FirstName || emp.firstName || ''} ${emp.LastName || emp.lastName || ''}`.trim()
-      const jobCode = emp.JobCode || emp.jobCode || emp.Job || emp.job || ''
-      const address = emp.Address || emp.address ||
-        emp.WorkLocation || emp.workLocation || ''
-      const rate = parseFloat(
-        emp.HourlyRate || emp.hourlyRate || emp.Rate || emp.rate || '0'
-      ) || null
-      const status = emp.Status || emp.status || emp.EmploymentStatus || 'Active'
-      const email = emp.Email || emp.email || ''
+      const employeeNumber = String(emp.EmployeeNumber || emp.EmployeeId || emp.Id || '')
+      const fullName = emp.FirstLast || `${emp.FirstName || ''} ${emp.LastName || ''}`.trim()
+      const jobCode = emp.Job || emp.JobCode || emp.JobTitle || ''
+      const address = [emp.Address1, emp.City, emp.State].filter(Boolean).join(', ')
+      const rate = parseFloat(emp.HourlyRate || emp.Rate || emp.PayRate || '0') || null
+      
+      // DivisionEmployeeStatus: A=Active, T=Terminated, I=Inactive, O=Onboarding
+      const rawStatus = emp.DivisionEmployeeStatus || emp.Status || 'A'
+      const status = rawStatus === 'A' ? 'Active'
+        : rawStatus === 'T' ? 'Terminated'
+        : rawStatus === 'I' ? 'Inactive'
+        : rawStatus === 'O' ? 'Onboarding'
+        : rawStatus
 
-      // Detect if hired in last 30 days
-      const hireDate = emp.HireDate || emp.hireDate || emp.StartDate || emp.startDate
-      const isNew = hireDate ? new Date(hireDate) >= thirtyDaysAgo : false
+      const email = emp.Email || emp.PersonalEmail || ''
+      const hireDate = emp.HireDate || emp.StartDate
+
+      // isNew: hired in last 30 days AND not terminated
+      const isNew = hireDate && new Date(hireDate) >= thirtyDaysAgo && rawStatus !== 'T'
 
       return {
         employee_number: employeeNumber,
