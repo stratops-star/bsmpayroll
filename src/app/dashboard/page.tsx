@@ -86,15 +86,32 @@ export default function DashboardPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
+      // Load cache first (fast — from Supabase)
       await loadAsanaCache()
-      await loadEntries()
-      await loadExportCount()
+      // Load entries and export count in parallel
+      await Promise.all([loadEntries(), loadExportCount()])
+      // Auto-sync Asana in background (slow — don't await)
+      syncAsanaInBackground()
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
       }
     })
   }, [])
+
+  async function syncAsanaInBackground() {
+    try {
+      const token = await getToken()
+      await fetch('/api/asana-sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      // Reload cache after sync completes
+      await loadAsanaCache()
+    } catch {
+      // Silent fail — background sync is best-effort
+    }
+  }
 
   function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
 
