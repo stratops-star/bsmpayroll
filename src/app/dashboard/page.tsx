@@ -8,7 +8,8 @@ import { getCurrentPeriod, getPreviousPeriod, fmtISO } from '@/lib/payPeriod'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 import NavBar from '@/components/NavBar'
 
-type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'closed' | 'exported' | 'general_issues' | 'terminations'
+type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'closed' | 'exported' | 'general_issues' | 'terminations' | 'employees'
+type EmployeeFilter = 'all' | 'new' | 'terminated'
 type EntryTypeFilter = 'all' | 'cover' | 'extra_hours' | 'billable'
 interface SortState { col: string; dir: 'asc' | 'desc' }
 
@@ -88,6 +89,12 @@ export default function DashboardPage() {
   const [asanaCache, setAsanaCache] = useState<Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }>>({})
   const [asanaIssues, setAsanaIssues] = useState<{ task_id: string; name: string; notes: string; completed: boolean; assignee: string | null; due_on: string | null; task_type: string; updated_at: string }[]>([])
   const [syncingAsana, setSyncingAsana] = useState(false)
+  const [fcEmployees, setFcEmployees] = useState<any[]>([])
+  const [fcEmployeeFilter, setFcEmployeeFilter] = useState<EmployeeFilter>('all')
+  const [fcDeptFilter, setFcDeptFilter] = useState<string>('all')
+  const [fcSearch, setFcSearch] = useState('')
+  const [fcSortCol, setFcSortCol] = useState('name')
+  const [fcSortDir, setFcSortDir] = useState<'asc' | 'desc'>('asc')
   const dir = TRANSLATIONS[lang].dir
 
   useEffect(() => {
@@ -108,13 +115,24 @@ export default function DashboardPage() {
       setSyncingAsana(false)
       // Now load cache with fresh data, then entries
       await loadAsanaCache()
-      await Promise.all([loadEntries(), loadExportCount()])
+      await Promise.all([loadEntries(), loadExportCount(), loadFcEmployees()])
       const tourDone = localStorage.getItem('bsm_tour_done')
       if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
       }
     })
   }, [])
+
+  async function loadFcEmployees() {
+    try {
+      const token = await getToken()
+      const res = await fetch('/api/fingercheck/employees', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setFcEmployees(data.employees || [])
+    } catch {}
+  }
 
   async function syncAsanaInBackground() {
     try {
@@ -916,9 +934,12 @@ export default function DashboardPage() {
 
           {/* Inner tabs */}
           <div id="tour-tabs" className="flex border-b border-gray-200 px-1 items-center overflow-x-auto">
-            {(['approved','pending','waiting','billing','errors','closed','exported','general_issues','terminations'] as InnerTab[]).map(tab => {
+            {(['approved','pending','waiting','billing','errors','closed','exported','general_issues','terminations','employees'] as InnerTab[]).map(tab => {
               const isIssueTab = tab === 'general_issues' || tab === 'terminations'
-              const count = isIssueTab
+              const isEmpTab = tab === 'employees'
+              const count = isEmpTab
+                ? fcEmployees.filter(e => e.status === 'Active').length
+                : isIssueTab
                 ? asanaIssues.filter(i => i.task_type === (tab === 'general_issues' ? 'general_issue' : 'termination') && !i.completed).length
                 : tabEntries(activeTier, tab).length
               const labels: Record<InnerTab,string> = {
@@ -931,6 +952,7 @@ export default function DashboardPage() {
                 exported: t(lang,'tab_exported'),
                 general_issues: 'General Issues',
                 terminations: 'Terminations',
+                employees: 'Employees',
               }
               const colors: Record<InnerTab,string> = {
                 approved:'bg-emerald-50 text-emerald-700',
@@ -942,6 +964,7 @@ export default function DashboardPage() {
                 exported:'bg-blue-50 text-blue-700',
                 general_issues:'bg-amber-50 text-amber-700',
                 terminations:'bg-red-50 text-red-700',
+                employees:'bg-[#0D1B35]/10 text-[#0D1B35]',
               }
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
@@ -951,6 +974,7 @@ export default function DashboardPage() {
                       : tab === 'billing' ? 'border-purple-500 text-purple-700'
                       : tab === 'terminations' ? 'border-red-500 text-red-700'
                       : tab === 'general_issues' ? 'border-amber-500 text-amber-700'
+                      : tab === 'employees' ? 'border-[#0D1B35] text-[#0D1B35]'
                       : 'border-[#D4A843] text-[#0D1B35]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                   {labels[tab]}
@@ -1017,7 +1041,138 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {activeTab !== 'general_issues' && activeTab !== 'terminations' && (visibleEntries.length === 0 ? (
+          {/* Employees tab content */}
+          {activeTab === 'employees' && (() => {
+            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+            const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+            const tiers = ['Tier #1','Tier #2','Tier #3','Tier #4']
+
+            let filtered = fcEmployees
+            // Department filter
+            if (fcDeptFilter !== 'all') filtered = filtered.filter(e => e.raw_data?._department === fcDeptFilter)
+            // Status filter
+            if (fcEmployeeFilter === 'new') filtered = filtered.filter(e => {
+              const h = e.raw_data?._hireDate
+              return h && new Date(h) >= thirtyDaysAgo && e.status === 'Active'
+            })
+            else if (fcEmployeeFilter === 'terminated') filtered = filtered.filter(e => {
+              const t = e.raw_data?._termDate
+              return t && new Date(t) >= ninetyDaysAgo && e.status === 'Terminated'
+            })
+            else filtered = filtered.filter(e => e.status === 'Active')
+            // Search
+            if (fcSearch.trim()) {
+              const q = fcSearch.toLowerCase()
+              filtered = filtered.filter(e =>
+                e.full_name?.toLowerCase().includes(q) ||
+                e.employee_number?.toString().includes(q) ||
+                e.raw_data?._department?.toLowerCase().includes(q)
+              )
+            }
+            // Sort
+            filtered = [...filtered].sort((a, b) => {
+              let av = '', bv = ''
+              if (fcSortCol === 'number') return fcSortDir === 'asc' ? Number(a.employee_number) - Number(b.employee_number) : Number(b.employee_number) - Number(a.employee_number)
+              if (fcSortCol === 'name') { av = a.full_name || ''; bv = b.full_name || '' }
+              if (fcSortCol === 'dept') { av = a.raw_data?._department || ''; bv = b.raw_data?._department || '' }
+              if (fcSortCol === 'hire') { av = a.raw_data?._hireDate || ''; bv = b.raw_data?._hireDate || '' }
+              if (fcSortCol === 'term') { av = a.raw_data?._termDate || ''; bv = b.raw_data?._termDate || '' }
+              return fcSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+            })
+
+            const allActive = fcEmployees.filter(e => e.status === 'Active').length
+            const newCount = fcEmployees.filter(e => { const h = e.raw_data?._hireDate; return h && new Date(h) >= thirtyDaysAgo && e.status === 'Active' }).length
+            const termCount = fcEmployees.filter(e => { const t = e.raw_data?._termDate; return t && new Date(t) >= ninetyDaysAgo && e.status === 'Terminated' }).length
+
+            function fmtD(d: string) { if (!d) return '—'; return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+            function toggleSort(col: string) { if (fcSortCol === col) setFcSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setFcSortCol(col); setFcSortDir('asc') } }
+            function si(col: string) { if (fcSortCol !== col) return ' ↕'; return fcSortDir === 'asc' ? ' ↑' : ' ↓' }
+
+            return (
+              <div>
+                {/* FC toolbar */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
+                  <div className="flex gap-1">
+                    {([['all', `All Active (${allActive})`], ['new', `🆕 New 30d (${newCount})`], ['terminated', `Terminated 90d (${termCount})`]] as [EmployeeFilter, string][]).map(([f, label]) => (
+                      <button key={f} onClick={() => setFcEmployeeFilter(f)}
+                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcEmployeeFilter === f ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="w-px h-4 bg-gray-200" />
+                  <div className="flex gap-1">
+                    <button onClick={() => setFcDeptFilter('all')}
+                      className={`text-xs px-2 py-1 rounded-full border transition-colors ${fcDeptFilter === 'all' ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      All Tiers
+                    </button>
+                    {tiers.map(tier => (
+                      <button key={tier} onClick={() => setFcDeptFilter(tier)}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${fcDeptFilter === tier ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>
+                        {tier}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 flex-1 max-w-xs">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)}
+                      placeholder="Search name or number…"
+                      className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
+                    {fcSearch && <button onClick={() => setFcSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
+                  </div>
+                  <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
+                </div>
+
+                {fcEmployees.length === 0 ? (
+                  <div className="py-10 text-center text-gray-400 text-sm">No employee data — go to Fingercheck page and sync first</div>
+                ) : filtered.length === 0 ? (
+                  <div className="py-10 text-center text-gray-400 text-sm">No employees match this filter</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th onClick={() => toggleSort('number')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 w-14 cursor-pointer hover:text-gray-700">#{ si('number')}</th>
+                          <th onClick={() => toggleSort('name')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Name{si('name')}</th>
+                          <th onClick={() => toggleSort('dept')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Department{si('dept')}</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Job Code</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Address</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Rate</th>
+                          <th onClick={() => toggleSort('hire')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Hire Date{si('hire')}</th>
+                          {fcEmployeeFilter === 'terminated' && <th onClick={() => toggleSort('term')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Term Date{si('term')}</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map(e => {
+                          const isNew = e.raw_data?._hireDate && new Date(e.raw_data._hireDate) >= thirtyDaysAgo && e.status === 'Active'
+                          return (
+                            <tr key={e.employee_number} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 ${isNew ? 'bg-amber-50/20' : ''}`}>
+                              <td className="px-3 py-2 font-mono text-xs text-gray-500">{e.employee_number}</td>
+                              <td className="px-3 py-2">
+                                <div className="text-xs font-medium text-gray-900 flex items-center gap-1">
+                                  {e.full_name}
+                                  {isNew && <span className="text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded">🆕</span>}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
+                              <td className="px-3 py-2 text-xs">
+                                {e.job_code ? <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{e.job_code}</span> : <span className="text-gray-400">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate">{e.address || '—'}</td>
+                              <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
+                              <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
+                              {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+          {activeTab !== 'general_issues' && activeTab !== 'terminations' && activeTab !== 'employees' && (visibleEntries.length === 0 ? (
             <div className="py-14 text-center text-gray-400 text-sm">{t(lang,'no_entries')}</div>
           ) : (
             <div id="tour-table" className="overflow-x-auto">
@@ -1058,7 +1213,7 @@ export default function DashboardPage() {
             </div>
           ))}
 
-          {activeTab !== 'general_issues' && activeTab !== 'terminations' && (
+          {activeTab !== 'general_issues' && activeTab !== 'terminations' && activeTab !== 'employees' && (
           <div className="px-4 py-2 border-t border-gray-100 flex justify-between">
             <span className="text-xs text-gray-400">{visibleEntries.length} {t(lang,'export_entries')} · {t(lang,'click_to_expand')}</span>
             <span className="text-xs text-gray-400">{t(lang,'period_payday')} {paydayStr}</span>
