@@ -1152,8 +1152,7 @@ export default function DashboardPage() {
                           <th onClick={() => toggleSort('number')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 w-14 cursor-pointer hover:text-gray-700">#{ si('number')}</th>
                           <th onClick={() => toggleSort('name')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Name{si('name')}</th>
                           <th onClick={() => toggleSort('dept')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Department{si('dept')}</th>
-                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Job Code</th>
-                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Address</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Supervisor</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Rate</th>
                           <th onClick={() => toggleSort('hire')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Hire Date{si('hire')}</th>
                           {fcEmployeeFilter === 'terminated' && <th onClick={() => toggleSort('term')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Term Date{si('term')}</th>}
@@ -1179,17 +1178,14 @@ export default function DashboardPage() {
                                   </div>
                                 </td>
                                 <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
-                                <td className="px-3 py-2 text-xs">
-                                  {e.job_code ? <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{e.job_code}</span> : <span className="text-gray-400">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate">{e.address || '—'}</td>
+                                <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?.SupervisorEmployeeNumber ? `#${e.raw_data.SupervisorEmployeeNumber}` : '—'}</td>
                                 <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
                                 <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
                                 {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
                               </tr>
                               {isExpanded && (
                                 <tr key={`${e.employee_number}-expanded`} className="border-b border-gray-100 bg-blue-50/20">
-                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 9 : 8} className="px-6 py-4">
+                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 7 : 6} className="px-6 py-4">
                                     <div className="grid grid-cols-2 gap-6">
                                       {/* Rates */}
                                       <div>
@@ -1229,6 +1225,9 @@ export default function DashboardPage() {
                                           <div className="flex justify-between"><span className="text-gray-500">Pay Group</span><span className="text-gray-700">{e.raw_data?.PayGroup || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Pay Type</span><span className="text-gray-700">{e.raw_data?.PayType || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Full/Part Time</span><span className="text-gray-700">{e.raw_data?.FullOrPartTime || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Supervisor #</span><span className="text-gray-700">{e.raw_data?.SupervisorEmployeeNumber || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Job Code</span><span className="text-gray-700 font-mono">{e.job_code || '—'}</span></div>
+                                          <div className="flex justify-between"><span className="text-gray-500">Address</span><span className="text-gray-700 text-right max-w-[180px]">{e.address || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Cost Center 3</span><span className="text-gray-700">{e.raw_data?.CostCenter3 || '—'}</span></div>
                                           <div className="flex justify-between"><span className="text-gray-500">Cost Center 4</span><span className="text-gray-700">{e.raw_data?.CostCenter4 || '—'}</span></div>
                                         </div>
