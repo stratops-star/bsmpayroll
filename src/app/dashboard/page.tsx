@@ -508,7 +508,11 @@ export default function DashboardPage() {
     let entries = allEntries[tier]
     if (tab === 'approved') entries = entries.filter(x => x.approvalStatus === 'approved')
     else if (tab === 'pending') entries = entries.filter(x => ['open','pending'].includes(x.approvalStatus) && !x.isLastMinute && x.entryType !== 'billable')
-    else if (tab === 'waiting') entries = entries.filter(x => (x.approvalStatus === 'waiting' || (x.isLastMinute && !['approved','closed','exported'].includes(x.approvalStatus))) && x.entryType !== 'billable')
+    else if (tab === 'waiting') entries = entries.filter(x => {
+      // Exclude billing-assigned entries from waiting
+      if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
+      return (x.approvalStatus === 'waiting' || (x.isLastMinute && !['approved','closed','exported'].includes(x.approvalStatus))) && x.entryType !== 'billable'
+    })
     else if (tab === 'billing') entries = entries.filter(x => {
       if (['closed','exported'].includes(x.approvalStatus)) return false
       if (x.entryType === 'billable') return true
