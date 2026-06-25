@@ -50,7 +50,7 @@ const TOUR_STEPS = [
   { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number. Results update instantly.' },
   { target: 'tour-tabs', title: 'Tab Priority System', body: 'Tabs follow a routing priority: Errors (blocked) → Billing (assigned to billing team) → Waiting (assigned to manager/staff) → Pending (no assignee OR assigned to payroll@). An entry only appears in ONE tab.' },
   { target: 'tour-tabs', title: 'Errors Tab', body: 'Entries missing rate, job code, or Asana link. These CANNOT be approved until fixed. Always check Errors first before exporting.' },
-  { target: 'tour-tabs', title: 'Billing Tab', body: 'Entries whose Asana task is assigned to the billing team (Rebecca, Anthony, Leah, Ella, Office, Abe). Approve to confirm hours — Asana task stays open for billing.' },
+  { target: 'tour-tabs', title: 'Billing Tab', body: 'Extra Hours & Billable entries assigned to billing team. Click "Approve & Send to Billing" to pay the porter in Fingercheck AND auto-assign the Asana task to Rebecca for client invoicing. Once Rebecca invoices and closes the Asana task, it moves to Closed.' },
   { target: 'tour-tabs', title: 'Waiting Tab ⚡', body: 'Entries assigned to a manager or staff member in Asana (not billing, not payroll@). These need review before approval.' },
   { target: 'tour-tabs', title: 'Pending Tab', body: 'Entries with no Asana assignee OR assigned to payroll@bsmfacilitysolutions.com. These are ready to review — set rate and approve.' },
   { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. The accordion shows building max rate, Asana assignee, extra details, and screenshot.' },
@@ -544,7 +544,9 @@ export default function DashboardPage() {
       return false
     })
     else if (tab === 'billing') entries = entries.filter(x => {
-      if (['closed','exported'].includes(x.approvalStatus)) return false
+      if (x.approvalStatus === 'closed') return false
+      // Show entries assigned to billing regardless of approval status
+      // This includes: pending billing approval AND exported (awaiting billing completion)
       if (x.entryType === 'billable') return true
       if (x.asanaId && asanaCache[x.asanaId]) {
         if (isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return true
@@ -706,14 +708,21 @@ export default function DashboardPage() {
                 {wasClosedInAsana && <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Asana ✓</span>}
                 <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
               </div>
-            ) : entry.entryType === 'billable' ? (
-              <button onClick={() => handleApprove(entry)} disabled={!approved}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
-                title={blockReason}>{!approved ? '🚫 Bill' : t(lang,'action_bill')}</button>
+            ) : entry.entryType === 'billable' || (entry.asanaId && asanaCache[entry.asanaId] && isBillingAssignee(asanaCache[entry.asanaId].assignee_email)) ? (
+              // Billing entries — read only, no approve button
+              isExported ? (
+                <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-medium">📋 Billing</span>
+              ) : isApproved ? (
+                <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">✓ Paid</span>
+              ) : (
+                <button onClick={() => handleApprove(entry)} disabled={!approved}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
+                  title={blockReason}>{!approved ? '🚫 Approve' : '✓ Approve & Send to Billing'}</button>
+              )
             ) : entry.entryType === 'extra_hours' ? (
               <button onClick={() => handleApprove(entry)} disabled={!approved}
                 className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-[#D4A843]/40 text-[#8B6A1A] bg-[#D4A843]/10 hover:bg-[#D4A843]/20'}`}
-                title={blockReason}>{!approved ? '🚫 Approve' : t(lang,'action_approve')}</button>
+                title={blockReason}>{!approved ? '🚫 Approve' : '✓ Approve & Send to Billing'}</button>
             ) : isApproved ? (
               <div className="flex gap-1.5">
                 <button onClick={() => handleUnapprove(entry)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">{t(lang,'action_unapprove')}</button>
@@ -952,7 +961,7 @@ export default function DashboardPage() {
             <span className="ml-auto pr-3 text-xs text-gray-400">{tierLabels[activeTier]}</span>
           </div>
 
-          {activeTab === 'billing' && <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100"><p className="text-xs text-purple-700">Billable entries — approve to confirm hours. Asana task assigned to billing team.</p></div>}
+          {activeTab === 'billing' && <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100 flex items-center gap-2"><span>💜</span><p className="text-xs text-purple-700">Extra Hours & Billable entries — approve to pay porter in Fingercheck. Asana task auto-assigns to Rebecca for client invoicing. Billing closes the task when invoicing is complete.</p></div>}
           {activeTab === 'errors' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><span className="text-red-500">⚠️</span><p className="text-xs text-red-700"><strong>{visibleEntries.length} entries cannot be approved</strong> — fix missing rate, job code, or Asana link first</p></div>}
           {activeTab === 'waiting' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-start gap-2"><span className="text-red-500 mt-0.5">⚡</span><p className="text-xs text-red-700">Last-minute — review before payday <strong>{paydayStr}</strong></p></div>}
           {activeTab === 'closed' && visibleEntries.filter(e => e.closedReason === 'Closed in Asana').length > 0 && (
