@@ -98,6 +98,26 @@ export default function PastTasksPage() {
         .select('*')
         .order('closed_at', { ascending: false })
 
+      // Map closed_entries to display format
+      const payrollClosed: ClosedRow[] = (closedData || []).map(r => ({
+        id: r.id,
+        entry_id: r.source_id,
+        reason: r.reason,
+        closed_by: r.closed_by,
+        closed_at: r.closed_at,
+        entry: {
+          porterName: r.porter_name,
+          employeeNumber: r.employee_number,
+          coverDay: r.date_worked,
+          hours: r.hours,
+          propertyAddress: r.property_address,
+          manager: r.manager,
+          asanaLink: r.asana_link,
+          tier: r.tier,
+          entryType: r.reason === 'Closed in Asana' ? 'cover' : 'cover', // will show based on entry
+        },
+      }))
+
       // Paginate asana_task_cache for completed issues + terminations
       let issueRows: ClosedRow[] = []
       let from = 0
@@ -128,7 +148,7 @@ export default function PastTasksPage() {
         from += pageSize
       }
 
-      const combined = [...(closedData || []), ...issueRows]
+      const combined = [...payrollClosed, ...issueRows]
         .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
       setClosedRows(combined)
     } catch (e) { console.error(e) }
