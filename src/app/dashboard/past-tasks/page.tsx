@@ -93,11 +93,32 @@ export default function PastTasksPage() {
 
   async function loadClosed() {
     try {
-      const { data } = await supabase
+      const { data: closedData } = await supabase
         .from('closed_entries')
         .select('*')
         .order('closed_at', { ascending: false })
-      setClosedRows(data || [])
+
+      // Also pull completed General Issues + Terminations from asana cache
+      const { data: issueData } = await supabase
+        .from('asana_task_cache')
+        .select('task_id, name, notes, assignee, completed, task_type, updated_at')
+        .in('task_type', ['general_issue', 'termination'])
+        .eq('completed', true)
+        .limit(500)
+
+      // Convert asana issues to closed row format
+      const issueRows: ClosedRow[] = (issueData || []).map(i => ({
+        id: i.task_id,
+        entry_id: i.task_id,
+        reason: i.task_type === 'termination' ? 'Termination' : 'General Issue — Resolved',
+        closed_by: i.assignee || 'Asana',
+        closed_at: i.updated_at,
+        entry: { porterName: i.name, asanaLink: `https://app.asana.com/0/0/${i.task_id}` },
+      }))
+
+      const combined = [...(closedData || []), ...issueRows]
+        .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
+      setClosedRows(combined)
     } catch (e) { console.error(e) }
   }
 
