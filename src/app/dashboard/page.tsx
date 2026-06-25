@@ -828,8 +828,24 @@ export default function DashboardPage() {
             {TIERS.map(tier => {
               const e = allEntries[tier]
               const ap = e.filter(x => x.approvalStatus === 'approved').length
-              const pe = e.filter(x => ['open','pending'].includes(x.approvalStatus) && !x.isLastMinute).length
-              const ur = e.filter(x => x.approvalStatus === 'waiting' || (x.isLastMinute && !['approved','closed','exported'].includes(x.approvalStatus))).length
+              const pe = e.filter(x => {
+                if (!['open','pending'].includes(x.approvalStatus) || x.isLastMinute || x.entryType === 'billable') return false
+                if (!x.jobCode || !x.asanaLink || !x.rate) return false
+                if (x.asanaId && asanaCache[x.asanaId]?.assignee_email) return false
+                return true
+              }).length
+              const ur = e.filter(x => {
+                if (['approved','closed','exported'].includes(x.approvalStatus)) return false
+                if (x.entryType === 'billable') return false
+                if (!x.jobCode || !x.asanaLink || !x.rate) return false
+                if (x.asanaId && asanaCache[x.asanaId]) {
+                  const email = asanaCache[x.asanaId].assignee_email
+                  if (!email) return false
+                  if (isBillingAssignee(email)) return false
+                  return true
+                }
+                return false
+              }).length
               const hrs = e.filter(x => x.approvalStatus === 'approved').reduce((s, x) => s + x.hours, 0)
               return (
                 <button key={tier} onClick={() => setActiveTier(tier)} className={`card p-4 text-left hover:border-[#D4A843]/50 transition-colors ${activeTier === tier ? 'border-[#D4A843] border-[1.5px]' : ''}`}>
@@ -840,7 +856,7 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-gray-50 rounded-lg p-2.5"><div className="text-lg font-semibold text-emerald-700">{ap}</div><div className="text-xs text-gray-500">{t(lang,'mini_approved')}</div></div>
                     <div className="bg-gray-50 rounded-lg p-2.5"><div className="text-lg font-semibold text-amber-700">{pe}</div><div className="text-xs text-gray-500">{t(lang,'mini_pending')}</div></div>
-                    <div className="bg-gray-50 rounded-lg p-2.5"><div className="text-lg font-semibold text-red-700">{ur}</div><div className="text-xs text-gray-500">{t(lang,'mini_urgent')}</div></div>
+                    <div className="bg-gray-50 rounded-lg p-2.5"><div className="text-lg font-semibold text-red-700">{ur}</div><div className="text-xs text-gray-500">Waiting ⚡</div></div>
                     <div className="bg-gray-50 rounded-lg p-2.5"><div className="text-lg font-semibold text-[#0D1B35]">{hrs.toFixed(1)}</div><div className="text-xs text-gray-500">{t(lang,'mini_appr_hrs')}</div></div>
                   </div>
                 </button>
