@@ -62,6 +62,9 @@ const TOUR_STEPS = [
   { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. The accordion shows building max rate, Asana assignee, extra details, and screenshot.' },
   { target: 'tour-actions', title: 'Actions', body: 'Cover: Approve + Close. Extra Hrs + Billable: Approve only. On approval, Asana is updated automatically — Cover tasks are completed, Extra/Billable tasks are assigned to billing.' },
   { target: 'tour-export-btn', title: 'Export to Fingercheck', body: 'When all entries are approved, click Export to download a Fingercheck CSV. Only Cover, Extra Hrs, and Billable entries are exported — never General Issues or Terminations.' },
+  { target: 'tour-employees-tab', title: 'Employees Tab', body: 'The Employees tab pulls your full Fingercheck roster — active, new hires, and recently terminated. Use the tier filters to narrow by division, or search by name or employee number. New hires in the last 30 days are flagged with 🆕.' },
+  { target: 'tour-setup-filters', title: 'Setup Status', body: 'New hires show a Setup Status column — ⚠️ Missing means the employee is missing a job-specific rate code or has unchecked policies. ✓ Complete means they're fully configured. Use the Missing Setup filter to quickly see who still needs attention.' },
+  { target: 'tour-profile-checklist', title: 'Profile Checklist', body: 'Expand any employee row to see the Profile Checklist — three policies that must be configured in Fingercheck for each new hire: Maximum Hour Policy, Alert Policy, and Job Fencing Policy. Check each box as you confirm it's set. All three must be checked for Setup Status to show Complete.' },
 ]
 
 export default function DashboardPage() {
@@ -966,6 +969,7 @@ export default function DashboardPage() {
               const colors: Record<InnerTab,string> = { approved:'bg-emerald-50 text-emerald-700', pending:'bg-amber-50 text-amber-700', waiting:'bg-red-50 text-red-700', billing:'bg-purple-50 text-purple-700', errors:'bg-red-50 text-red-700', closed:'bg-gray-100 text-gray-600', exported:'bg-blue-50 text-blue-700', general_issues:'bg-amber-50 text-amber-700', terminations:'bg-red-50 text-red-700', employees:'bg-[#0D1B35]/10 text-[#0D1B35]' }
               return (
                 <button key={tab} onClick={() => setActiveTab(tab)}
+                  id={tab === 'employees' ? 'tour-employees-tab' : undefined}
                   className={`px-3 py-2.5 text-xs font-medium border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap
                     ${activeTab === tab
                       ? tab === 'errors' ? 'border-red-500 text-red-700'
@@ -1119,6 +1123,7 @@ export default function DashboardPage() {
                     ))}
                     <div className="w-px h-4 bg-gray-200 self-center mx-1" />
                     {/* Setup filters — only meaningful for New 30d */}
+                    <span id="tour-setup-filters" className="contents">
                     <button
                       onClick={() => { setFcEmployeeFilter('new'); setFcSetupFilter(prev => prev === 'missing' ? 'all' : 'missing') }}
                       className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcSetupFilter === 'missing' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
@@ -1129,6 +1134,7 @@ export default function DashboardPage() {
                       className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcSetupFilter === 'completed' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
                       ✓ Setup Complete {completedCount > 0 && <span className="ml-1 font-semibold">({completedCount})</span>}
                     </button>
+                    </span>
                   </div>
                   <div className="w-px h-4 bg-gray-200" />
                   <div className="flex gap-1">
@@ -1276,7 +1282,7 @@ export default function DashboardPage() {
                                         </div>
 
                                         {/* Profile Checklist — shown for ALL employees, required for New 30d setup */}
-                                        <div className="mt-3 pt-3 border-t border-gray-100">
+                                        <div id="tour-profile-checklist" className="mt-3 pt-3 border-t border-gray-100">
                                           <div className="flex items-center justify-between mb-2">
                                             <div className="text-xs font-semibold text-gray-700">Profile Checklist</div>
                                             {isNew && (
