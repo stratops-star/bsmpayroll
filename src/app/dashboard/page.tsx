@@ -148,6 +148,7 @@ export default function DashboardPage() {
       const { data } = await supabase
         .from('asana_task_cache')
         .select('task_id, assignee, assignee_email, completed, name, notes, due_on, task_type, updated_at')
+        .limit(10000)
 
       const map: Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }> = {}
       const issues: typeof asanaIssues = []
@@ -183,23 +184,46 @@ export default function DashboardPage() {
     return periods
   }
 
-  // Check if an Asana task is completed (manually closed in Asana)
-  async function checkAsanaClosed(asanaId: string, token: string): Promise<boolean> {
+  // Check Asana closed from local cache — NO API calls
+  function isAsanaClosed(asanaId: string): boolean {
+    if (!asanaId) return false
+    return asanaCache[asanaId]?.completed === true
+  }
+
+  async function saveApprovalStatus(entryId: string, status: string, closedReason?: string) {
     try {
-      const res = await fetch(`/api/asana-status?taskId=${asanaId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      return data.completed === true
+      const supabase = createClient()
+      await supabase.from('entry_approvals').upsert({
+        entry_id: entryId,
+        approval_status: status,
+        closed_reason: closedReason || null,
+        approved_by: userEmail,
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'entry_id' })
+    } catch {}
+  }
+
+  async function loadApprovals(entryIds: string[]): Promise<Record<string, { status: string; closedReason?: string }>> {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('entry_approvals')
+        .select('entry_id, approval_status, closed_reason')
+        .in('entry_id', entryIds)
+      const map: Record<string, { status: string; closedReason?: string }> = {}
+      for (const row of data || []) {
+        map[row.entry_id] = { status: row.approval_status, closedReason: row.closed_reason }
+      }
+      return map
     } catch {
-      return false
+      return {}
     }
   }
 
   async function saveAsanaClosedEntry(entry: PorterEntry) {
     try {
       const supabase = createClient()
-      // Check if already saved to avoid duplicates
       const { data: existing } = await supabase
         .from('closed_entries')
         .select('id')
@@ -221,6 +245,8 @@ export default function DashboardPage() {
     setStatusMsg(t(lang, 'period_loading'))
     try {
       const token = await getToken()
+
+      // Load current period + rates in parallel
       const [sheetsRes, ratesRes] = await Promise.all([
         fetch(`/api/sheets?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/rates?start=${periodStart}&end=${periodEnd}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -229,18 +255,17 @@ export default function DashboardPage() {
       const ratesData = await ratesRes.json()
       if (data.error) throw new Error(data.error)
       const savedRates = ratesData.rates || {}
-      const mapped: Record<Tier, PorterEntry[]> = { T1: [], T2: [], T3: [] }
+
+      // Collect all entry IDs to load approvals
+      const allIds: string[] = []
       for (const tier of TIERS) {
-        mapped[tier] = (data[tier] || []).map((e: PorterEntry) => ({
-          ...e,
-          rate: savedRates[e.id] || e.rate || '',
-          approvalStatus: e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending',
-        }))
+        for (const e of (data[tier] || [])) allIds.push(e.id)
       }
 
-      // Load past 4 periods — carry forward unresolved entries
+      // Load past 4 periods entries
       const pastPeriods = getPastPeriods(4)
-      for (const period of pastPeriods) {
+      const pastDataMap: Record<string, { data: any; rates: any }> = {}
+      await Promise.all(pastPeriods.map(async period => {
         try {
           const [pastRes, pastRatesRes] = await Promise.all([
             fetch(`/api/sheets?start=${period.start}&end=${period.end}`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -248,64 +273,72 @@ export default function DashboardPage() {
           ])
           const pastData = await pastRes.json()
           const pastRates = (await pastRatesRes.json()).rates || {}
-          if (pastData.error) continue
-          for (const tier of TIERS) {
-            const pastEntries = await Promise.all(
-              (pastData[tier] || [])
-                .map(async (e: PorterEntry) => {
-                  const baseStatus = e.status?.toUpperCase() === 'CLOSED' ? 'closed' : e.isLastMinute ? 'waiting' : 'pending'
-                  // Check Asana cache for manually closed tasks
-                  let approvalStatus = baseStatus
-                  if (e.asanaId && !['closed'].includes(baseStatus)) {
-                    const isClosed = await checkAsanaClosed(e.asanaId, token)
-                    if (isClosed) {
-                      approvalStatus = 'closed'
-                      saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
-                    }
-                  }
-                  return {
-                    ...e,
-                    rate: pastRates[e.id] || e.rate || '',
-                    approvalStatus,
-                    closedReason: approvalStatus === 'closed' && baseStatus !== 'closed' ? 'Closed in Asana' : undefined,
-                    pastPeriod: period.label,
-                  }
-                })
-            )
-            // Only carry forward unresolved entries (but include Asana-closed so they show in Closed tab)
-            const unresolved = pastEntries.filter((e: any) =>
-              ['pending','waiting','open','closed'].includes(e.approvalStatus) &&
-              !(e.approvalStatus === 'closed' && !e.pastPeriod)
-            )
-            mapped[tier] = [...mapped[tier], ...unresolved]
+          if (!pastData.error) {
+            pastDataMap[period.label] = { data: pastData, rates: pastRates }
+            for (const tier of TIERS) {
+              for (const e of (pastData[tier] || [])) allIds.push(e.id)
+            }
           }
         } catch {}
+      }))
+
+      // Load all approvals in ONE query
+      const approvals = await loadApprovals(allIds)
+
+      const mapped: Record<Tier, PorterEntry[]> = { T1: [], T2: [], T3: [] }
+
+      // Map current period entries
+      for (const tier of TIERS) {
+        mapped[tier] = (data[tier] || []).map((e: PorterEntry) => {
+          const saved = approvals[e.id]
+          // Priority: saved approval > Asana closed > sheet status > default
+          let approvalStatus: string
+          if (saved?.status && saved.status !== 'pending') {
+            approvalStatus = saved.status
+          } else if (e.status?.toUpperCase() === 'CLOSED') {
+            approvalStatus = 'closed'
+          } else if (e.asanaId && isAsanaClosed(e.asanaId)) {
+            approvalStatus = 'closed'
+            saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
+            saveApprovalStatus(e.id, 'closed', 'Closed in Asana')
+          } else {
+            approvalStatus = e.isLastMinute ? 'waiting' : 'pending'
+          }
+          return {
+            ...e,
+            rate: savedRates[e.id] || e.rate || '',
+            approvalStatus,
+            closedReason: saved?.closedReason || (approvalStatus === 'closed' ? 'Closed in Asana' : undefined),
+          }
+        })
       }
 
-      // FIX: Check Asana for manually closed tasks — auto-move to closed tab
-      // Runs on ALL entries including past period entries
-      for (const tier of TIERS) {
-        const batchSize = 10
-        const pending = mapped[tier].filter(e => e.asanaId && !['closed','exported'].includes(e.approvalStatus))
-        for (let i = 0; i < pending.length; i += batchSize) {
-          const batch = pending.slice(i, i + batchSize)
-          await Promise.all(
-            batch.map(async (entry) => {
-              const isClosed = await checkAsanaClosed(entry.asanaId!, token)
-              if (isClosed) {
-                const idx = mapped[tier].findIndex(e => e.id === entry.id)
-                if (idx !== -1) {
-                  mapped[tier][idx] = {
-                    ...mapped[tier][idx],
-                    approvalStatus: 'closed',
-                    closedReason: 'Closed in Asana',
-                  }
-                  // Save to closed_entries so it appears in Past Tasks
-                  saveAsanaClosedEntry(mapped[tier][idx])
-                }
-              }
-            })
-          )
+      // Map past period entries
+      for (const [periodLabel, { data: pastData, rates: pastRates }] of Object.entries(pastDataMap)) {
+        for (const tier of TIERS) {
+          const pastEntries = (pastData[tier] || []).map((e: PorterEntry) => {
+            const saved = approvals[e.id]
+            let approvalStatus: string
+            if (saved?.status && saved.status !== 'pending') {
+              approvalStatus = saved.status
+            } else if (e.status?.toUpperCase() === 'CLOSED') {
+              approvalStatus = 'closed'
+            } else if (e.asanaId && isAsanaClosed(e.asanaId)) {
+              approvalStatus = 'closed'
+              saveAsanaClosedEntry({ ...e, approvalStatus: 'closed', closedReason: 'Closed in Asana' })
+              saveApprovalStatus(e.id, 'closed', 'Closed in Asana')
+            } else {
+              approvalStatus = e.isLastMinute ? 'waiting' : 'pending'
+            }
+            return {
+              ...e,
+              rate: pastRates[e.id] || e.rate || '',
+              approvalStatus,
+              closedReason: saved?.closedReason || (approvalStatus === 'closed' ? 'Closed in Asana' : undefined),
+              pastPeriod: periodLabel,
+            }
+          }).filter((e: any) => ['pending','waiting','open','closed'].includes(e.approvalStatus))
+          mapped[tier] = [...mapped[tier], ...pastEntries]
         }
       }
 
@@ -313,10 +346,25 @@ export default function DashboardPage() {
       const total = TIERS.reduce((s, ti) => s + mapped[ti].length, 0)
       const now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
       setLastRefreshed(now)
-      setStatusMsg(`${total} ${t(lang, 'period_loaded')}`)
+      setStatusMsg(`${total} ${t(lang, 'period_loaded')}${data.fromCache ? ' (cached)' : ''}`)
+
+      // Background sync to keep Supabase cache fresh
+      syncSheetsInBackground()
     } catch (e: any) { setStatusMsg(`Error: ${e.message}`) }
     setLoading(false)
   }
+
+  async function syncSheetsInBackground() {
+    try {
+      const token = await getToken()
+      await fetch('/api/sheets-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ periodStart, periodEnd }),
+      })
+    } catch {}
+  }
+
 
   function updateEntry(id: string, tier: Tier, patch: Partial<PorterEntry>) {
     setAllEntries(prev => ({ ...prev, [tier]: prev[tier].map(e => e.id === id ? { ...e, ...patch } : e) }))
@@ -334,6 +382,7 @@ export default function DashboardPage() {
 
   async function handleApprove(entry: PorterEntry) {
     updateEntry(entry.id, entry.tier, { approvalStatus: 'approved' })
+    saveApprovalStatus(entry.id, 'approved')
     const token = await getToken()
     if (entry.asanaId) {
       await fetch('/api/asana', {
@@ -345,12 +394,15 @@ export default function DashboardPage() {
   }
 
   function handleUnapprove(entry: PorterEntry) {
-    updateEntry(entry.id, entry.tier, { approvalStatus: entry.isLastMinute ? 'waiting' : 'pending' })
+    const status = entry.isLastMinute ? 'waiting' : 'pending'
+    updateEntry(entry.id, entry.tier, { approvalStatus: status })
+    saveApprovalStatus(entry.id, status)
   }
 
   async function handleCloseConfirm() {
     if (!closeTarget) return
     updateEntry(closeTarget.id, closeTarget.tier, { approvalStatus: 'closed', closedReason: closeReason })
+    saveApprovalStatus(closeTarget.id, 'closed', closeReason)
     setCloseTarget(null); setCloseReason('')
     const token = await getToken()
     await fetch('/api/close', {
@@ -363,7 +415,9 @@ export default function DashboardPage() {
   function handleReopen(entry: PorterEntry) {
     const d = new Date(entry.submissionDay)
     if (Math.ceil((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)) > 14) return
-    updateEntry(entry.id, entry.tier, { approvalStatus: 'pending', closedReason: undefined })
+    const status = 'pending'
+    updateEntry(entry.id, entry.tier, { approvalStatus: status, closedReason: undefined })
+    saveApprovalStatus(entry.id, status)
   }
 
   function isLocked(entry: PorterEntry): boolean {
@@ -401,6 +455,10 @@ export default function DashboardPage() {
       a.click()
       for (const tier of TIERS) {
         setAllEntries(prev => ({ ...prev, [tier]: prev[tier].map(e => e.approvalStatus === 'approved' ? { ...e, approvalStatus: 'exported' as const } : e) }))
+      }
+      // Persist exported status for all approved entries
+      for (const entry of allApproved) {
+        saveApprovalStatus(entry.id, 'exported')
       }
       setExportCount(c => c + 1)
       setStatusMsg('Exported — Asana tasks updated')
