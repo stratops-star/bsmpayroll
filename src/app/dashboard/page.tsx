@@ -853,7 +853,7 @@ export default function DashboardPage() {
                 </tbody>
               </table>
             </div>
-          )}
+          ))}
 
           {activeTab !== 'general_issues' && activeTab !== 'terminations' && (
           <div className="px-4 py-2 border-t border-gray-100 flex justify-between">
