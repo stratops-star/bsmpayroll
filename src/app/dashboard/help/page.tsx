@@ -34,7 +34,7 @@ const STEPS = [
   {
     id: 'billing',
     title: 'Billing Tab',
-    body: 'Entries whose Asana task is assigned to the billing team route here automatically. This includes all Billable Extra Hours entries AND any Cover/Extra Hrs entries assigned to: Rebecca, Anthony (billing@), Leah, Ella, Office, or Abe. Click Approve to confirm hours — the Asana task is assigned to billing but NOT completed (billing team handles invoicing separately).',
+    body: 'Extra Hours and Billable entries route here when assigned to the billing team in Asana.\n\nFlow:\n1. Entry submitted → assigned to payroll@ (Odelia) → appears in Pending\n2. Payroll approves → porter gets paid in Fingercheck → Asana task auto-assigned to Rebecca\n3. Entry moves to Billing tab (now assigned to billing)\n4. Rebecca invoices the client separately\n5. Rebecca marks Asana task ✓ Complete\n6. Entry auto-moves to Closed tab\n\nClick "Approve & Send to Billing" to pay the porter AND send the task to Rebecca simultaneously.',
   },
   {
     id: 'waiting',
