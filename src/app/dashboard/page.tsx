@@ -32,7 +32,7 @@ const FEDERAL_HOLIDAYS = [
 const TOUR_STEPS = [
   { target: 'tour-period', title: 'Pay Period', body: 'The current pay period loads automatically on login. Change dates and click Load to view a different period.' },
   { target: 'tour-export-btn', title: 'Export Approved', body: 'When you\'re ready, click here to export all approved entries to a Fingercheck CSV file.' },
-  { target: 'tour-banners', title: 'Smart Reminders', body: 'Dismissible banners appear 7 days before SVPTO end of month, 1st & 15th rule dates, and federal holidays.' },
+  { target: 'tour-banners', title: 'Smart Reminders', body: 'Dismissible banners appear 7 days before SVPTO end of month, 1st & 15th rule dates, federal holidays, and prevailing wage updates.' },
   { target: 'tour-mini-cards', title: 'Tier Dashboard', body: 'Click any card to switch between Tier 1, 2, and 3. Shows approved, pending, urgent counts and approved hours.' },
   { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number.' },
   { target: 'tour-tabs', title: 'Entry Tabs', body: 'Approved · Pending · Waiting ⚡ (last-minute) · Billing · Errors (blocked) · Closed · Exported. Always check Errors first!' },
@@ -78,14 +78,20 @@ export default function DashboardPage() {
       setUserEmail(data.user.email || '')
       await loadEntries()
       await loadExportCount()
-      // Show tour on first visit
-      if (!localStorage.getItem('bsm_tour_done')) {
+      // FIX: Only show tour on first visit — check localStorage correctly
+      const tourDone = localStorage.getItem('bsm_tour_done')
+      if (!tourDone) {
         setTimeout(() => setTourStep(0), 1000)
       }
     })
   }, [])
 
   function switchLang(l: Lang) { setLang(l); localStorage.setItem('bsm_lang', l) }
+
+  function relaunchTour() {
+    localStorage.removeItem('bsm_tour_done')
+    setTourStep(0)
+  }
 
   async function getToken() {
     const { data } = await supabase.auth.getSession()
@@ -116,6 +122,19 @@ export default function DashboardPage() {
       endDate.setDate(endDate.getDate() - 1)
     }
     return periods
+  }
+
+  // Check if an Asana task is completed (manually closed in Asana)
+  async function checkAsanaClosed(asanaId: string, token: string): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/asana-status?taskId=${asanaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      return data.completed === true
+    } catch {
+      return false
+    }
   }
 
   async function loadEntries() {
@@ -163,6 +182,36 @@ export default function DashboardPage() {
             mapped[tier] = [...mapped[tier], ...pastEntries]
           }
         } catch {}
+      }
+
+      // FIX: Check Asana for manually closed tasks — auto-move to closed tab
+      // Batch check all entries that have asanaId and are not already closed/exported
+      const allPendingEntries = TIERS.flatMap(tier =>
+        mapped[tier].filter(e => e.asanaId && !['closed','exported'].includes(e.approvalStatus))
+      )
+
+      if (allPendingEntries.length > 0) {
+        // Check in batches to avoid too many concurrent requests
+        const batchSize = 10
+        for (let i = 0; i < allPendingEntries.length; i += batchSize) {
+          const batch = allPendingEntries.slice(i, i + batchSize)
+          await Promise.all(
+            batch.map(async (entry) => {
+              const isClosed = await checkAsanaClosed(entry.asanaId!, token)
+              if (isClosed) {
+                const tier = entry.tier as Tier
+                const idx = mapped[tier].findIndex(e => e.id === entry.id)
+                if (idx !== -1) {
+                  mapped[tier][idx] = {
+                    ...mapped[tier][idx],
+                    approvalStatus: 'closed',
+                    closedReason: 'Closed in Asana',
+                  }
+                }
+              }
+            })
+          )
+        }
       }
 
       setAllEntries(mapped)
@@ -303,7 +352,9 @@ export default function DashboardPage() {
     const now = new Date()
     const year = now.getFullYear()
     const month = now.getMonth() + 1
-    const banners: { id: string; type: 'holiday' | 'svpto' | 'first15'; message: string; sub: string }[] = []
+    const banners: { id: string; type: 'holiday' | 'svpto' | 'first15' | 'prevwage'; message: string; sub: string }[] = []
+
+    // Federal holiday banners
     for (const h of FEDERAL_HOLIDAYS) {
       const hDate = new Date(year, h.month - 1, h.day)
       const diff = Math.ceil((hDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -312,18 +363,30 @@ export default function DashboardPage() {
         banners.push({ id: `holiday-${year}-${h.month}-${h.day}`, type: 'holiday', message: `⚠️ ${t(lang,'banner_holiday')} — ${hName}`, sub: hDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) })
       }
     }
+
+    // SVPTO — 7 days before end of month
     const endOfMonth = new Date(year, month, 0)
     if (Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `svpto-${year}-${month}`, type: 'svpto', message: `⚠️ ${t(lang,'banner_svpto')}`, sub: `${t(lang,'banner_end_of_month')}: ${endOfMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
+
+    // Prevailing Wages — 7 days before end of month
+    if (Math.ceil((endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
+      banners.push({ id: `prevwage-${year}-${month}`, type: 'prevwage', message: `💰 Remember to update all employees with Prevailing Wages.`, sub: `Due by end of month: ${endOfMonth.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
+    }
+
+    // 1st of next month
     const first = new Date(year, month, 1)
     if (Math.ceil((first.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `first-${year}-${month}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_1st')} ${first.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
+
+    // 15th
     const fifteen = now.getDate() < 15 ? new Date(year, month - 1, 15) : new Date(year, month, 15)
     if (Math.ceil((fifteen.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) <= 7) {
       banners.push({ id: `fifteen-${fifteen.getFullYear()}-${fifteen.getMonth()}`, type: 'first15', message: `⚠️ ${t(lang,'banner_first15')}`, sub: `${t(lang,'banner_the_15th')} ${fifteen.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` })
     }
+
     return banners.filter(b => !dismissedBanners.includes(b.id))
   }
 
@@ -369,6 +432,7 @@ export default function DashboardPage() {
     const propShort = (entry.propertyAddress || entry.property || '').split(',')[0]
     const etLabel = entry.entryType === 'billable' ? t(lang,'type_billable') : entry.entryType === 'extra_hours' ? t(lang,'type_extra') : t(lang,'type_cover')
     const etBadge = entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700' : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+    const wasClosedInAsana = isClosed && entry.closedReason === 'Closed in Asana'
 
     return (
       <>
@@ -406,7 +470,10 @@ export default function DashboardPage() {
             ) : isExported ? (
               <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">{t(lang,'status_exported')}</span>
             ) : isClosed ? (
-              <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
+              <div className="flex flex-col gap-0.5">
+                {wasClosedInAsana && <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Asana ✓</span>}
+                <button onClick={() => handleReopen(entry)} className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50">{t(lang,'action_reopen')}</button>
+              </div>
             ) : entry.entryType === 'billable' ? (
               <button onClick={() => handleApprove(entry)} disabled={!approved}
                 className={`text-xs px-2 py-1 rounded border transition-colors ${!approved ? 'border-red-200 text-red-400 bg-red-50 cursor-not-allowed' : 'border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
@@ -454,6 +521,7 @@ export default function DashboardPage() {
                 <div><div className="text-gray-400 mb-1">Submitted</div><div className="text-gray-800 font-medium">{entry.submissionDay || '—'}</div></div>
                 {entry.jobCode && <div><div className="text-gray-400 mb-1">Job code</div><div className="text-gray-800 font-mono font-medium">{entry.jobCode}</div></div>}
                 {(entry as any).pastPeriod && <div><div className="text-gray-400 mb-1">Original period</div><div className="text-amber-700 font-medium">{(entry as any).pastPeriod}</div></div>}
+                {entry.closedReason && <div><div className="text-gray-400 mb-1">Close reason</div><div className="text-gray-800 font-medium">{entry.closedReason}</div></div>}
                 {entry.extraDetails && <div className="col-span-2"><div className="text-gray-400 mb-1">Extra details</div><div className="text-gray-800">{entry.extraDetails}</div></div>}
                 {entry.screenshotUrl && <div><div className="text-gray-400 mb-1">Screenshot</div><a href={entry.screenshotUrl} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ View</a></div>}
                 {entry.asanaLink && <div><div className="text-gray-400 mb-1">Asana task</div><a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Open in Asana</a></div>}
@@ -467,7 +535,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]" dir={dir}>
-      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={loadEntries} loading={loading} exportCount={exportCount} />
+      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={loadEntries} loading={loading} exportCount={exportCount} onRelaunchTour={relaunchTour} />
 
       <main className="px-5 py-4 max-w-7xl mx-auto">
         {/* Period card */}
@@ -501,12 +569,25 @@ export default function DashboardPage() {
         {/* Smart banners */}
         <div id="tour-banners">
           {getActiveBanners().map(banner => (
-            <div key={banner.id} className={`border rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3 ${banner.type === 'holiday' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div key={banner.id} className={`border rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3
+              ${banner.type === 'holiday' ? 'bg-blue-50 border-blue-200' :
+                banner.type === 'prevwage' ? 'bg-green-50 border-green-200' :
+                'bg-amber-50 border-amber-200'}`}>
               <div>
-                <p className={`text-sm font-semibold ${banner.type === 'holiday' ? 'text-blue-800' : 'text-amber-800'}`}>{banner.message}</p>
-                <p className={`text-xs mt-0.5 ${banner.type === 'holiday' ? 'text-blue-600' : 'text-amber-600'}`}>{banner.sub}</p>
+                <p className={`text-sm font-semibold
+                  ${banner.type === 'holiday' ? 'text-blue-800' :
+                    banner.type === 'prevwage' ? 'text-green-800' :
+                    'text-amber-800'}`}>{banner.message}</p>
+                <p className={`text-xs mt-0.5
+                  ${banner.type === 'holiday' ? 'text-blue-600' :
+                    banner.type === 'prevwage' ? 'text-green-600' :
+                    'text-amber-600'}`}>{banner.sub}</p>
               </div>
-              <button onClick={() => setDismissedBanners(prev => [...prev, banner.id])} className={`text-lg leading-none flex-shrink-0 ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' : 'text-amber-400 hover:text-amber-600'}`}>✕</button>
+              <button onClick={() => setDismissedBanners(prev => [...prev, banner.id])}
+                className={`text-lg leading-none flex-shrink-0
+                  ${banner.type === 'holiday' ? 'text-blue-400 hover:text-blue-600' :
+                    banner.type === 'prevwage' ? 'text-green-400 hover:text-green-600' :
+                    'text-amber-400 hover:text-amber-600'}`}>✕</button>
             </div>
           ))}
         </div>
@@ -580,6 +661,12 @@ export default function DashboardPage() {
           {activeTab === 'billing' && <div className="px-4 py-2.5 bg-purple-50 border-b border-purple-100"><p className="text-xs text-purple-700">Billable entries — approve to confirm hours. Asana task assigned to billing team.</p></div>}
           {activeTab === 'errors' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><span className="text-red-500">⚠️</span><p className="text-xs text-red-700"><strong>{visibleEntries.length} entries cannot be approved</strong> — fix missing rate, job code, or Asana link first</p></div>}
           {activeTab === 'waiting' && visibleEntries.length > 0 && <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-start gap-2"><span className="text-red-500 mt-0.5">⚡</span><p className="text-xs text-red-700">Last-minute — review before payday <strong>{paydayStr}</strong></p></div>}
+          {activeTab === 'closed' && visibleEntries.filter(e => e.closedReason === 'Closed in Asana').length > 0 && (
+            <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-100 flex items-center gap-2">
+              <span className="text-orange-500">ℹ️</span>
+              <p className="text-xs text-orange-700"><strong>{visibleEntries.filter(e => e.closedReason === 'Closed in Asana').length} entries</strong> were closed directly in Asana</p>
+            </div>
+          )}
 
           {visibleEntries.length === 0 ? (
             <div className="py-14 text-center text-gray-400 text-sm">{t(lang,'no_entries')}</div>
@@ -632,9 +719,7 @@ export default function DashboardPage() {
       {/* Interactive overlay tutorial */}
       {tourStep !== null && (
         <div className="fixed inset-0 z-[100]" onClick={() => {}}>
-          {/* Dark overlay */}
           <div className="absolute inset-0 bg-black/60" />
-          {/* Tour card */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
