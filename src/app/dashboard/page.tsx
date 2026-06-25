@@ -507,7 +507,12 @@ export default function DashboardPage() {
   function tabEntries(tier: Tier, tab: InnerTab): PorterEntry[] {
     let entries = allEntries[tier]
     if (tab === 'approved') entries = entries.filter(x => x.approvalStatus === 'approved')
-    else if (tab === 'pending') entries = entries.filter(x => ['open','pending'].includes(x.approvalStatus) && !x.isLastMinute && x.entryType !== 'billable')
+    else if (tab === 'pending') entries = entries.filter(x => {
+      if (!['open','pending'].includes(x.approvalStatus) || x.isLastMinute || x.entryType === 'billable') return false
+      // Exclude billing-assigned entries
+      if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
+      return true
+    })
     else if (tab === 'waiting') entries = entries.filter(x => {
       // Exclude billing-assigned entries from waiting
       if (x.asanaId && asanaCache[x.asanaId] && isBillingAssignee(asanaCache[x.asanaId].assignee_email)) return false
