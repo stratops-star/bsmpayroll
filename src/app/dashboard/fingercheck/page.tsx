@@ -173,9 +173,11 @@ export default function FingercheckeEmployeesPage() {
 
           {syncResult && (
             <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
-              <p className="text-xs text-emerald-700 font-medium">
+              <p className="text-xs text-emerald-700 font-medium flex flex-wrap gap-2">
                 ✓ Synced {syncResult.synced} employees
-                {syncResult.new_employees > 0 && <span className="ml-2 bg-emerald-100 px-2 py-0.5 rounded">🆕 {syncResult.new_employees} new in last 30 days</span>}
+                {syncResult.rates_synced > 0 && <span className="bg-emerald-100 px-2 py-0.5 rounded">💰 {syncResult.rates_synced} rates</span>}
+                {syncResult.jobs_synced > 0 && <span className="bg-emerald-100 px-2 py-0.5 rounded">🔧 {syncResult.jobs_synced} jobs</span>}
+                {syncResult.new_employees > 0 && <span className="bg-emerald-100 px-2 py-0.5 rounded">🆕 {syncResult.new_employees} new in last 30 days</span>}
               </p>
               {syncResult.new_employee_list?.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
