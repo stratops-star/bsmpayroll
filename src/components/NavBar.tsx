@@ -13,9 +13,10 @@ interface NavBarProps {
   onRefresh?: () => void
   loading?: boolean
   exportCount?: number
+  onRelaunchTour?: () => void
 }
 
-export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount }: NavBarProps) {
+export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour }: NavBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -32,8 +33,8 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
   const links = [
     { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks', badge: 0 },
     { label: t(lang, 'nav_exported_files'), href: '/dashboard/history',    badge: exportCount && exportCount > 0 ? exportCount : 0 },
-    { label: t(lang, 'nav_tutorial'),       href: '/dashboard/help',       badge: 0 },
     { label: t(lang, 'nav_payroll_rules'),  href: '/dashboard/rules',      badge: 0 },
+    { label: 'Asana Issues',                href: '/dashboard/asana-issues', badge: 0 },
   ]
 
   return (
@@ -90,6 +91,19 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
           </button>
         ))}
 
+        {/* Tutorial + Relaunch Tour */}
+        <button onClick={() => router.push('/dashboard/help')}
+          className={`text-xs transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
+          {t(lang, 'nav_tutorial')}
+        </button>
+        {onRelaunchTour && isDashboard && (
+          <button onClick={onRelaunchTour}
+            className="text-xs text-white/40 hover:text-[#D4A843] transition-colors border border-white/10 px-2 py-0.5 rounded-md"
+            title="Relaunch tutorial tour">
+            ▶ Tour
+          </button>
+        )}
+
         <div className="w-px h-4 bg-white/15" />
         <span className="text-white/35 text-xs truncate max-w-[120px]">{userEmail}</span>
         <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">{t(lang, 'nav_signout')}</button>
@@ -140,6 +154,16 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
                 )}
               </button>
             ))}
+            <button onClick={() => { router.push('/dashboard/help'); setMenuOpen(false) }}
+              className={`w-full text-left text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/70 hover:text-white'}`}>
+              {t(lang, 'nav_tutorial')}
+            </button>
+            {onRelaunchTour && isDashboard && (
+              <button onClick={() => { onRelaunchTour(); setMenuOpen(false) }}
+                className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
+                ▶ Relaunch Tour
+              </button>
+            )}
             <div className="border-t border-white/10 pt-2 mt-2">
               <div className="text-white/35 text-xs px-3 py-1 truncate">{userEmail}</div>
               <button onClick={() => { signOut(); setMenuOpen(false) }}
