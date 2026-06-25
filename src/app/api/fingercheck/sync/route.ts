@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-const FC_API_URL = process.env.FINGERCHECK_API_URL || 'https://developer.fingercheck.com/api'
+const FC_API_URL = (process.env.FINGERCHECK_API_URL || 'https://developer.fingercheck.com/api').replace(/\/$/, '')
 const FC_API_KEY = process.env.FINGERCHECK_API_KEY || ''
 const FC_SECRET_KEY = process.env.FINGERCHECK_SECRET_KEY || ''
 const FC_COMPANY_ID = process.env.FINGERCHECK_COMPANY_ID || 'BE4627'
