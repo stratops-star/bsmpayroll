@@ -44,14 +44,18 @@ const FEDERAL_HOLIDAYS = [
 
 // Overlay tutorial steps
 const TOUR_STEPS = [
-  { target: 'tour-period', title: 'Pay Period', body: 'The current pay period loads automatically on login. Change dates and click Load to view a different period.' },
-  { target: 'tour-export-btn', title: 'Export Approved', body: 'When you\'re ready, click here to export all approved entries to a Fingercheck CSV file.' },
-  { target: 'tour-banners', title: 'Smart Reminders', body: 'Dismissible banners appear 7 days before SVPTO end of month, 1st & 15th rule dates, federal holidays, and prevailing wage updates.' },
-  { target: 'tour-mini-cards', title: 'Tier Dashboard', body: 'Click any card to switch between Tier 1, 2, and 3. Shows approved, pending, urgent counts and approved hours.' },
-  { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number.' },
-  { target: 'tour-tabs', title: 'Entry Tabs', body: 'Approved · Pending · Waiting ⚡ (last-minute) · Billing · Errors (blocked) · Closed · Exported. Always check Errors first!' },
-  { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. Job code and Asana link must also be present.' },
-  { target: 'tour-actions', title: 'Actions', body: 'Cover entries: Approve + Close. Extra Hrs + Billable: Approve only — no close. Asana task is updated automatically on approval.' },
+  { target: 'tour-period', title: 'Pay Period', body: 'The current pay period loads automatically. Change dates and click Load to view a different period. The app syncs fresh data from Google Sheets and Asana on every load.' },
+  { target: 'tour-banners', title: 'Smart Reminders', body: 'Banners appear 7 days before key dates — SVPTO end of month, Prevailing Wage updates, 1st & 15th rule, and federal holidays. Click ✕ to dismiss.' },
+  { target: 'tour-mini-cards', title: 'Tier Dashboard', body: 'Click any card to switch between Tier 1, 2, and 3. Pending = no assignee. Waiting ⚡ = assigned to manager/staff. Appr. Hrs = approved hours ready to export.' },
+  { target: 'tour-filter-bar', title: 'Filter & Search', body: 'Filter by entry type (Cover / Extra Hrs / Billable) or search by employee name or number. Results update instantly.' },
+  { target: 'tour-tabs', title: 'Tab Priority System', body: 'Tabs follow a routing priority: Errors (blocked) → Billing (assigned to billing team) → Waiting (assigned to manager/staff) → Pending (no assignee). An entry only appears in ONE tab.' },
+  { target: 'tour-tabs', title: 'Errors Tab', body: 'Entries missing rate, job code, or Asana link. These CANNOT be approved until fixed. Always check Errors first before exporting.' },
+  { target: 'tour-tabs', title: 'Billing Tab', body: 'Entries whose Asana task is assigned to the billing team (Rebecca, Anthony, Leah, Ella, Office, Abe). Approve to confirm hours — Asana task stays open for billing.' },
+  { target: 'tour-tabs', title: 'Waiting Tab ⚡', body: 'Entries assigned to a manager or staff member in Asana (not billing). These need review before approval. Rate must be set before approving.' },
+  { target: 'tour-tabs', title: 'General Issues & Terminations', body: 'Pulled live from Asana — shows open General Issues and Termination requests across all tiers. These are informational only and are NOT exported to Fingercheck.' },
+  { target: 'tour-table', title: 'Entry Table', body: 'Click any row to expand details. Rate is required before approving. The accordion shows building max rate, Asana assignee, extra details, and screenshot.' },
+  { target: 'tour-actions', title: 'Actions', body: 'Cover: Approve + Close. Extra Hrs + Billable: Approve only. On approval, Asana is updated automatically — Cover tasks are completed, Extra/Billable tasks are assigned to billing.' },
+  { target: 'tour-export-btn', title: 'Export to Fingercheck', body: 'When all entries are approved, click Export to download a Fingercheck CSV. Only Cover, Extra Hrs, and Billable entries are exported — never General Issues or Terminations.' },
 ]
 
 export default function DashboardPage() {
@@ -179,7 +183,6 @@ export default function DashboardPage() {
 
       setAsanaCache(map)
       setAsanaIssues(issues.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
-      console.log('Cache loaded:', Object.keys(map).length, 'tasks,', issues.length, 'issues')
       return map
     } catch (err) {
       console.error('Cache error:', err)
@@ -1048,46 +1051,102 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Interactive overlay tutorial */}
-      {tourStep !== null && (
-        <div className="fixed inset-0 z-[100]" onClick={() => {}}>
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-[#D4A843] flex items-center justify-center text-[#0D1B35] text-xs font-bold">{tourStep + 1}</div>
-                <span className="text-xs text-gray-400">{tourStep + 1} of {TOUR_STEPS.length}</span>
+      {/* Interactive overlay tutorial with spotlight */}
+      {tourStep !== null && (() => {
+        const step = TOUR_STEPS[tourStep]
+        const targetEl = document.getElementById(step.target)
+        const rect = targetEl?.getBoundingClientRect()
+        const hasTarget = rect && rect.width > 0
+
+        // Position card below or above target
+        const cardTop = hasTarget
+          ? Math.min(rect.bottom + 12, window.innerHeight - 220)
+          : window.innerHeight / 2 - 100
+        const cardLeft = hasTarget
+          ? Math.max(8, Math.min(rect.left, window.innerWidth - 408))
+          : window.innerWidth / 2 - 200
+
+        return (
+          <div className="fixed inset-0 z-[100]">
+            {/* Dark overlay with cutout for target */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              <defs>
+                <mask id="spotlight-mask">
+                  <rect width="100%" height="100%" fill="white" />
+                  {hasTarget && (
+                    <rect
+                      x={rect.left - 6}
+                      y={rect.top - 6}
+                      width={rect.width + 12}
+                      height={rect.height + 12}
+                      rx="8"
+                      fill="black"
+                    />
+                  )}
+                </mask>
+              </defs>
+              <rect
+                width="100%"
+                height="100%"
+                fill="rgba(0,0,0,0.65)"
+                mask="url(#spotlight-mask)"
+              />
+            </svg>
+
+            {/* Highlight border around target */}
+            {hasTarget && (
+              <div
+                className="absolute border-2 border-[#D4A843] rounded-lg pointer-events-none animate-pulse"
+                style={{
+                  top: rect.top - 6,
+                  left: rect.left - 6,
+                  width: rect.width + 12,
+                  height: rect.height + 12,
+                }}
+              />
+            )}
+
+            {/* Tour card */}
+            <div
+              className="absolute bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 z-10"
+              style={{ top: cardTop, left: cardLeft }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-[#D4A843] flex items-center justify-center text-[#0D1B35] text-xs font-bold">{tourStep + 1}</div>
+                  <span className="text-xs text-gray-400">{tourStep + 1} of {TOUR_STEPS.length}</span>
+                </div>
+                <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }} className="text-gray-400 hover:text-gray-600 text-sm">✕ Skip</button>
               </div>
-              <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }} className="text-gray-400 hover:text-gray-600 text-sm">✕ Skip</button>
-            </div>
-            <h3 className="text-base font-semibold text-gray-900 mb-1">{TOUR_STEPS[tourStep].title}</h3>
-            <p className="text-sm text-gray-600 leading-relaxed mb-4">{TOUR_STEPS[tourStep].body}</p>
-            <div className="flex items-center justify-between">
-              <button onClick={() => setTourStep(s => s !== null && s > 0 ? s - 1 : s)}
-                disabled={tourStep === 0}
-                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
-                ← Back
-              </button>
-              <div className="flex gap-1">
-                {TOUR_STEPS.map((_, i) => (
-                  <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === tourStep ? 'bg-[#D4A843]' : 'bg-gray-200'}`} />
-                ))}
+              <h3 className="text-base font-semibold text-gray-900 mb-1">{step.title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-4">{step.body}</p>
+              <div className="flex items-center justify-between">
+                <button onClick={() => setTourStep(s => s !== null && s > 0 ? s - 1 : s)}
+                  disabled={tourStep === 0}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+                  ← Back
+                </button>
+                <div className="flex gap-1">
+                  {TOUR_STEPS.map((_, i) => (
+                    <div key={i} onClick={() => setTourStep(i)} className={`w-1.5 h-1.5 rounded-full transition-colors cursor-pointer ${i === tourStep ? 'bg-[#D4A843]' : 'bg-gray-200 hover:bg-gray-300'}`} />
+                  ))}
+                </div>
+                {tourStep < TOUR_STEPS.length - 1 ? (
+                  <button onClick={() => setTourStep(s => s !== null ? s + 1 : s)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[#0D1B35] text-white hover:bg-[#152444]">
+                    Next →
+                  </button>
+                ) : (
+                  <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[#D4A843] text-[#0D1B35] font-semibold hover:bg-[#C49A38]">
+                    Done ✓
+                  </button>
+                )}
               </div>
-              {tourStep < TOUR_STEPS.length - 1 ? (
-                <button onClick={() => setTourStep(s => s !== null ? s + 1 : s)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-[#0D1B35] text-white hover:bg-[#152444]">
-                  Next →
-                </button>
-              ) : (
-                <button onClick={() => { setTourStep(null); localStorage.setItem('bsm_tour_done', '1') }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-[#D4A843] text-[#0D1B35] font-semibold hover:bg-[#C49A38]">
-                  Done ✓
-                </button>
-              )}
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Close modal */}
       {closeTarget && (
