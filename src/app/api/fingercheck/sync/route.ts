@@ -92,8 +92,17 @@ export async function POST(request: NextRequest) {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
+    // Only sync Tier employees — exclude admin/office/HR/payroll/sales
+    const EXCLUDED_DEPTS = ['hr & recruiting team', 'office admin', 'payroll team', 'sales team']
+    const tierEmployees = employees.filter((emp: any) => {
+      const dept = (emp.CostCenter1 || '').toLowerCase()
+      return !EXCLUDED_DEPTS.includes(dept)
+    })
+
+    console.log(`Total: ${employees.length}, Tier only: ${tierEmployees.length}`)
+
     // Map employees to our schema
-    const rows = employees.map((emp: any) => {
+    const rows = tierEmployees.map((emp: any) => {
       const employeeNumber = String(emp.EmployeeNumber || emp.EmployeeId || emp.Id || '')
       const fullName = emp.FirstLast || `${emp.FirstName || ''} ${emp.LastName || ''}`.trim()
       const jobCode = emp.Job || emp.JobCode || emp.JobTitle || ''
