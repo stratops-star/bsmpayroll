@@ -9,7 +9,7 @@ import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 import NavBar from '@/components/NavBar'
 
 type InnerTab = 'approved' | 'pending' | 'waiting' | 'billing' | 'errors' | 'closed' | 'exported' | 'general_issues' | 'terminations' | 'employees'
-type EmployeeFilter = 'all' | 'new' | 'terminated'
+type EmployeeFilter = 'all' | 'new' | 'terminated' | 'missing' | 'completed'
 type EntryTypeFilter = 'all' | 'cover' | 'extra_hours' | 'billable'
 interface SortState { col: string; dir: 'asc' | 'desc' }
 
@@ -96,6 +96,7 @@ export default function DashboardPage() {
   const [fcSortCol, setFcSortCol] = useState('name')
   const [fcSortDir, setFcSortDir] = useState<'asc' | 'desc'>('asc')
   const [fcExpandedEmp, setFcExpandedEmp] = useState<string | null>(null)
+  const [fcSetupFilter, setFcSetupFilter] = useState<'all' | 'missing' | 'completed'>('all')
   const [fcRates, setFcRates] = useState<Record<string, any[]>>({})
   const dir = TRANSLATIONS[lang].dir
 
@@ -137,6 +138,24 @@ export default function DashboardPage() {
     } catch {
       setFcRates(prev => ({ ...prev, [empNumber]: [] }))
     }
+  }
+
+  // Returns 'completed' if employee has job-specific rate codes AND all 3 policies set.
+  // Returns 'missing' if rates loaded but requirements not met.
+  // Returns null if rates not yet loaded (row not expanded).
+  function getSetupStatus(emp: any, rates: any[] | undefined): 'missing' | 'completed' | null {
+    if (!rates) return null // not yet loaded
+    const hasJobRate = rates.some((r: any) => {
+      const code = (r.RateCode || r.Description || r.Code || '').toLowerCase().trim()
+      return code !== 'base' && code !== ''
+    })
+    // Profile policies — field names verified against GetEmployeeByEmployeeNumber response
+    const maxHour = !!(emp.raw_data?.MaximumHourPolicy || emp.raw_data?.MaxHourPolicy)
+    const alert = !!(emp.raw_data?.AlertPolicy)
+    const jobFence = !!(emp.raw_data?.JobFencingPolicy || emp.raw_data?.GeoFencingPolicy)
+    const policiesOk = maxHour && alert && jobFence
+    if (hasJobRate && policiesOk) return 'completed'
+    return 'missing'
   }
 
   async function loadFcEmployees() {
@@ -1085,6 +1104,16 @@ export default function DashboardPage() {
                 e.raw_data?._department?.toLowerCase().includes(q)
               )
             }
+            // Setup status filter — only filters rows where rates have been loaded
+            if (fcSetupFilter !== 'all') {
+              filtered = filtered.filter(e => {
+                const rates = fcRates[e.employee_number]
+                const status = getSetupStatus(e, rates)
+                if (fcSetupFilter === 'missing') return status !== 'completed' // missing or not yet loaded
+                if (fcSetupFilter === 'completed') return status === 'completed'
+                return true
+              })
+            }
             // Sort
             filtered = [...filtered].sort((a, b) => {
               let av = '', bv = ''
@@ -1108,10 +1137,31 @@ export default function DashboardPage() {
               <div>
                 {/* FC toolbar */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-wrap">
-                  <div className="flex gap-1">
-                    {([['all', `All Active (${allActive})`], ['new', `🆕 New 30d (${newCount})`], ['terminated', `Terminated 90d (${termCount})`]] as [EmployeeFilter, string][]).map(([f, label]) => (
+                  <div className="flex gap-1 flex-wrap">
+                    {([
+                      ['all', `All Active (${allActive})`],
+                      ['new', `🆕 New 30d (${newCount})`],
+                      ['terminated', `Terminated 90d (${termCount})`],
+                    ] as [EmployeeFilter, string][]).map(([f, label]) => (
                       <button key={f} onClick={() => setFcEmployeeFilter(f)}
                         className={`text-xs px-3 py-1 rounded-full border transition-colors ${fcEmployeeFilter === f ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                    <div className="w-px h-4 bg-gray-200 self-center mx-1" />
+                    {([
+                      ['missing', '⚠️ Missing Setup'],
+                      ['completed', '✓ Completed'],
+                    ] as ['missing' | 'completed', string][]).map(([f, label]) => (
+                      <button key={f}
+                        onClick={() => setFcSetupFilter(prev => prev === f ? 'all' : f)}
+                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                          fcSetupFilter === f
+                            ? f === 'missing'
+                              ? 'bg-amber-500 text-white border-amber-500'
+                              : 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                        }`}>
                         {label}
                       </button>
                     ))}
@@ -1139,6 +1189,15 @@ export default function DashboardPage() {
                   <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
                 </div>
 
+                {fcSetupFilter !== 'all' && (
+                  <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+                    <span className="text-amber-500 text-xs">ℹ️</span>
+                    <p className="text-xs text-amber-700">
+                      Setup status is based on expanded rows only — expand a row to load its rates and update its status.
+                    </p>
+                  </div>
+                )}
+
                 {fcEmployees.length === 0 ? (
                   <div className="py-10 text-center text-gray-400 text-sm">No employee data — go to Fingercheck page and sync first</div>
                 ) : filtered.length === 0 ? (
@@ -1154,6 +1213,7 @@ export default function DashboardPage() {
                           <th onClick={() => toggleSort('dept')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Department{si('dept')}</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Supervisor</th>
                           <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Rate</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Setup</th>
                           <th onClick={() => toggleSort('hire')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Hire Date{si('hire')}</th>
                           {fcEmployeeFilter === 'terminated' && <th onClick={() => toggleSort('term')} className="text-left text-xs font-medium text-gray-500 px-3 py-2 cursor-pointer hover:text-gray-700">Term Date{si('term')}</th>}
                         </tr>
@@ -1163,6 +1223,7 @@ export default function DashboardPage() {
                           const isNew = e.raw_data?._hireDate && new Date(e.raw_data._hireDate) >= thirtyDaysAgo && e.status === 'Active'
                           const isExpanded = fcExpandedEmp === e.employee_number
                           const empRates = fcRates[e.employee_number]
+                          const setupStatus = getSetupStatus(e, empRates)
                           return (
                             <>
                               <tr key={e.employee_number}
@@ -1179,12 +1240,20 @@ export default function DashboardPage() {
                                 <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?._department || '—'}</td>
                                 <td className="px-3 py-2 text-xs text-gray-600">{e.raw_data?.SupervisorEmployeeNumber ? `#${e.raw_data.SupervisorEmployeeNumber}` : '—'}</td>
                                 <td className="px-3 py-2 text-xs">{e.rate ? <span className="font-medium text-gray-700">${e.rate}/hr</span> : <span className="text-gray-400">—</span>}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {setupStatus === null
+                                    ? <span className="text-gray-300">—</span>
+                                    : setupStatus === 'completed'
+                                    ? <span className="text-emerald-600 font-medium">✓ Completed</span>
+                                    : <span className="text-amber-600 font-medium">⚠️ Missing</span>
+                                  }
+                                </td>
                                 <td className="px-3 py-2 text-xs text-gray-500">{fmtD(e.raw_data?._hireDate)}</td>
                                 {fcEmployeeFilter === 'terminated' && <td className="px-3 py-2 text-xs text-red-500">{fmtD(e.raw_data?._termDate)}</td>}
                               </tr>
                               {isExpanded && (
                                 <tr key={`${e.employee_number}-expanded`} className="border-b border-gray-100 bg-blue-50/20">
-                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 7 : 6} className="px-6 py-4">
+                                  <td colSpan={fcEmployeeFilter === 'terminated' ? 9 : 8} className="px-6 py-4">
                                     <div className="grid grid-cols-2 gap-6">
                                       {/* Rates */}
                                       <div>
