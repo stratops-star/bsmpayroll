@@ -29,6 +29,23 @@ function g(row: Record<string, string>, ...keys: string[]): string {
   return ''
 }
 
+// Extract Asana task GID from URL — always accurate, avoids scientific notation issue
+// Supports both old format: /0/0/1234567890 and new format: /task/1234567890
+function extractAsanaId(url: string, fallbackId: string): string {
+  if (!url) return fallbackId || ''
+  // New format: /task/1234567890
+  const newMatch = url.match(/\/task\/(\d+)/)
+  if (newMatch) return newMatch[1]
+  // Old format: /0/PROJECT_ID/TASK_ID
+  const oldMatch = url.match(/\/(\d{16,})(?:[/?]|$)/)
+  if (oldMatch) return oldMatch[1]
+  // Last segment fallback
+  const segments = url.replace(/\/$/, '').split('/')
+  const last = segments[segments.length - 1]
+  if (/^\d{10,}$/.test(last)) return last
+  return fallbackId || ''
+}
+
 async function buildJobCodeMap(): Promise<Map<string, string>> {
   const rows = await fetchTab(GIDS.BUILDING)
   const map = new Map<string, string>()
@@ -93,9 +110,11 @@ export async function fetchAllTiers(
   for (const row of t3m) {
     const id = g(row, 'ID')
     if (!id) continue
+    const asanaLink = g(row, 'Asana Link', 'ASANA LINK', 'asana link')
+    const rawAsanaId = g(row, 'ASANA ID', 'Asana ID', 'asana id')
     t3ParentMap.set(id.trim(), {
-      asanaLink: g(row, 'Asana Link', 'ASANA LINK', 'asana link'),
-      asanaId: g(row, 'ASANA ID', 'Asana ID', 'asana id'),
+      asanaLink,
+      asanaId: extractAsanaId(asanaLink, rawAsanaId),
       manager: g(row, 'Manager', 'MANAGER'),
       status: g(row, 'Status', 'STATUS'),
       coverDay: g(row, 'Coverage Date', 'Coverage D', 'Date', 'Coverage Day'),
@@ -116,6 +135,8 @@ export async function fetchAllTiers(
     const propertyId = g(row, 'Property')
     const entryTypeRaw = g(row, 'Is this a cover or extra hours?')
     const entryType = resolveEntryType(entryTypeRaw)
+    const asanaLink = g(row, 'Asana Link')
+    const rawAsanaId = g(row, 'ASANA ID')
     return {
       id: g(row, 'ID') || `t1-${Math.random()}`,
       tier: 'T1' as Tier,
@@ -131,8 +152,8 @@ export async function fetchAllTiers(
       property: propertyId,
       propertyAddress: g(row, 'Property Address'),
       jobCode: jobCodeMap.get(propertyId) || '',
-      asanaLink: g(row, 'Asana Link'),
-      asanaId: g(row, 'ASANA ID'),
+      asanaLink,
+      asanaId: extractAsanaId(asanaLink, rawAsanaId),
       rate: '',
       status: g(row, 'Status'),
       approvalStatus: 'open',
@@ -159,6 +180,8 @@ export async function fetchAllTiers(
     const subDate = parseDate(subDay)
     const entryTypeRaw = g(row, 'Is this a cover or extra hours?')
     const entryType = resolveEntryType(entryTypeRaw)
+    const asanaLink = g(row, 'Asana Link')
+    const rawAsanaId = g(row, 'ASANA ID')
     return {
       id: g(row, 'ID') || `t2-${Math.random()}`,
       tier: 'T2' as Tier,
@@ -174,8 +197,8 @@ export async function fetchAllTiers(
       property: g(row, 'Property'),
       propertyAddress: g(row, 'Property Address'),
       jobCode: T2_JOB_CODE,
-      asanaLink: g(row, 'Asana Link'),
-      asanaId: g(row, 'ASANA ID'),
+      asanaLink,
+      asanaId: extractAsanaId(asanaLink, rawAsanaId),
       rate: '',
       status: g(row, 'Status'),
       extraHoursApproved: g(row, 'Are these extra hours approved by manager?') === 'TRUE',
@@ -195,35 +218,25 @@ export async function fetchAllTiers(
 
   // T3 — join child rows with parent data
   const T3: PorterEntry[] = t3c.map(row => {
-    // Get parent ID from child row column "ID"
     const parentId = g(row, 'ID')
     if (!parentId) return null
 
-    // Look up parent data
     const parent = t3ParentMap.get(parentId.trim())
 
     const hrs = parseFloat(g(row, 'How many Hours?', 'How many hours?', 'Hours')) || 0
     const porter = g(row, 'Concierge or Security ID', 'Concierge or Sec')
     if (!porter || !hrs) return null
 
-    // Get date from child row first, fall back to parent
     const coverDayRaw = g(row, 'Date') || (parent?.coverDay || '')
     const cd = parseDate(coverDayRaw)
 
-    // Get property ID from child row for job code lookup
     const propertyId = g(row, 'Address I', 'Address ID', 'Property')
     const jobCode = jobCodeMap.get(propertyId) || ''
-
-    // Get address from child row
     const propertyAddress = g(row, 'Full Address Info', 'Property Address')
-
-    // Status — if parent is closed, child is closed
     const status = parent?.status || g(row, 'Status', 'STATUS')
 
     const entryTypeRaw = g(row, 'Is this a coverage or extra hours?', 'Is this a cover or extra hours?', 'Reason for Coverage')
     const entryType = resolveEntryType(entryTypeRaw)
-
-    // Use parent's submission day as approximate
     const subDate = cd
 
     return {
@@ -241,7 +254,6 @@ export async function fetchAllTiers(
       property: propertyId,
       propertyAddress,
       jobCode,
-      // Pull Asana link and ID from PARENT row
       asanaLink: parent?.asanaLink || '',
       asanaId: parent?.asanaId || '',
       rate: g(row, 'RATE', 'Rate') || '',
