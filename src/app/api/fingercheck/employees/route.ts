@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
     if (newOnly) {
       employees = employees.filter(e => {
         const hireDate = e.raw_data?._hireDate
-        return hireDate && new Date(hireDate) >= thirtyDaysAgo
+        const isNotTerminated = e.status !== 'Terminated'
+        return hireDate && new Date(hireDate) >= thirtyDaysAgo && isNotTerminated
       })
     }
 
