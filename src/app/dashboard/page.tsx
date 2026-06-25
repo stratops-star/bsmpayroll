@@ -253,15 +253,24 @@ export default function DashboardPage() {
       const { data: existing } = await supabase
         .from('closed_entries')
         .select('id')
-        .eq('entry_id', entry.id)
+        .eq('source_id', entry.id)
         .single()
       if (existing) return
       await supabase.from('closed_entries').insert({
-        entry_id: entry.id,
-        reason: 'Closed in Asana',
+        source_id: entry.id,
+        tier: entry.tier,
+        employee_number: entry.employeeNumber,
+        porter_name: entry.porterName,
+        date_worked: entry.coverDay || null,
+        hours: entry.hours,
+        property_address: entry.propertyAddress,
+        manager: entry.manager,
+        asana_link: entry.asanaLink,
         closed_by: 'Asana',
         closed_at: new Date().toISOString(),
-        entry: entry,
+        reason: 'Closed in Asana',
+        period_start: periodStart,
+        period_end: periodEnd,
       })
     } catch {}
   }
