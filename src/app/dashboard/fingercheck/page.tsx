@@ -109,7 +109,7 @@ export default function FingercheckeEmployeesPage() {
 
   const newEmployees = employees.filter(e => {
     const hireDate = e.raw_data?._hireDate
-    return hireDate && new Date(hireDate) >= thirtyDaysAgo
+    return hireDate && new Date(hireDate) >= thirtyDaysAgo && e.status !== 'Terminated'
   })
 
   function fmtDate(d: string) {
