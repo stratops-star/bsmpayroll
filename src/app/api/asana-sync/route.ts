@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       name: task.name || '',
       notes: task.notes || '',
       assignee: task.assignee?.name || null,
+      assignee_email: task.assignee?.email || null,
       due_on: task.due_on || null,
       task_type: detectTaskType(task.name || ''),
       updated_at: new Date().toISOString(),
