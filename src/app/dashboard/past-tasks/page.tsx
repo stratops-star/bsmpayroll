@@ -27,12 +27,25 @@ interface ExportRow {
   exported_at: string
 }
 
+interface ClosedRow {
+  id: string
+  entry_id: string
+  reason: string
+  closed_by: string
+  closed_at: string
+  entry: any
+}
+
+type ActiveTab = 'exported' | 'closed'
+
 export default function PastTasksPage() {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
   const [allRows, setAllRows] = useState<ExportRow[]>([])
+  const [closedRows, setClosedRows] = useState<ClosedRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<ActiveTab>('exported')
   const [userEmail, setUserEmail] = useState('')
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window !== 'undefined') return (localStorage.getItem('bsm_lang') as Lang) || 'en'
@@ -44,11 +57,11 @@ export default function PastTasksPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { router.push('/login'); return }
       setUserEmail(data.user.email || '')
-      await loadAll()
+      await Promise.all([loadExported(), loadClosed()])
     })
   }, [])
 
-  async function loadAll() {
+  async function loadExported() {
     setLoading(true)
     try {
       const { data: sd } = await supabase.auth.getSession()
@@ -78,14 +91,40 @@ export default function PastTasksPage() {
     setLoading(false)
   }
 
-  const filtered = !search.trim() ? allRows : allRows.filter(r =>
+  async function loadClosed() {
+    try {
+      const { data } = await supabase
+        .from('closed_entries')
+        .select('*')
+        .order('closed_at', { ascending: false })
+      setClosedRows(data || [])
+    } catch (e) { console.error(e) }
+  }
+
+  const filteredExported = !search.trim() ? allRows : allRows.filter(r =>
     r.employee_number?.toString().includes(search.trim()) ||
     r.porter_name?.toLowerCase().includes(search.toLowerCase()) ||
     r.property_address?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const employeeCount = new Set(filtered.map(r => r.employee_number)).size
-  const totalHours = filtered.reduce((s, r) => s + Number(r.hours || 0), 0)
+  const filteredClosed = !search.trim() ? closedRows : closedRows.filter(r => {
+    const q = search.toLowerCase()
+    const entry = r.entry || {}
+    return (
+      entry.porterName?.toLowerCase().includes(q) ||
+      entry.employeeNumber?.toString().includes(q) ||
+      entry.propertyAddress?.toLowerCase().includes(q) ||
+      r.reason?.toLowerCase().includes(q)
+    )
+  })
+
+  const totalHours = filteredExported.reduce((s, r) => s + Number(r.hours || 0), 0)
+  const employeeCount = new Set(filteredExported.map(r => r.employee_number)).size
+
+  function fmtDate(d: string) {
+    if (!d) return '—'
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
@@ -94,11 +133,11 @@ export default function PastTasksPage() {
         <div className="mb-5 flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-base font-semibold text-gray-900">Past Tasks</h1>
-            <p className="text-sm text-gray-500 mt-1">Full payroll history across all exports — search by name, number, or property</p>
+            <p className="text-sm text-gray-500 mt-1">Payroll history — exported entries and closed/voided entries</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span className="bg-gray-100 px-2 py-1 rounded">{allRows.length} total entries</span>
-            <span className="bg-gray-100 px-2 py-1 rounded">{new Set(allRows.map(r => r.employee_number)).size} employees</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">{allRows.length} exported</span>
+            <span className="bg-gray-100 px-2 py-1 rounded">{closedRows.length} closed</span>
           </div>
         </div>
 
@@ -112,94 +151,200 @@ export default function PastTasksPage() {
             {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕ Clear</button>}
           </div>
           {search && (
-            <p className="text-xs text-gray-400 mt-2">{filtered.length} result{filtered.length !== 1 ? 's' : ''} · {employeeCount} employee{employeeCount !== 1 ? 's' : ''} · {totalHours.toFixed(1)} hrs</p>
+            <p className="text-xs text-gray-400 mt-2">
+              {activeTab === 'exported'
+                ? `${filteredExported.length} result${filteredExported.length !== 1 ? 's' : ''} · ${employeeCount} employee${employeeCount !== 1 ? 's' : ''} · ${totalHours.toFixed(1)} hrs`
+                : `${filteredClosed.length} closed result${filteredClosed.length !== 1 ? 's' : ''}`}
+            </p>
           )}
         </div>
 
-        {loading ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <div className="text-sm text-gray-400">Loading payroll history…</div>
+        {/* Tabs */}
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="flex border-b border-gray-200 px-1">
+            <button onClick={() => setActiveTab('exported')}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 flex items-center gap-1.5 transition-colors
+                ${activeTab === 'exported' ? 'border-[#D4A843] text-[#0D1B35]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              Exported
+              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">{allRows.length}</span>
+            </button>
+            <button onClick={() => setActiveTab('closed')}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 flex items-center gap-1.5 transition-colors
+                ${activeTab === 'closed' ? 'border-[#D4A843] text-[#0D1B35]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              Closed / Voided
+              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{closedRows.length}</span>
+            </button>
           </div>
-        ) : allRows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <div className="text-4xl mb-3">📋</div>
-            <div className="text-sm font-medium text-gray-700 mb-1">No export history yet</div>
-            <div className="text-xs text-gray-400">Entries appear here after you approve and export them to Fingercheck</div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <div className="text-sm text-gray-500">No results for "{search}"</div>
-            <button onClick={() => setSearch('')} className="text-xs text-[#D4A843] mt-2 hover:underline block mx-auto">Clear search</button>
-          </div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
-              <span className="text-sm font-medium text-gray-700">
-                {search ? `${filtered.length} entries matching "${search}"` : `All ${allRows.length} exported entries`}
-              </span>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">Total hrs: <strong>{totalHours.toFixed(1)}</strong></span>
-                <span className="text-xs text-gray-400">🔒 Read only</span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Employee</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Pay Period</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Date Worked</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Property</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-2.5">Hours</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Rate</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Type</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Job Code</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Asana</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Manager</th>
-                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Export</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r, i) => (
-                    <tr key={r.id || i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5">
-                        <div className="text-xs font-medium text-gray-900">{r.porter_name || '—'}</div>
-                        <div className="text-xs text-gray-400 font-mono">#{r.employee_number}</div>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{r.period_start} → {r.period_end}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600">{r.date_worked}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{r.property_address || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs text-right font-medium">{r.hours}</td>
-                      <td className="px-4 py-2.5 text-xs">
-                        {r.rate ? <span className="text-gray-700 font-medium">${r.rate}/hr</span> : <span className="text-red-400">—</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs">
-                        <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
-                          ${r.entry_type === 'billable' ? 'bg-purple-50 text-purple-700'
-                          : r.entry_type === 'extra_hours' ? 'bg-amber-50 text-amber-700'
-                          : 'bg-blue-50 text-blue-700'}`}>
-                          {r.entry_type === 'billable' ? 'Billable' : r.entry_type === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{r.job || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs">
-                        {r.asana_link
-                          ? <a href={r.asana_link} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
-                          : <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-gray-600">{r.manager || '—'}</td>
-                      <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[120px] truncate">{r.filename}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-              <span className="text-xs text-gray-400">🔒 All data is read only — exported payroll cannot be modified</span>
-              <span className="text-xs text-gray-400">{filtered.length} entries shown</span>
-            </div>
-          </div>
-        )}
+
+          {loading ? (
+            <div className="p-12 text-center text-sm text-gray-400">Loading…</div>
+          ) : activeTab === 'exported' ? (
+            <>
+              {allRows.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-3">📋</div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">No export history yet</div>
+                  <div className="text-xs text-gray-400">Entries appear here after you approve and export to Fingercheck</div>
+                </div>
+              ) : filteredExported.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-sm text-gray-500">No results for "{search}"</div>
+                  <button onClick={() => setSearch('')} className="text-xs text-[#D4A843] mt-2 hover:underline block mx-auto">Clear search</button>
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-sm font-medium text-gray-700">
+                      {search ? `${filteredExported.length} entries matching "${search}"` : `All ${allRows.length} exported entries`}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500">Total hrs: <strong>{totalHours.toFixed(1)}</strong></span>
+                      <span className="text-xs text-gray-400">🔒 Read only</span>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Employee</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Pay Period</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Date Worked</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Property</th>
+                          <th className="text-right text-xs font-medium text-gray-500 px-4 py-2.5">Hours</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Rate</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Type</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Job Code</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Asana</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Manager</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Export</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredExported.map((r, i) => (
+                          <tr key={r.id || i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
+                            <td className="px-4 py-2.5">
+                              <div className="text-xs font-medium text-gray-900">{r.porter_name || '—'}</div>
+                              <div className="text-xs text-gray-400 font-mono">#{r.employee_number}</div>
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{r.period_start} → {r.period_end}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-600">{r.date_worked}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{r.property_address || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs text-right font-medium">{r.hours}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {r.rate ? <span className="text-gray-700 font-medium">${r.rate}/hr</span> : <span className="text-red-400">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs">
+                              <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
+                                ${r.entry_type === 'billable' ? 'bg-purple-50 text-purple-700'
+                                : r.entry_type === 'extra_hours' ? 'bg-amber-50 text-amber-700'
+                                : 'bg-blue-50 text-blue-700'}`}>
+                                {r.entry_type === 'billable' ? 'Billable' : r.entry_type === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{r.job || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {r.asana_link
+                                ? <a href={r.asana_link} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
+                                : <span className="text-gray-400">—</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-gray-600">{r.manager || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[120px] truncate">{r.filename}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-xs text-gray-400">🔒 All data is read only — exported payroll cannot be modified</span>
+                    <span className="text-xs text-gray-400">{filteredExported.length} entries shown</span>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {closedRows.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-4xl mb-3">🔒</div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">No closed entries yet</div>
+                  <div className="text-xs text-gray-400">Entries appear here when closed in the dashboard or in Asana</div>
+                </div>
+              ) : filteredClosed.length === 0 ? (
+                <div className="p-12 text-center">
+                  <div className="text-sm text-gray-500">No results for "{search}"</div>
+                  <button onClick={() => setSearch('')} className="text-xs text-[#D4A843] mt-2 hover:underline block mx-auto">Clear search</button>
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">
+                      {search ? `${filteredClosed.length} closed entries matching "${search}"` : `All ${closedRows.length} closed entries`}
+                    </span>
+                    <span className="text-xs text-gray-400">🔒 Read only</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Employee</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Date Worked</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Property</th>
+                          <th className="text-right text-xs font-medium text-gray-500 px-4 py-2.5">Hours</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Type</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Close Reason</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Closed By</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Closed At</th>
+                          <th className="text-left text-xs font-medium text-gray-500 px-4 py-2.5">Asana</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredClosed.map((r, i) => {
+                          const entry = r.entry || {}
+                          const isAsanaClosed = r.reason === 'Closed in Asana'
+                          return (
+                            <tr key={r.id || i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
+                              <td className="px-4 py-2.5">
+                                <div className="text-xs font-medium text-gray-900">{entry.porterName || '—'}</div>
+                                <div className="text-xs text-gray-400 font-mono">#{entry.employeeNumber}</div>
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600">{entry.coverDay || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[140px] truncate">{entry.propertyAddress || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-right font-medium">{entry.hours || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs">
+                                <span className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded
+                                  ${entry.entryType === 'billable' ? 'bg-purple-50 text-purple-700'
+                                  : entry.entryType === 'extra_hours' ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-blue-50 text-blue-700'}`}>
+                                  {entry.entryType === 'billable' ? 'Billable' : entry.entryType === 'extra_hours' ? 'Extra Hrs' : 'Cover'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-xs">
+                                {isAsanaClosed
+                                  ? <span className="text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Closed in Asana</span>
+                                  : <span className="text-gray-600">{r.reason || '—'}</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600">{r.closed_by || '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDate(r.closed_at)}</td>
+                              <td className="px-4 py-2.5 text-xs">
+                                {entry.asanaLink
+                                  ? <a href={entry.asanaLink} target="_blank" rel="noopener noreferrer" className="text-[#D4A843] hover:underline">↗ Task</a>
+                                  : <span className="text-gray-400">—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-xs text-gray-400">🔒 Read only</span>
+                    <span className="text-xs text-gray-400">{filteredClosed.length} entries shown</span>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </main>
     </div>
   )
