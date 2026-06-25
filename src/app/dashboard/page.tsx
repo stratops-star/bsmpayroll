@@ -83,6 +83,7 @@ export default function DashboardPage() {
   const [tourStep, setTourStep] = useState<number | null>(null)
   const [asanaCache, setAsanaCache] = useState<Record<string, { assignee: string | null; assignee_email: string | null; completed: boolean }>>({})
   const [asanaIssues, setAsanaIssues] = useState<{ task_id: string; name: string; notes: string; completed: boolean; assignee: string | null; due_on: string | null; task_type: string; updated_at: string }[]>([])
+  const [syncingAsana, setSyncingAsana] = useState(false)
   const dir = TRANSLATIONS[lang].dir
 
   useEffect(() => {
@@ -106,15 +107,17 @@ export default function DashboardPage() {
 
   async function syncAsanaInBackground() {
     try {
+      setSyncingAsana(true)
       const token = await getToken()
       await fetch('/api/asana-sync', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      // Reload cache after sync completes
       await loadAsanaCache()
     } catch {
-      // Silent fail — background sync is best-effort
+      // Silent fail
+    } finally {
+      setSyncingAsana(false)
     }
   }
 
@@ -650,7 +653,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]" dir={dir}>
-      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={loadEntries} loading={loading} exportCount={exportCount} onRelaunchTour={relaunchTour} />
+      <NavBar lang={lang} onLangChange={switchLang} userEmail={userEmail} lastRefreshed={lastRefreshed} onRefresh={loadEntries} loading={loading} exportCount={exportCount} onRelaunchTour={relaunchTour} syncing={syncingAsana} />
 
       <main className="px-5 py-4 max-w-7xl mx-auto">
         {/* Period card */}
