@@ -106,6 +106,8 @@ export default function DashboardPage() {
   const [fcExpandedEmp, setFcExpandedEmp] = useState<string | null>(null)
   const [fcSetupFilter, setFcSetupFilter] = useState<'all' | 'missing' | 'completed'>('all')
   const [fcRates, setFcRates] = useState<Record<string, any[]>>({})
+  const [fcLastSynced, setFcLastSynced] = useState<string | null>(null)
+  const [fcSyncing, setFcSyncing] = useState(false)
   // employee_setup table data: keyed by employee_number
   const [empSetup, setEmpSetup] = useState<Record<string, EmployeeSetup>>({})
   const dir = TRANSLATIONS[lang].dir
@@ -232,8 +234,32 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
-      setFcEmployees(data.employees || [])
+      const employees = data.employees || []
+      setFcEmployees(employees)
+      // Populate fcRates from stored Supabase data — no expand needed
+      const ratesMap: Record<string, any[]> = {}
+      for (const e of employees) {
+        if (e.rates && Array.isArray(e.rates)) {
+          ratesMap[e.employee_number] = e.rates
+        }
+      }
+      setFcRates(ratesMap)
+      if (data.last_synced_at) setFcLastSynced(data.last_synced_at)
     } catch {}
+  }
+
+  async function syncFcNow() {
+    try {
+      setFcSyncing(true)
+      const token = await getToken()
+      await fetch('/api/fingercheck/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      await loadFcEmployees()
+    } catch {} finally {
+      setFcSyncing(false)
+    }
   }
 
   // ── Auth / misc ───────────────────────────────────────────────────────────
@@ -1157,7 +1183,23 @@ export default function DashboardPage() {
                     <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)} placeholder="Search name, number, or rate code…" className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
                     {fcSearch && <button onClick={() => setFcSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
                   </div>
-                  <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {fcLastSynced && (
+                      <span className="text-xs text-gray-400">
+                        FC synced: {new Date(fcLastSynced).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {new Date(fcLastSynced).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                      </span>
+                    )}
+                    <button
+                      onClick={syncFcNow}
+                      disabled={fcSyncing}
+                      className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-1 transition-colors">
+                      {fcSyncing
+                        ? <><span className="animate-spin w-2.5 h-2.5 border border-gray-300 border-t-gray-600 rounded-full" />Syncing…</>
+                        : <>↻ Sync FC</>
+                      }
+                    </button>
+                    <span className="text-xs text-gray-400">{filtered.length} employees</span>
+                  </div>
                 </div>
 
                 {fcEmployees.length === 0 ? (
