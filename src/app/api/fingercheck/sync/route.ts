@@ -18,10 +18,7 @@ function fcHeaders() {
 
 async function fcGet(path: string) {
   const url = `${FC_API_URL}${path}`
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: fcHeaders(),
-  })
+  const res = await fetch(url, { method: 'GET', headers: fcHeaders() })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Fingercheck ${path} → ${res.status}: ${text}`)
@@ -29,11 +26,54 @@ async function fcGet(path: string) {
   return res.json()
 }
 
+// Fetch rates + profile for a single employee — returns both or nulls on failure
+async function fetchEmpDetails(employeeNumber: string): Promise<{ rates: any[] | null; profile: any | null }> {
+  const [ratesResult, profileResult] = await Promise.allSettled([
+    fcGet(`/v1/Employees/GetEmployeePayRatesByEmployeeNumber/${employeeNumber}`),
+    fcGet(`/v1/Employees/GetEmployeeByEmployeeNumber/${employeeNumber}`),
+  ])
+
+  const rates = ratesResult.status === 'fulfilled'
+    ? (Array.isArray(ratesResult.value) ? ratesResult.value : (ratesResult.value?.data || ratesResult.value?.Data || []))
+    : null
+
+  const profile = profileResult.status === 'fulfilled'
+    ? (Array.isArray(profileResult.value) ? profileResult.value[0] : profileResult.value)
+    : null
+
+  return { rates, profile }
+}
+
+// Process employees in batches to avoid overwhelming the Fingercheck API
+async function fetchAllEmpDetails(
+  employeeNumbers: string[],
+  batchSize = 10
+): Promise<Record<string, { rates: any[] | null; profile: any | null }>> {
+  const results: Record<string, { rates: any[] | null; profile: any | null }> = {}
+
+  for (let i = 0; i < employeeNumbers.length; i += batchSize) {
+    const batch = employeeNumbers.slice(i, i + batchSize)
+    const batchResults = await Promise.all(
+      batch.map(async empNum => ({ empNum, ...(await fetchEmpDetails(empNum)) }))
+    )
+    for (const r of batchResults) {
+      results[r.empNum] = { rates: r.rates, profile: r.profile }
+    }
+    // Small delay between batches to be gentle on the API
+    if (i + batchSize < employeeNumbers.length) {
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  }
+
+  return results
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
+    const syncStart = new Date().toISOString()
 
-    // Fetch employees, rates, and jobs in parallel
+    // ── Step 1: Fetch employees, rates report, jobs in parallel ──────────
     const today = new Date().toISOString().split('T')[0]
     const oneYearAgo = new Date()
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
@@ -50,27 +90,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Failed to fetch employees: ${e.message}` }, { status: 500 })
     }
 
-    // Fetch active rates for all employees
     try {
       const data = await fcGet(`/v1/Reports/GetEmployeeActiveRates?startDate=${startDate}&endDate=${today}&companyId=${FC_COMPANY_ID}`)
       ratesData = Array.isArray(data) ? data : (data.data || data.Data || [])
-    } catch (e) {
-      console.log('Could not fetch rates:', e)
-    }
+    } catch (e) { console.log('Could not fetch rates report:', e) }
 
-    // Fetch job list
     try {
       const data = await fcGet(`/v1/Sync/GetJobList?companyId=${FC_COMPANY_ID}`)
       jobsData = Array.isArray(data) ? data : (data.data || data.Data || [])
-    } catch (e) {
-      console.log('Could not fetch jobs:', e)
-    }
+    } catch (e) { console.log('Could not fetch jobs:', e) }
 
     if (!employees.length) {
       return NextResponse.json({ error: 'No employees returned from Fingercheck' }, { status: 400 })
     }
 
-    // Build rate map by employee number
+    // ── Step 2: Build lookup maps ─────────────────────────────────────────
     const rateMap: Record<string, number> = {}
     for (const r of ratesData) {
       const empNum = String(r.EmployeeNumber || r.employeeNumber || '')
@@ -78,7 +112,6 @@ export async function POST(request: NextRequest) {
       if (empNum && rate) rateMap[empNum] = rate
     }
 
-    // Build job map by job code
     const jobMap: Record<string, string> = {}
     for (const j of jobsData) {
       const code = j.Code || j.code || j.JobCode || ''
@@ -88,29 +121,35 @@ export async function POST(request: NextRequest) {
 
     console.log(`Fetched ${employees.length} employees, ${ratesData.length} rates, ${jobsData.length} jobs`)
 
-    // Calculate 30 days ago for new employee detection
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
-    // Only sync Tier employees — exclude admin/office/HR/payroll/sales
+    // ── Step 3: Filter to tier employees ─────────────────────────────────
     const EXCLUDED_DEPTS = ['hr & recruiting team', 'office admin', 'payroll team', 'sales team']
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+
     const tierEmployees = employees.filter((emp: any) => {
-      const dept = (emp.CostCenter1 || '').toLowerCase()
+      const dept = (emp.CostCenter1 || '').toLowerCase().trim()
       return !EXCLUDED_DEPTS.includes(dept)
     })
 
     console.log(`Total: ${employees.length}, Tier only: ${tierEmployees.length}`)
 
-    // Map employees to our schema
+    // ── Step 4: Fetch rates + profile for ALL employees in batches ────────
+    const allEmpNumbers = tierEmployees.map((emp: any) =>
+      String(emp.EmployeeNumber || emp.EmployeeId || emp.Id || '')
+    ).filter(Boolean)
+
+    console.log(`Fetching rates + profile for ${allEmpNumbers.length} employees in batches of 10…`)
+    const empDetails = await fetchAllEmpDetails(allEmpNumbers, 10)
+    console.log(`Done fetching employee details`)
+
+    // ── Step 5: Build upsert rows ─────────────────────────────────────────
     const rows = tierEmployees.map((emp: any) => {
       const employeeNumber = String(emp.EmployeeNumber || emp.EmployeeId || emp.Id || '')
       const fullName = emp.FirstLast || `${emp.FirstName || ''} ${emp.LastName || ''}`.trim()
       const jobCode = emp.Job || emp.JobCode || emp.JobTitle || ''
       const address = [emp.Address1, emp.City, emp.State].filter(Boolean).join(', ')
-      // Use rate from rates API first, fall back to employee record
       const rate = rateMap[employeeNumber] || parseFloat(emp.HourlyRate || emp.Rate || emp.PayRate || '0') || null
-      
-      // DivisionEmployeeStatus: A=Active, T=Terminated, I=Inactive, O=Onboarding
+
       const rawStatus = emp.DivisionEmployeeStatus || emp.Status || 'A'
       const status = rawStatus === 'A' ? 'Active'
         : rawStatus === 'T' ? 'Terminated'
@@ -122,14 +161,10 @@ export async function POST(request: NextRequest) {
       const hireDate = emp.HireDate || emp.StartDate
       const termDate = emp.TerminationDate || null
       const department = emp.CostCenter1 || emp.CostCenter2 || emp.Department || ''
-
-      // isNew: hired in last 30 days AND active
       const isNew = hireDate && new Date(hireDate) >= thirtyDaysAgo && rawStatus === 'A'
-      
-      // recentlyTerminated: terminated in last 90 days
-      const ninetyDaysAgo = new Date()
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
       const isRecentlyTerminated = termDate && new Date(termDate) >= ninetyDaysAgo && rawStatus === 'T'
+
+      const details = empDetails[employeeNumber] || { rates: null, profile: null }
 
       return {
         employee_number: employeeNumber,
@@ -140,12 +175,21 @@ export async function POST(request: NextRequest) {
         rate,
         company_id: FC_COMPANY_ID,
         status,
-        raw_data: { ...emp, _isNew: isNew, _hireDate: hireDate, _termDate: termDate, _department: department, _isRecentlyTerminated: isRecentlyTerminated },
-        synced_at: new Date().toISOString(),
+        raw_data: {
+          ...emp,
+          _isNew: isNew,
+          _hireDate: hireDate,
+          _termDate: termDate,
+          _department: department,
+          _isRecentlyTerminated: isRecentlyTerminated,
+        },
+        rates: details.rates,
+        profile: details.profile,
+        synced_at: syncStart,
       }
     }).filter(r => r.employee_number)
 
-    // Upsert in batches of 100
+    // ── Step 6: Upsert in batches of 100 ─────────────────────────────────
     const batchSize = 100
     for (let i = 0; i < rows.length; i += batchSize) {
       const { error } = await supabase
@@ -154,14 +198,26 @@ export async function POST(request: NextRequest) {
       if (error) console.error('Upsert error:', error)
     }
 
-    // Count new employees (hired in last 30 days)
+    // ── Step 7: Log sync time ─────────────────────────────────────────────
+    await supabase.from('sync_log').upsert({
+      id: 'fingercheck_employees',
+      synced_at: syncStart,
+      details: {
+        total_synced: rows.length,
+        new_employees: rows.filter(r => r.raw_data._isNew).length,
+        rates_fetched: allEmpNumbers.length,
+        jobs_synced: jobsData.length,
+      }
+    }, { onConflict: 'id' })
+
     const newEmployees = rows.filter(r => r.raw_data._isNew)
 
     return NextResponse.json({
       synced: rows.length,
       new_employees: newEmployees.length,
-      rates_synced: Object.keys(rateMap).length,
+      rates_synced: allEmpNumbers.length,
       jobs_synced: jobsData.length,
+      synced_at: syncStart,
       new_employee_list: newEmployees.map(e => ({
         employee_number: e.employee_number,
         full_name: e.full_name,
