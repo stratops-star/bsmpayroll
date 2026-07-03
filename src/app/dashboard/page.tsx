@@ -262,6 +262,25 @@ export default function DashboardPage() {
     }
   }
 
+  async function syncAll() {
+    // Sync everything in parallel then reload
+    setSyncingAsana(true)
+    setFcSyncing(true)
+    try {
+      const token = await getToken()
+      await Promise.allSettled([
+        fetch('/api/asana-sync', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/fingercheck/sync', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/sheets-sync', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ periodStart, periodEnd }) }),
+      ])
+      await Promise.all([loadAsanaCache(), loadFcEmployees()])
+    } catch {} finally {
+      setSyncingAsana(false)
+      setFcSyncing(false)
+    }
+    await loadEntries()
+  }
+
   // ── Auth / misc ───────────────────────────────────────────────────────────
 
   async function syncAsanaInBackground() {
@@ -881,8 +900,11 @@ export default function DashboardPage() {
             </div>
             <button onClick={() => { setPeriodStart(fmtISO(currentPeriod.start)); setPeriodEnd(fmtISO(currentPeriod.end)) }} className="btn-outline text-xs py-1.5">{t(lang,'period_current')}</button>
             <button onClick={() => { setPeriodStart(fmtISO(prevPeriod.start)); setPeriodEnd(fmtISO(prevPeriod.end)) }} className="btn-outline text-xs py-1.5">{t(lang,'period_previous')}</button>
-            <button onClick={loadEntries} disabled={loading} className="bg-[#0D1B35] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#152444] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
-              {loading ? <><span className="animate-spin w-3 h-3 border border-white/30 border-t-white rounded-full" />{t(lang,'period_loading')}</> : t(lang,'period_load')}
+            <button onClick={syncAll} disabled={loading || fcSyncing || syncingAsana} className="bg-[#0D1B35] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#152444] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
+              {(loading || fcSyncing || syncingAsana)
+                ? <><span className="animate-spin w-3 h-3 border border-white/30 border-t-white rounded-full" />Syncing…</>
+                : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>{t(lang,'period_load')}</>
+              }
             </button>
             <div id="tour-export-btn" className="ml-auto">
               <button onClick={() => setShowExport(true)} disabled={!allApproved.length} className="bg-[#D4A843] text-[#0D1B35] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#C49A38] transition-colors disabled:opacity-40 inline-flex items-center gap-2">
@@ -890,10 +912,17 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-2">
-            {t(lang,'period_payday')}: <strong className="text-gray-600">{paydayStr}</strong>
-            {statusMsg && <span className="ml-3 text-[#0D1B35] font-medium">{statusMsg}</span>}
-          </p>
+          <div className="flex items-center justify-between mt-2 flex-wrap gap-1">
+            <p className="text-xs text-gray-400">
+              {t(lang,'period_payday')}: <strong className="text-gray-600">{paydayStr}</strong>
+              {statusMsg && <span className="ml-3 text-[#0D1B35] font-medium">{statusMsg}</span>}
+            </p>
+            {fcLastSynced && (
+              <p className="text-xs text-gray-400">
+                Last synced: <strong className="text-gray-600">{new Date(fcLastSynced).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {new Date(fcLastSynced).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</strong>
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Smart banners */}
@@ -1183,23 +1212,7 @@ export default function DashboardPage() {
                     <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)} placeholder="Search name, number, or rate code…" className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
                     {fcSearch && <button onClick={() => setFcSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
-                    {fcLastSynced && (
-                      <span className="text-xs text-gray-400">
-                        FC synced: {new Date(fcLastSynced).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {new Date(fcLastSynced).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                      </span>
-                    )}
-                    <button
-                      onClick={syncFcNow}
-                      disabled={fcSyncing}
-                      className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-1 transition-colors">
-                      {fcSyncing
-                        ? <><span className="animate-spin w-2.5 h-2.5 border border-gray-300 border-t-gray-600 rounded-full" />Syncing…</>
-                        : <>↻ Sync FC</>
-                      }
-                    </button>
-                    <span className="text-xs text-gray-400">{filtered.length} employees</span>
-                  </div>
+                  <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
                 </div>
 
                 {fcEmployees.length === 0 ? (
