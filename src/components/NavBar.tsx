@@ -65,28 +65,6 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
           ))}
         </div>
 
-        {onRefresh && (
-          <div className="relative group">
-            <button onClick={onRefresh} disabled={loading}
-              className="w-7 h-7 rounded-md border border-white/10 bg-white/8 flex items-center justify-center hover:bg-white/15 transition-colors disabled:opacity-40">
-              <svg className={loading ? 'animate-spin' : ''} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2">
-                <path d="M21 12a9 9 0 11-6.219-8.56"/>
-              </svg>
-            </button>
-            {lastRefreshed && (
-              <div className="absolute top-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                {t(lang, 'nav_last_refreshed')}: {lastRefreshed}
-              </div>
-            )}
-          </div>
-        )}
-        {syncing && (
-          <div className="flex items-center gap-1.5 text-white/40 text-xs">
-            <span className="animate-spin w-3 h-3 border border-white/20 border-t-white/60 rounded-full" />
-            Syncing Asana…
-          </div>
-        )}
-
         {links.map(link => (
           <button key={link.href} onClick={() => router.push(link.href)}
             className={`text-xs transition-colors flex items-center gap-1.5 ${pathname === link.href ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
@@ -141,14 +119,6 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
               <button onClick={() => { router.push('/dashboard'); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
                 ← {t(lang, 'nav_dashboard')}
-              </button>
-            )}
-            {onRefresh && (
-              <button onClick={() => { onRefresh(); setMenuOpen(false) }}
-                className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
-                <svg className={loading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                {t(lang, 'nav_refresh')}
-                {lastRefreshed && <span className="text-white/35 text-xs ml-auto">{lastRefreshed}</span>}
               </button>
             )}
             {links.map(link => (
