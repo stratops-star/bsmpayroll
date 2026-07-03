@@ -1076,7 +1076,10 @@ export default function DashboardPage() {
               filtered = filtered.filter(e =>
                 e.full_name?.toLowerCase().includes(q) ||
                 e.employee_number?.toString().includes(q) ||
-                e.raw_data?._department?.toLowerCase().includes(q)
+                e.raw_data?._department?.toLowerCase().includes(q) ||
+                (fcRates[e.employee_number] || []).some((r: any) =>
+                  (r.RateCode || r.Description || r.Code || '').toLowerCase().includes(q)
+                )
               )
             }
 
@@ -1151,7 +1154,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 flex-1 max-w-xs">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                    <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)} placeholder="Search name or number…" className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
+                    <input type="text" value={fcSearch} onChange={e => setFcSearch(e.target.value)} placeholder="Search name, number, or rate code…" className="border-none bg-transparent text-xs focus:outline-none w-full text-gray-700 placeholder-gray-400" />
                     {fcSearch && <button onClick={() => setFcSearch('')} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
                   </div>
                   <span className="text-xs text-gray-400 ml-auto">{filtered.length} employees</span>
