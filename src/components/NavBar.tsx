@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
@@ -17,6 +17,12 @@ interface NavBarProps {
   syncing?: boolean
 }
 
+type Mod = { label: string; href: string }
+const MODULE_MAP: Record<string, Mod> = {
+  payroll: { label: 'Payroll', href: '/dashboard' },
+  recruiting: { label: 'Recruiting', href: '/recruiting' },
+}
+
 export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour, syncing }: NavBarProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -25,6 +31,37 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
   const dir = TRANSLATIONS[lang].dir
 
   const isDashboard = pathname === '/dashboard'
+
+  // ── Module switcher ───────────────────────────────────────────────
+  const [switcherMods, setSwitcherMods] = useState<Mod[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const switcherRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: me } = await supabase
+        .from('app_users').select('role, departments, active').eq('id', user.id).single()
+      if (!me?.active) return
+      const admin = me.role === 'admin'
+      setIsAdmin(admin)
+      setSwitcherMods((me.departments || []).map((d: string) => MODULE_MAP[d]).filter(Boolean))
+    })()
+  }, [])
+
+  // close on outside click
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) setSwitcherOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  // The logo is a switcher only if the user has 2+ modules OR is admin
+  const canSwitch = switcherMods.length > 1 || isAdmin
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -40,9 +77,41 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
   return (
     <header className="bg-[#0D1B35] h-[48px] px-4 flex items-center justify-between gap-3 relative z-50" dir={dir}>
       <div className="flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => router.push('/dashboard')}
-          className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0"
-          title="Go to dashboard">B</button>
+        {/* Logo — module switcher when the user has more than one module */}
+        <div className="relative" ref={switcherRef}>
+          <button
+            onClick={() => canSwitch ? setSwitcherOpen(o => !o) : router.push('/dashboard')}
+            className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0"
+            title={canSwitch ? 'Switch module' : 'Go to dashboard'}>
+            B
+          </button>
+
+          {canSwitch && switcherOpen && (
+            <div className="absolute top-[38px] left-0 bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 w-52 z-[60]">
+              <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Switch workspace</div>
+              {switcherMods.map(m => (
+                <button key={m.href} onClick={() => { setSwitcherOpen(false); router.push(m.href) }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#D4A843]" /> {m.label}
+                </button>
+              ))}
+              {isAdmin && (
+                <>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button onClick={() => { setSwitcherOpen(false); router.push('/recruiting/admin') }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                    <span>🛡️</span> User Access
+                  </button>
+                  <button onClick={() => { setSwitcherOpen(false); router.push('/hub') }}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:bg-gray-50">
+                    Open full hub →
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="w-px h-4 bg-white/15 hidden sm:block" />
         {isDashboard ? (
           <span className="text-white/50 text-xs hidden sm:block">{t(lang, 'nav_dashboard')}</span>
@@ -75,7 +144,6 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
           </button>
         ))}
 
-        {/* Tutorial + Relaunch Tour */}
         <button onClick={() => router.push('/dashboard/help')}
           className={`text-xs transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
           {t(lang, 'nav_tutorial')}
@@ -115,6 +183,23 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
       {menuOpen && (
         <div className="absolute top-[48px] left-0 right-0 bg-[#0D1B35] border-t border-white/10 shadow-xl md:hidden z-50" dir={dir}>
           <div className="px-4 py-3 space-y-1">
+            {canSwitch && (
+              <div className="border-b border-white/10 pb-2 mb-2">
+                <div className="text-white/35 text-xs px-3 py-1">Switch workspace</div>
+                {switcherMods.map(m => (
+                  <button key={m.href} onClick={() => { router.push(m.href); setMenuOpen(false) }}
+                    className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#D4A843]" /> {m.label}
+                  </button>
+                ))}
+                {isAdmin && (
+                  <button onClick={() => { router.push('/recruiting/admin'); setMenuOpen(false) }}
+                    className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
+                    🛡️ User Access
+                  </button>
+                )}
+              </div>
+            )}
             {!isDashboard && (
               <button onClick={() => { router.push('/dashboard'); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
