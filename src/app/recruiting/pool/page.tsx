@@ -22,17 +22,22 @@ const STAGES = ['available', '2nd_interview', 'offer', 'hired']
 const stageLabel: Record<string, string> = { available: 'Available', '2nd_interview': '2nd Interview', offer: 'Offer', hired: 'Hired', rejected: 'Rejected' }
 const BOROUGHS = ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island']
 const TRANSPORT = ['Bicycle', 'Scooter', 'Train', 'Bus', 'Car']
+const ALL_POSITIONS = ['Garbage Porter', 'Cleaning Porter', 'Morning Garbage Porter', 'Janitorial', 'Concierge', 'Superintendent', 'Security (Licensed)', 'Security (Unlicensed)', 'Handyman', 'Maintenance', 'Valet Parking', 'Parking Attendant', 'Nanny', 'Lease Coordinator', 'Area Supervisor', 'Operations Supervisor', 'Operations Manager', 'Sr. Operations Manager']
 
-function Tabs() {
-  const items = [['New Queue', '/recruiting'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']]
-  return (
-    <div className="flex gap-1 mt-3">
-      {items.map(([l, h]) => (
-        <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'Candidate Pool' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>
-      ))}
-    </div>
-  )
-}
+const daysIn = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+const funnelColor = (d: number) => d > 21 ? 'bg-red-50 text-red-600' : d > 7 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+
+const FILTERS = [
+  { key: 'tier', label: 'Tier', opts: [['all', 'All tiers'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']] },
+  { key: 'stage', label: 'Stage', opts: [['all', 'All stages'], ...STAGES.map(s => [s, stageLabel[s]])] },
+  { key: 'gender', label: 'Gender', opts: [['all', 'Any gender'], ['female', 'Female'], ['male', 'Male'], ['other', 'Other']] },
+  { key: 'age', label: 'Age', opts: [['all', 'Any age'], ['u30', 'Under 30'], ['30-45', '30–45'], ['45p', '45+']] },
+  { key: 'trans', label: 'Transportation', opts: [['all', 'Any transport'], ...TRANSPORT.map(t => [t, t])] },
+  { key: 'lives', label: 'Lives in', opts: [['all', 'Any borough'], ...BOROUGHS.map(b => [b, b])] },
+  { key: 'open', label: 'Open to work', opts: [['all', 'Any borough'], ...BOROUGHS.map(b => [b, b])] },
+  { key: 'pos', label: 'Position', opts: [['all', 'All positions'], ...ALL_POSITIONS.map(p => [p, p])] },
+] as const
 
 export default function PoolPage() {
   const [supabase] = useState(() => createClient())
@@ -44,15 +49,10 @@ export default function PoolPage() {
   const [toast, setToast] = useState('')
 
   const [q, setQ] = useState('')
-  const [fTier, setFTier] = useState('all')
-  const [fPos, setFPos] = useState('all')
-  const [fStage, setFStage] = useState('all')
-  const [fGender, setFGender] = useState('all')
-  const [fAge, setFAge] = useState('all')
-  const [fTrans, setFTrans] = useState('all')
-  const [fLives, setFLives] = useState('all')
-  const [fOpen, setFOpen] = useState('all')
+  const [F, setF] = useState<Record<string, string>>({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all' })
+  const [panelOpen, setPanelOpen] = useState(false)
   const [view, setView] = useState<'list' | 'photos'>('list')
+  const [sort, setSort] = useState<'recent' | 'longest'>('recent')
 
   async function load() {
     setLoading(true)
@@ -74,25 +74,35 @@ export default function PoolPage() {
   }
   useEffect(() => { load() }, [])
 
-  const positions = useMemo(() => [...new Set(rows.flatMap(r => r.positions || []))].sort(), [rows])
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
+  const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
+  const clearAll = () => { setF({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all' }); setQ('') }
+  const activeCount = Object.values(F).filter(v => v !== 'all').length
   const payText = (c: Candidate) => c.expected_pay || (c.pay_min != null && c.pay_max != null ? `$${c.pay_min}–${c.pay_max}/hr` : '—')
-  const ageOk = (a: number | null) => fAge === 'all' || (a != null && ((fAge === 'u30' && a < 30) || (fAge === '30-45' && a >= 30 && a <= 45) || (fAge === '45p' && a > 45)))
+  const ageOk = (a: number | null) => F.age === 'all' || (a != null && ((F.age === 'u30' && a < 30) || (F.age === '30-45' && a >= 30 && a <= 45) || (F.age === '45p' && a > 45)))
+  function posOk(c: Candidate) {
+    if (F.pos === 'all') return true
+    const p = c.positions || []
+    if (F.pos === 'Security (Licensed)') return p.includes('Security') && c.security_licensed === true
+    if (F.pos === 'Security (Unlicensed)') return p.includes('Security') && c.security_licensed === false
+    return p.includes(F.pos)
+  }
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase()
-    return rows.filter(c =>
-      (fTier === 'all' || c.profile_tier === fTier) &&
-      (fPos === 'all' || (c.positions || []).includes(fPos)) &&
-      (fStage === 'all' || c.stage === fStage) &&
-      (fGender === 'all' || c.gender === fGender) &&
-      ageOk(c.age) &&
-      (fTrans === 'all' || (c.transportation || '').toLowerCase().includes(fTrans.toLowerCase())) &&
-      (fLives === 'all' || c.borough === fLives) &&
-      (fOpen === 'all' || (c.work_areas || []).includes(fOpen)) &&
+    const out = rows.filter(c =>
+      (F.tier === 'all' || c.profile_tier === F.tier) &&
+      (F.stage === 'all' || c.stage === F.stage) &&
+      (F.gender === 'all' || c.gender === F.gender) && ageOk(c.age) &&
+      (F.trans === 'all' || (c.transportation || '').toLowerCase().includes(F.trans.toLowerCase())) &&
+      (F.lives === 'all' || c.borough === F.lives) &&
+      (F.open === 'all' || (c.work_areas || []).includes(F.open)) && posOk(c) &&
       (c.full_name.toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.positions || []).join(' ').toLowerCase().includes(s))
     )
-  }, [rows, q, fTier, fPos, fStage, fGender, fAge, fTrans, fLives, fOpen])
+    return out.sort((a, b) => sort === 'recent'
+      ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      : new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  }, [rows, q, F, sort])
 
   async function openFile(bucket: string, path: string | null) {
     if (!path) return
@@ -107,15 +117,13 @@ export default function PoolPage() {
     setSel(updated); setRows(rs => rs.map(r => r.id === sel.id ? updated : r)); flash('Saved')
   }
 
-  const Chip = ({ on, onClick, children }: any) => (
-    <button onClick={onClick} className={`text-xs font-medium px-3 py-1.5 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>{children}</button>
-  )
-  const Frow = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div className="flex flex-wrap items-center gap-1.5 mb-2"><span className="text-xs text-gray-400 font-semibold mr-1 w-24 flex-shrink-0">{label}</span>{children}</div>
-  )
   const tierPill = (t: string | null) => {
     const c = t === 'high' ? 'bg-[#F3E4BE] text-[#8A6D1E]' : t === 'medium' ? 'bg-blue-100 text-blue-800' : t === 'low' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'
     return <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full capitalize ${c}`}>{t || '—'}</span>
+  }
+  const chipLabel = (k: string, v: string) => {
+    const map: Record<string, string> = { u30: 'Under 30', '30-45': '30–45', '45p': '45+' }
+    return map[v] || stageLabel[v] || (v[0].toUpperCase() + v.slice(1))
   }
 
   return (
@@ -127,13 +135,25 @@ export default function PoolPage() {
             <div><div className="text-lg font-semibold">Candidate Pool</div><div className="text-xs text-white/50">Passed the initial interview · rated</div></div>
             <div className="ml-auto"><ShareCareers /></div>
           </div>
-          <Tabs />
+          <div className="flex gap-1 mt-3">
+            {[['New Queue', '/recruiting'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']].map(([l, h]) => (
+              <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'Candidate Pool' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-5">
+        {/* top bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
+          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">
+            ⛃ Filters {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}
+          </button>
+          <select value={sort} onChange={e => setSort(e.target.value as any)} className="border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm text-gray-600">
+            <option value="recent">Sort: Recently added</option>
+            <option value="longest">Sort: Longest in funnel</option>
+          </select>
           <div className="ml-auto flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
             {(['list', 'photos'] as const).map(v => (
               <button key={v} onClick={() => setView(v)} className={`text-xs font-semibold px-3 py-1.5 rounded-md ${view === v ? 'bg-[#0D1B35] text-white' : 'text-gray-500'}`}>{v === 'list' ? '▤ List' : '▦ Photos'}</button>
@@ -141,39 +161,66 @@ export default function PoolPage() {
           </div>
         </div>
 
-        <Frow label="Tier">{['all', 'high', 'medium', 'low'].map(t => <Chip key={t} on={fTier === t} onClick={() => setFTier(t)}>{t === 'all' ? 'All' : t}</Chip>)}</Frow>
-        <Frow label="Stage"><Chip on={fStage === 'all'} onClick={() => setFStage('all')}>All</Chip>{STAGES.map(s => <Chip key={s} on={fStage === s} onClick={() => setFStage(s)}>{stageLabel[s]}</Chip>)}</Frow>
-        <Frow label="Gender">{[['all', 'All'], ['female', 'Female'], ['male', 'Male'], ['other', 'Other']].map(([v, l]) => <Chip key={v} on={fGender === v} onClick={() => setFGender(v)}>{l}</Chip>)}</Frow>
-        <Frow label="Age">{[['all', 'All'], ['u30', 'Under 30'], ['30-45', '30–45'], ['45p', '45+']].map(([v, l]) => <Chip key={v} on={fAge === v} onClick={() => setFAge(v)}>{l}</Chip>)}</Frow>
-        <Frow label="Transportation"><Chip on={fTrans === 'all'} onClick={() => setFTrans('all')}>All</Chip>{TRANSPORT.map(t => <Chip key={t} on={fTrans === t} onClick={() => setFTrans(t)}>{t}</Chip>)}</Frow>
-        <Frow label="Lives in"><Chip on={fLives === 'all'} onClick={() => setFLives('all')}>All</Chip>{BOROUGHS.map(b => <Chip key={b} on={fLives === b} onClick={() => setFLives(b)}>{b}</Chip>)}</Frow>
-        <Frow label="Open to work"><Chip on={fOpen === 'all'} onClick={() => setFOpen('all')}>All</Chip>{BOROUGHS.map(b => <Chip key={b} on={fOpen === b} onClick={() => setFOpen(b)}>{b}</Chip>)}</Frow>
-        <Frow label="Position"><Chip on={fPos === 'all'} onClick={() => setFPos('all')}>All</Chip>{positions.map(p => <Chip key={p} on={fPos === p} onClick={() => setFPos(p)}>{p}</Chip>)}</Frow>
+        {/* active chips */}
+        {activeCount > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3 items-center">
+            {Object.entries(F).filter(([, v]) => v !== 'all').map(([k, v]) => (
+              <span key={k} className="bg-[#0D1B35] text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                {FILTERS.find(f => f.key === k)?.label}: {chipLabel(k, v)}<button onClick={() => setF1(k, 'all')} className="opacity-70">✕</button>
+              </span>
+            ))}
+            <button onClick={clearAll} className="text-xs text-gray-500 underline">Clear all</button>
+          </div>
+        )}
 
-        <div className="mt-3">
-          {loading ? <p className="text-gray-400 text-sm">Loading…</p>
-            : filtered.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No candidates match these filters.</div>
-            : view === 'photos' ? (
-              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))' }}>
-                {filtered.map(c => (
+        {/* panel */}
+        {panelOpen && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
+              {FILTERS.map(f => (
+                <div key={f.key}>
+                  <label className="block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1">{f.label}</label>
+                  <select value={F[f.key]} onChange={e => setF1(f.key, e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white">
+                    {f.opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end mt-3"><button onClick={clearAll} className="text-xs text-gray-500 underline">Clear all filters</button></div>
+          </div>
+        )}
+
+        {loading ? <p className="text-gray-400 text-sm">Loading…</p>
+          : filtered.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No candidates match these filters.</div>
+          : view === 'photos' ? (
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))' }}>
+              {filtered.map(c => {
+                const d = daysIn(c.created_at)
+                return (
                   <button key={c.id} onClick={() => setSel(c)} className="bg-white border border-gray-200 rounded-xl overflow-hidden text-left hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                    <div className="h-36 grid place-items-center text-white text-3xl font-semibold" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</div>
+                    <div className="h-36 grid place-items-center text-white text-3xl font-semibold relative" style={{ background: hue(c.email || c.full_name) }}>
+                      {photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}
+                      <span className={`absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${funnelColor(d)}`}>{d}d</span>
+                    </div>
                     <div className="p-3">
                       <div className="font-semibold text-sm text-[#0D1B35]">{c.full_name}</div>
                       <div className="text-xs text-gray-500 mt-0.5">{(c.positions || [])[0] || '—'} · {c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() + c.gender.slice(1) : '—'}</div>
                       <div className="flex gap-1.5 mt-2">{tierPill(c.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[c.stage]}</span></div>
                     </div>
                   </button>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3">Candidate</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Age / Sex</th><th className="px-4 py-3">Tier</th><th className="px-4 py-3">Stage</th>
-                  </tr></thead>
-                  <tbody>
-                    {filtered.map(c => (
+                )
+              })}
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200">
+                  <th className="px-4 py-3">Candidate</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Age / Sex</th><th className="px-4 py-3">Tier</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Added</th><th className="px-4 py-3">In funnel</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.map(c => {
+                    const d = daysIn(c.created_at)
+                    return (
                       <tr key={c.id} onClick={() => setSel(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
                         <td className="px-4 py-3"><div className="flex items-center gap-3">
                           <span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span>
@@ -183,13 +230,15 @@ export default function PoolPage() {
                         <td className="px-4 py-3 text-gray-500">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                         <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
                         <td className="px-4 py-3"><span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[c.stage]}</span></td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(c.created_at)}</td>
+                        <td className="px-4 py-3"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${funnelColor(d)}`}>{d}d</span></td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-        </div>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
       </div>
 
       {sel && (
@@ -200,8 +249,12 @@ export default function PoolPage() {
               <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
               <div className="flex items-center gap-3">
                 <span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span></div></div>
+                <div>
+                  <h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2>
+                  <div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span></div>
+                </div>
               </div>
+              <div className="text-xs text-gray-500 mt-2">Added {fmtDate(sel.created_at)} · <b className="text-[#0D1B35]">{daysIn(sel.created_at)} days</b> in funnel</div>
             </div>
             <div className="overflow-auto flex-1">
               {canAct && (
