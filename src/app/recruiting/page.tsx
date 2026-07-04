@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 
@@ -23,17 +23,9 @@ const ago = (iso: string) => {
   const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`
   const d = Math.floor(h / 24); return d === 1 ? 'yesterday' : `${d}d ago`
 }
-
-function Tabs() {
-  const items = [['New Queue', '/recruiting'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']]
-  return (
-    <div className="flex gap-1 mt-3">
-      {items.map(([l, h]) => (
-        <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'New Queue' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>
-      ))}
-    </div>
-  )
-}
+const MANUAL_POS = ['Garbage Porter', 'Cleaning Porter', 'Morning Garbage Porter', 'Janitorial', 'Concierge', 'Superintendent', 'Security', 'Handyman', 'Maintenance', 'Valet Parking', 'Parking Attendant', 'Nanny', 'Lease Coordinator', 'Area Supervisor', 'Operations Supervisor', 'Operations Manager', 'Sr. Operations Manager']
+const BOROUGHS = ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island']
+const TRANSPORT = ['Bicycle', 'Scooter', 'Train', 'Bus', 'Car']
 
 export default function NewQueuePage() {
   const [supabase] = useState(() => createClient())
@@ -45,6 +37,10 @@ export default function NewQueuePage() {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState('')
+  const [newCount, setNewCount] = useState(0)
+  const [showAdd, setShowAdd] = useState(false)
+  const rowsRef = useRef<Candidate[]>([])
+  rowsRef.current = rows
 
   async function load() {
     setLoading(true)
@@ -56,7 +52,17 @@ export default function NewQueuePage() {
     const { data } = await supabase.from('candidates').select('*').eq('status', 'applied').order('created_at', { ascending: false })
     setRows(data ?? []); setLoading(false)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const ch = supabase.channel('queue-inserts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'candidates' }, (payload: any) => {
+        const c = payload.new as Candidate
+        if (c.status !== 'applied') return
+        if (rowsRef.current.some(r => r.id === c.id)) return
+        setRows(rs => [c, ...rs]); setNewCount(n => n + 1)
+      }).subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   function open(c: Candidate) { setSel(c); setTier(c.profile_tier); setReason('') }
   function close() { setSel(null) }
@@ -93,13 +99,17 @@ export default function NewQueuePage() {
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
             <a href="/hub" className="text-white/50 text-sm">← Hub</a>
-            <div>
-              <div className="text-lg font-semibold">New Queue</div>
-              <div className="text-xs text-white/50">Applications waiting for first review</div>
+            <div><div className="text-lg font-semibold">New Queue</div><div className="text-xs text-white/50">Applications waiting for first review</div></div>
+            <div className="ml-auto flex items-center gap-2">
+              {canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">+ Add candidate</button>}
+              <ShareCareers />
             </div>
-            <div className="ml-auto"><ShareCareers /></div>
           </div>
-          <Tabs />
+          <div className="flex gap-1 mt-3">
+            <a href="/recruiting" className="text-sm px-3 py-1.5 rounded-lg bg-white/15 text-white font-medium flex items-center gap-1.5">New Queue{newCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{newCount}</span>}</a>
+            <a href="/recruiting/pool" className="text-sm px-3 py-1.5 rounded-lg text-white/55 hover:text-white">Candidate Pool</a>
+            <a href="/recruiting/rejected" className="text-sm px-3 py-1.5 rounded-lg text-white/55 hover:text-white">Rejected</a>
+          </div>
         </div>
       </div>
 
@@ -109,8 +119,9 @@ export default function NewQueuePage() {
           : (
             <>
               <div className="flex items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Live</span>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />Live</span>
                 <span className="font-semibold text-[#0D1B35]">{rows.length} new application{rows.length > 1 ? 's' : ''}</span>
+                {newCount > 0 && <span className="text-xs text-[#8A6D1E] bg-[#F3E4BE] px-2 py-0.5 rounded-full">{newCount} arrived just now</span>}
               </div>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))' }}>
                 {rows.map(c => (
@@ -130,6 +141,7 @@ export default function NewQueuePage() {
           )}
       </div>
 
+      {/* detail drawer */}
       {sel && (
         <>
           <div className="fixed inset-0 bg-[#0D1B35]/40 z-20" onClick={close} />
@@ -153,7 +165,6 @@ export default function NewQueuePage() {
                   <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for rejection (optional)" className="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-xs" />
                 </Sec>
               ) : <Sec title="View only"><p className="text-xs text-gray-500">You have read-only access to applications.</p></Sec>}
-
               <Sec title="Applied for">
                 <div className="flex flex-wrap gap-1.5">{(sel.positions || []).map(p => <span key={p} className="text-xs bg-[#0D1B35]/5 text-[#0D1B35] font-medium px-2.5 py-1 rounded-full">{p}</span>)}</div>
                 {sel.positions?.includes('Security') && <div className="mt-2 text-xs">Security license: <b>{sel.security_licensed === true ? 'Licensed' : sel.security_licensed === false ? 'Unlicensed' : '—'}</b>{sel.license_path && <button onClick={() => openFile('candidate-licenses', sel.license_path)} className="ml-2 text-blue-600 font-medium">View license</button>}</div>}
@@ -168,7 +179,70 @@ export default function NewQueuePage() {
         </>
       )}
 
+      {showAdd && <AddCandidate supabase={supabase} onClose={() => setShowAdd(false)} onAdded={(c) => { setRows(rs => [c, ...rs]); setShowAdd(false); flash('Candidate added to queue') }} />}
+
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
+    </div>
+  )
+}
+
+function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: () => void; onAdded: (c: Candidate) => void }) {
+  const [f, setF] = useState({ full_name: '', phone: '', email: '', borough: '', pay_min: '', pay_max: '', english_level: '', availability: '', experience: '' })
+  const [positions, setPositions] = useState<string[]>([])
+  const [trans, setTrans] = useState<string[]>([])
+  const [lic, setLic] = useState<'' | 'yes' | 'no'>('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
+  const toggle = (arr: string[], s: any, v: string) => s(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
+  const input = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm'
+
+  async function submit() {
+    setErr('')
+    if (!f.full_name || !f.phone || positions.length === 0) { setErr('Name, phone, and at least one position are required.'); return }
+    setBusy(true)
+    const payMin = f.pay_min ? Number(f.pay_min) : null, payMax = f.pay_max ? Number(f.pay_max) : null
+    const { data, error } = await supabase.from('candidates').insert({
+      intake_channel: 'manual', status: 'applied', stage: 'applied', in_pool: false,
+      full_name: f.full_name, phone: f.phone, email: f.email || null, preferred_lang: 'en',
+      positions, state: f.borough ? 'NY' : null, borough: f.borough || null,
+      pay_min: payMin, pay_max: payMax, expected_pay: payMin != null && payMax != null ? `$${payMin}–${payMax}/hr` : null,
+      transportation: trans.length ? trans.join(', ') : null, availability: f.availability || null,
+      english_level: f.english_level || null, experience: f.experience || null,
+      security_licensed: positions.includes('Security') ? (lic === 'yes' ? true : lic === 'no' ? false : null) : null,
+    }).select().single()
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    onAdded(data as Candidate)
+  }
+
+  const pill = (on: boolean) => `text-xs font-medium px-3 py-1.5 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-auto p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold text-[#0D1B35]">Add candidate</h2><button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button></div>
+        <div className="space-y-3">
+          <input className={input} placeholder="Full name *" value={f.full_name} onChange={e => set('full_name', e.target.value)} />
+          <div className="grid grid-cols-2 gap-3"><input className={input} placeholder="Phone *" value={f.phone} onChange={e => set('phone', e.target.value)} /><input className={input} placeholder="Email" value={f.email} onChange={e => set('email', e.target.value)} /></div>
+          <div>
+            <div className="text-xs font-semibold text-gray-500 mb-1.5">Positions *</div>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-auto p-1">{MANUAL_POS.map(p => <button key={p} type="button" onClick={() => toggle(positions, setPositions, p)} className={pill(positions.includes(p))}>{p}</button>)}</div>
+          </div>
+          {positions.includes('Security') && (
+            <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Security license</div><div className="flex gap-2"><button type="button" onClick={() => setLic('yes')} className={pill(lic === 'yes')}>Licensed</button><button type="button" onClick={() => setLic('no')} className={pill(lic === 'no')}>Unlicensed</button></div></div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <select className={input} value={f.borough} onChange={e => set('borough', e.target.value)}><option value="">Borough…</option>{BOROUGHS.map(b => <option key={b} value={b}>{b}</option>)}</select>
+            <select className={input} value={f.english_level} onChange={e => set('english_level', e.target.value)}><option value="">English level…</option><option>Basic</option><option>Intermediate</option><option>Fluent</option></select>
+          </div>
+          <div className="grid grid-cols-2 gap-3"><input type="number" className={input} placeholder="Pay min $/hr" value={f.pay_min} onChange={e => set('pay_min', e.target.value)} /><input type="number" className={input} placeholder="Pay max $/hr" value={f.pay_max} onChange={e => set('pay_max', e.target.value)} /></div>
+          <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Transportation</div><div className="flex flex-wrap gap-1.5">{TRANSPORT.map(t => <button key={t} type="button" onClick={() => toggle(trans, setTrans, t)} className={pill(trans.includes(t))}>{t}</button>)}</div></div>
+          <select className={input} value={f.availability} onChange={e => set('availability', e.target.value)}><option value="">Availability…</option><option>Weekdays</option><option>Weekends & Holidays</option><option>All</option></select>
+          <textarea rows={2} className={input} placeholder="Notes / experience" value={f.experience} onChange={e => set('experience', e.target.value)} />
+          {err && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</p>}
+          <button disabled={busy} onClick={submit} className="w-full bg-[#D4A843] text-[#0D1B35] font-semibold py-2.5 rounded-lg disabled:opacity-50">{busy ? 'Adding…' : 'Add to New Queue'}</button>
+        </div>
+      </div>
     </div>
   )
 }
