@@ -5,11 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const DOMAIN = 'bsmfacilitysolutions.com'
-const ALLOWED_EMAILS = [
-  'strat.ops@bsmfacilitysolutions.com',
-  'pinny@bsmfacilitysolutions.com',
-  'payroll@bsmfacilitysolutions.com',
-]
 
 function LoginForm() {
   const [email, setEmail] = useState('')
@@ -22,7 +17,7 @@ function LoginForm() {
 
   useEffect(() => {
     const err = searchParams.get('error')
-    if (err === 'unauthorized') setError('Access denied — your account is not authorized for this application.')
+    if (err === 'unauthorized') setError('Access denied — only BSM accounts are authorized.')
     else if (err === 'auth_failed') setError('Authentication failed — please try again.')
   }, [searchParams])
 
@@ -34,15 +29,11 @@ function LoginForm() {
       setError(`Only @${DOMAIN} accounts are allowed.`)
       return
     }
-    if (!ALLOWED_EMAILS.includes(emailLower)) {
-      setError('Access denied — your account is not authorized for this application.')
-      return
-    }
     setLoading(true)
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false) }
-    else { router.push('/dashboard'); router.refresh() }
+    else { router.push('/hub'); router.refresh() }
   }
 
   async function handleGoogle() {
@@ -65,7 +56,7 @@ function LoginForm() {
             <span className="text-[#F5C072] font-bold text-2xl">B</span>
           </div>
           <h1 className="text-xl font-semibold text-[#0D1B35]">BSM Facility Solutions</h1>
-          <p className="text-sm text-gray-500 mt-1">Payroll Approval Dashboard</p>
+          <p className="text-sm text-gray-500 mt-1">Operations Platform</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
           <button onClick={handleGoogle} disabled={gLoading}
@@ -104,7 +95,7 @@ function LoginForm() {
             </button>
           </form>
         </div>
-        <p className="text-center text-xs text-gray-400 mt-5">Access restricted to authorized BSM accounts only</p>
+        <p className="text-center text-xs text-gray-400 mt-5">Access restricted to BSM accounts</p>
       </div>
     </div>
   )
