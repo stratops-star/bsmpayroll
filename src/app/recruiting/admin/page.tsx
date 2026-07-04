@@ -1,7 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
+
+const NAVY = '#0D1B35'
+const GOLD = '#D4A843'
 
 type AppUser = {
   id: string
@@ -12,29 +15,37 @@ type AppUser = {
   active: boolean
 }
 
-const ROLES = ['admin', 'recruiter', 'manager', 'viewer']
+const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'viewer']
 const DEPTS = ['recruiting', 'payroll']
+// Picking a role auto-grants the matching module(s); pills can still override.
+const ROLE_DEPTS: Record<string, string[]> = {
+  admin: ['recruiting', 'payroll'],
+  payroll: ['payroll'],
+  recruiter: ['recruiting'],
+  viewer: ['recruiting'],
+  manager: [],
+}
+const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706', '#4F46E5', '#BE123C']
+const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+const hue = (s: string) => AV[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AV.length]
 
 export default function AdminPage() {
   const [supabase] = useState(() => createClient())
   const [users, setUsers] = useState<AppUser[]>([])
-  const [status, setStatus] = useState('Loading…')
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [status, setStatus] = useState<'loading' | 'denied' | 'ready'>('loading')
+  const [msg, setMsg] = useState('')
+  const [q, setQ] = useState('')
+  const [toast, setToast] = useState('')
 
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setStatus('Please sign in.'); return }
-
-      const { data: me } = await supabase
-        .from('app_users').select('role').eq('id', user.id).single()
-      if (!me || me.role !== 'admin') { setStatus('Admins only.'); return }
-      setIsAdmin(true)
-
-      const { data: all, error } = await supabase
-        .from('app_users').select('*').order('email')
-      if (error) { setStatus('Error: ' + error.message); return }
-      setUsers(all ?? []); setStatus('')
+      if (!user) { setStatus('denied'); return }
+      const { data: me } = await supabase.from('app_users').select('role').eq('id', user.id).single()
+      if (me?.role !== 'admin') { setStatus('denied'); return }
+      const { data: all, error } = await supabase.from('app_users').select('*').order('email')
+      if (error) { setMsg(error.message); return }
+      setUsers(all ?? []); setStatus('ready')
     })()
   }, [supabase])
 
@@ -43,81 +54,122 @@ export default function AdminPage() {
   }
   function toggleDept(u: AppUser, d: string) {
     const has = u.departments?.includes(d)
-    patch(u.id, {
-      departments: has ? u.departments.filter(x => x !== d) : [...(u.departments || []), d],
-    })
+    patch(u.id, { departments: has ? u.departments.filter(x => x !== d) : [...(u.departments || []), d] })
   }
   async function save(u: AppUser) {
-    setStatus('Saving…')
-    const { error } = await supabase
-      .from('app_users')
-      .update({ role: u.role, departments: u.departments, active: u.active })
-      .eq('id', u.id)
-    setStatus(error ? 'Error: ' + error.message : `Saved ${u.email}`)
+    const { error } = await supabase.from('app_users')
+      .update({ role: u.role, departments: u.departments, active: u.active }).eq('id', u.id)
+    flash(error ? 'Error: ' + error.message : `Saved ${u.email.split('@')[0]}`)
   }
+  let t: any
+  function flash(m: string) { setToast(m); clearTimeout(t); t = setTimeout(() => setToast(''), 2200) }
 
-  if (!isAdmin) return <div style={{ padding: 24, fontFamily: 'system-ui' }}>{status}</div>
+  const filtered = useMemo(() => {
+    const s = q.toLowerCase()
+    return users.filter(u => u.email.toLowerCase().includes(s) || (u.full_name || '').toLowerCase().includes(s))
+  }, [users, q])
+  const pending = filtered.filter(u => !u.departments?.length)
+  const assigned = filtered.filter(u => u.departments?.length)
+
+  if (status === 'loading') return <Shell><p style={{ color: '#94A3B8' }}>Loading…</p></Shell>
+  if (status === 'denied') return <Shell><p style={{ color: '#94A3B8' }}>Admins only.{msg && ' ' + msg}</p></Shell>
 
   return (
-    <div style={{ padding: 24, maxWidth: 980, margin: '0 auto', fontFamily: 'system-ui' }}>
-      <h1 style={{ color: '#0D1B35' }}>User Access</h1>
-      <p style={{ color: '#6B7280' }}>
-        People appear here after their first BSM sign-in. Assign a role and departments, then Save.
-      </p>
-      <p style={{ color: '#047857', minHeight: 20 }}>{status}</p>
+    <div style={{ minHeight: '100vh', background: '#F5F6FA', fontFamily: 'system-ui, sans-serif' }}>
+      {/* header */}
+      <div style={{ background: NAVY, color: '#fff', padding: '20px 24px', borderBottom: `3px solid ${GOLD}` }}>
+        <div style={{ maxWidth: 940, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="/hub" style={{ color: '#8895AC', textDecoration: 'none', fontSize: 13 }}>← Hub</a>
+          <div style={{ marginLeft: 6 }}>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>User Access</div>
+            <div style={{ fontSize: 12, color: '#8895AC' }}>Assign roles and departments</div>
+          </div>
+        </div>
+      </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: '#6B7280', borderBottom: '1px solid #E5E7EB' }}>
-            <th style={{ padding: 8 }}>User</th>
-            <th style={{ padding: 8 }}>Role</th>
-            <th style={{ padding: 8 }}>Departments</th>
-            <th style={{ padding: 8 }}>Active</th>
-            <th style={{ padding: 8 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.id} style={{ borderBottom: '1px solid #F1F1F4' }}>
-              <td style={{ padding: 8 }}>
-                <div style={{ fontWeight: 600 }}>{u.full_name || '—'}</div>
-                <div style={{ color: '#6B7280', fontSize: 12 }}>{u.email}</div>
-              </td>
-              <td style={{ padding: 8 }}>
-                <select value={u.role} onChange={e => patch(u.id, { role: e.target.value })}>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </td>
-              <td style={{ padding: 8 }}>
-                {DEPTS.map(d => (
-                  <label key={d} style={{ marginRight: 12, whiteSpace: 'nowrap' }}>
-                    <input
-                      type="checkbox"
-                      checked={u.departments?.includes(d) || false}
-                      onChange={() => toggleDept(u, d)}
-                    /> {d}
-                  </label>
-                ))}
-              </td>
-              <td style={{ padding: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={u.active}
-                  onChange={e => patch(u.id, { active: e.target.checked })}
-                />
-              </td>
-              <td style={{ padding: 8 }}>
-                <button
-                  onClick={() => save(u)}
-                  style={{ background: '#0D1B35', color: '#fff', border: 0, borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
-                >
-                  Save
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ maxWidth: 940, margin: '0 auto', padding: '22px 24px 60px' }}>
+        <input
+          value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…"
+          style={{ width: '100%', maxWidth: 360, padding: '10px 14px', borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', marginBottom: 22 }}
+        />
+
+        {pending.length > 0 && (
+          <>
+            <SectionLabel>Pending assignment · {pending.length}</SectionLabel>
+            {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} pending />)}
+          </>
+        )}
+
+        <SectionLabel>Active users · {assigned.length}</SectionLabel>
+        {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} />)}
+        {filtered.length === 0 && <p style={{ color: '#6B7280' }}>No users match “{q}”.</p>}
+      </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', background: NAVY, color: '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 12px 30px -8px rgba(0,0,0,.4)' }}>
+          <span style={{ color: GOLD }}>✓</span> {toast}
+        </div>
+      )}
     </div>
   )
+}
+
+function Row({ u, patch, toggleDept, save, pending }: {
+  u: AppUser
+  patch: (id: string, p: Partial<AppUser>) => void
+  toggleDept: (u: AppUser, d: string) => void
+  save: (u: AppUser) => void
+  pending?: boolean
+}) {
+  const name = u.full_name || u.email.split('@')[0]
+  return (
+    <div style={{
+      background: '#fff', border: `1px solid ${pending ? '#FDE68A' : '#EEF0F4'}`, borderRadius: 14,
+      padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+    }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', background: hue(u.email), color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{ini(name)}</div>
+
+      <div style={{ minWidth: 160, flex: '1 1 160px' }}>
+        <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{name}</div>
+        <div style={{ color: '#6B7280', fontSize: 12 }}>{u.email}</div>
+      </div>
+
+      <select value={u.role} onChange={e => { const r = e.target.value; patch(u.id, { role: r, departments: ROLE_DEPTS[r] ?? u.departments }) }}
+        style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'inherit', background: '#fff' }}>
+        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+      </select>
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        {DEPTS.map(d => {
+          const on = u.departments?.includes(d)
+          return (
+            <button key={d} onClick={() => toggleDept(u, d)}
+              style={{
+                padding: '7px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                border: on ? `1px solid ${NAVY}` : '1px solid #E5E7EB',
+                background: on ? NAVY : '#fff', color: on ? '#fff' : '#9CA3AF',
+              }}>
+              {on ? '✓ ' : ''}{d}
+            </button>
+          )
+        })}
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#6B7280', cursor: 'pointer' }}>
+        <input type="checkbox" checked={u.active} onChange={e => patch(u.id, { active: e.target.checked })} /> active
+      </label>
+
+      <button onClick={() => save(u)}
+        style={{ marginLeft: 'auto', background: GOLD, color: NAVY, border: 0, borderRadius: 9, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+        Save
+      </button>
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.7px', color: '#9CA3AF', fontWeight: 700, margin: '18px 2px 10px' }}>{children}</div>
+}
+function Shell({ children }: { children: React.ReactNode }) {
+  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F5F6FA', fontFamily: 'system-ui' }}>{children}</div>
 }
