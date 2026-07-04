@@ -4,15 +4,15 @@ import { useState } from 'react'
 
 type Lang = 'en' | 'es'
 
-// ── Positions with micro-descriptions. Porter has sub-types. EDIT FREELY. ──
+// ── Positions. Porter has sub-types. Some roles trigger extra fields. EDIT FREELY. ──
 type Pos = { name: string; en: string; es: string; subs?: { name: string; en: string; es: string }[] }
 const POSITIONS: Pos[] = [
   {
     name: 'Porter', en: 'General building upkeep and trash handling.', es: 'Mantenimiento general del edificio y manejo de basura.',
     subs: [
-      { name: 'Garbage Porter', en: 'Collects and hauls trash and recycling to the compactor or curb.', es: 'Recoge y lleva basura y reciclaje al compactador o la acera.' },
+      { name: 'Garbage Porter', en: 'Collects and hauls trash and recycling to the curb. 6 PM–12 AM. Must have a car.', es: 'Recoge y lleva basura y reciclaje a la acera. 6 PM–12 AM. Debe tener auto.' },
       { name: 'Cleaning Porter', en: 'Cleans lobbies, hallways, common areas, and restrooms.', es: 'Limpia vestíbulos, pasillos, áreas comunes y baños.' },
-      { name: 'Morning Garbage Porter', en: 'Early-shift trash and recycling removal before the building opens.', es: 'Retiro de basura y reciclaje en el turno de la mañana antes de abrir el edificio.' },
+      { name: 'Morning Garbage Porter', en: 'Early-shift trash; brings cans back and cleans the perimeter as needed. 8 AM–5 PM. Must have a car.', es: 'Turno de la mañana; regresa los botes y limpia el perímetro si es necesario. 8 AM–5 PM. Debe tener auto.' },
     ],
   },
   { name: 'Concierge', en: 'Greets residents and guests, handles packages and front-desk requests.', es: 'Recibe a residentes e invitados, maneja paquetes y solicitudes de recepción.' },
@@ -25,8 +25,15 @@ const POSITIONS: Pos[] = [
   { name: 'Parking Attendant', en: 'Manages parking areas, entry/exit, and vehicle flow.', es: 'Gestiona áreas de estacionamiento, entrada/salida y flujo de vehículos.' },
   { name: 'Valet Parking', en: 'Parks and retrieves vehicles for residents and guests.', es: 'Estaciona y entrega vehículos a residentes e invitados.' },
   { name: 'Lease Coordinator', en: 'Manages leasing paperwork, applications, and move-in coordination.', es: 'Gestiona documentos de arrendamiento, solicitudes y coordinación de mudanzas.' },
-  { name: 'Operations Manager', en: 'Supervises staff, schedules coverage, and manages site operations.', es: 'Supervisa al personal, programa la cobertura y gestiona las operaciones del sitio.' },
+  { name: 'Area Supervisor', en: 'Entry management role — the start of the path. Promotes to Operations Supervisor, then Operations Manager.', es: 'Puesto inicial de gestión — el comienzo del camino. Asciende a Supervisor de Operaciones y luego a Gerente de Operaciones.' },
+  { name: 'Operations Supervisor', en: 'Second step in the path (typically after Area Supervisor). Oversees sites and staff.', es: 'Segundo paso del camino (normalmente después de Supervisor de Área). Supervisa sitios y personal.' },
+  { name: 'Operations Manager', en: 'Third step in the path. Manages operations across multiple sites.', es: 'Tercer paso del camino. Gestiona operaciones en varios sitios.' },
+  { name: 'Sr. Operations Manager', en: 'Manages a group of Operations Managers.', es: 'Gestiona un grupo de Gerentes de Operaciones.' },
 ]
+
+// Roles that trigger conditional fields
+const EXPERIENCE_ROLES = ['Superintendent', 'Concierge', 'Security']
+const MAX_POSITIONS = 3
 
 const BOROUGHS = ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island']
 const TRANSPORT = [
@@ -44,14 +51,16 @@ const S: Record<Lang, Record<string, string>> = {
   en: {
     title: 'Join the BSM team', subtitle: 'Tell us about yourself and a recruiter will reach out.',
     name: 'Full name', phone: 'Phone', email: 'Email',
-    position: 'Position you\u2019re applying for', pickType: 'Which type?',
+    position: 'Positions you\u2019re applying for', positionHint: 'Choose up to 3', pickType: 'Which type?',
+    priorExp: 'Prior experience as', licensed: 'Are you a licensed security guard?', yesLic: 'Licensed', noLic: 'Unlicensed',
+    licenseUpload: 'Upload your license / certificate',
     state: 'State', city: 'City', borough: 'Borough', chooseState: 'Select\u2026', chooseBorough: 'Select borough\u2026',
     workAreas: 'Open to work in (boroughs)', payLow: 'Lowest pay ($/hr)', payHigh: 'Highest pay ($/hr)',
     transport: 'How will you get to work?', avail: 'Availability',
     english: 'English level', basic: 'Basic', intermediate: 'Intermediate', fluent: 'Fluent',
     source: 'How did you hear about us?', experience: 'Briefly, your work experience', resume: 'Résumé (optional)',
     submit: 'Submit application', submitting: 'Submitting\u2026',
-    reqCore: 'Please fill in name, phone, email, and position.', reqSub: 'Please choose which type of Porter.',
+    reqCore: 'Please fill in name, phone, email, and at least one position.', reqSub: 'Please choose which type of Porter.',
     reqPay: 'Please enter your expected pay range.', payOrder: 'Lowest pay can\u2019t be higher than highest.',
     okTitle: 'Thank you!', okBody: 'We received your application. A recruiter will contact you soon.',
     another: 'Submit another', errorMsg: 'Something went wrong. Please try again.',
@@ -59,14 +68,16 @@ const S: Record<Lang, Record<string, string>> = {
   es: {
     title: '\u00danete al equipo de BSM', subtitle: 'Cu\u00e9ntanos sobre ti y un reclutador se comunicar\u00e1 contigo.',
     name: 'Nombre completo', phone: 'Tel\u00e9fono', email: 'Correo electr\u00f3nico',
-    position: 'Puesto al que aplicas', pickType: '\u00bfQu\u00e9 tipo?',
+    position: 'Puestos a los que aplicas', positionHint: 'Elige hasta 3', pickType: '\u00bfQu\u00e9 tipo?',
+    priorExp: 'Experiencia previa como', licensed: '\u00bfEres guardia de seguridad con licencia?', yesLic: 'Con licencia', noLic: 'Sin licencia',
+    licenseUpload: 'Sube tu licencia / certificado',
     state: 'Estado', city: 'Ciudad', borough: 'Condado', chooseState: 'Seleccionar\u2026', chooseBorough: 'Seleccionar condado\u2026',
     workAreas: 'Dispuesto a trabajar en (condados)', payLow: 'Pago m\u00ednimo ($/hr)', payHigh: 'Pago m\u00e1ximo ($/hr)',
     transport: '\u00bfC\u00f3mo llegar\u00e1s al trabajo?', avail: 'Disponibilidad',
     english: 'Nivel de ingl\u00e9s', basic: 'B\u00e1sico', intermediate: 'Intermedio', fluent: 'Fluido',
     source: '\u00bfC\u00f3mo supiste de nosotros?', experience: 'Brevemente, tu experiencia laboral', resume: 'Curr\u00edculum (opcional)',
     submit: 'Enviar solicitud', submitting: 'Enviando\u2026',
-    reqCore: 'Completa nombre, tel\u00e9fono, correo y puesto.', reqSub: 'Elige qu\u00e9 tipo de Portero.',
+    reqCore: 'Completa nombre, tel\u00e9fono, correo y al menos un puesto.', reqSub: 'Elige qu\u00e9 tipo de Portero.',
     reqPay: 'Ingresa tu rango de pago esperado.', payOrder: 'El pago m\u00ednimo no puede ser mayor que el m\u00e1ximo.',
     okTitle: '\u00a1Gracias!', okBody: 'Recibimos tu solicitud. Un reclutador te contactar\u00e1 pronto.',
     another: 'Enviar otra', errorMsg: 'Algo sali\u00f3 mal. Int\u00e9ntalo de nuevo.',
@@ -84,8 +95,11 @@ export default function CareersPage() {
     full_name: '', phone: '', email: '', state: '', city: '', borough: '',
     pay_min: '', pay_max: '', english_level: '', referral_source: '', experience: '',
   })
-  const [position, setPosition] = useState('')
+  const [positions, setPositions] = useState<string[]>([])
   const [subType, setSubType] = useState('')
+  const [roleExp, setRoleExp] = useState<Record<string, string>>({})
+  const [securityLicensed, setSecurityLicensed] = useState<'' | 'yes' | 'no'>('')
+  const [license, setLicense] = useState<File | null>(null)
   const [workAreas, setWorkAreas] = useState<string[]>([])
   const [transport, setTransport] = useState<string[]>([])
   const [availability, setAvailability] = useState('')
@@ -94,12 +108,26 @@ export default function CareersPage() {
   const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
   const toggle = (arr: string[], setArr: (a: string[]) => void, v: string) =>
     setArr(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
-  const selectedPos = POSITIONS.find(p => p.name === position)
+
+  function togglePosition(name: string) {
+    setPositions(prev => {
+      if (prev.includes(name)) {
+        if (name === 'Porter') setSubType('')
+        if (name === 'Security') { setSecurityLicensed(''); setLicense(null) }
+        return prev.filter(x => x !== name)
+      }
+      if (prev.length >= MAX_POSITIONS) return prev // cap at 3
+      return [...prev, name]
+    })
+  }
+
+  const has = (n: string) => positions.includes(n)
+  const capped = positions.length >= MAX_POSITIONS
 
   async function submit() {
     setErr('')
-    if (!f.full_name || !f.phone || !f.email || !position) { setErr(tt.reqCore); return }
-    if (selectedPos?.subs && !subType) { setErr(tt.reqSub); return }
+    if (!f.full_name || !f.phone || !f.email || positions.length === 0) { setErr(tt.reqCore); return }
+    if (has('Porter') && !subType) { setErr(tt.reqSub); return }
     if (!f.pay_min || !f.pay_max) { setErr(tt.reqPay); return }
     if (Number(f.pay_min) > Number(f.pay_max)) { setErr(tt.payOrder); return }
     setBusy(true)
@@ -107,11 +135,14 @@ export default function CareersPage() {
       const fd = new FormData()
       Object.entries(f).forEach(([k, v]) => fd.append(k, v))
       fd.append('preferred_lang', lang)
-      fd.append('position', position)
+      positions.forEach(p => fd.append('positions', p))
       fd.append('sub_type', subType)
       fd.append('availability', availability)
       workAreas.forEach(w => fd.append('work_areas', w))
       transport.forEach(t => fd.append('transportation', t))
+      fd.append('role_experience', JSON.stringify(roleExp))
+      if (has('Security')) fd.append('security_licensed', securityLicensed === 'yes' ? 'true' : securityLicensed === 'no' ? 'false' : '')
+      if (license) fd.append('license', license)
       fd.append('company', '') // honeypot
       if (resume) fd.append('resume', resume)
       const res = await fetch('/api/apply', { method: 'POST', body: fd })
@@ -164,22 +195,28 @@ export default function CareersPage() {
               <div><label className={label}>{tt.email} *</label><input type="email" className={input} value={f.email} onChange={e => set('email', e.target.value)} /></div>
             </div>
 
-            {/* Position cards */}
+            {/* Positions (multi-select, max 3) */}
             <div>
-              <label className={label}>{tt.position} *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className={label + ' mb-0'}>{tt.position} *</label>
+                <span className="text-xs text-gray-400">{positions.length}/{MAX_POSITIONS} · {tt.positionHint}</span>
+              </div>
               <div className="space-y-2">
                 {POSITIONS.map(p => {
-                  const on = position === p.name
+                  const on = has(p.name)
+                  const disabled = !on && capped
                   return (
                     <div key={p.name}>
-                      <button type="button" onClick={() => { setPosition(p.name); setSubType('') }}
-                        className={`w-full text-left rounded-xl border p-3 transition-colors ${on ? 'border-[#D4A843] bg-[#D4A843]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <button type="button" disabled={disabled} onClick={() => togglePosition(p.name)}
+                        className={`w-full text-left rounded-xl border p-3 transition-colors ${on ? 'border-[#D4A843] bg-[#D4A843]/5' : disabled ? 'border-gray-100 opacity-40 cursor-not-allowed' : 'border-gray-200 hover:border-gray-300'}`}>
                         <div className="flex items-center gap-2">
-                          <span className={`w-4 h-4 rounded-full border flex-shrink-0 grid place-items-center ${on ? 'border-[#D4A843]' : 'border-gray-300'}`}>{on && <span className="w-2 h-2 rounded-full bg-[#D4A843]" />}</span>
+                          <span className={`w-4 h-4 rounded border flex-shrink-0 grid place-items-center ${on ? 'bg-[#D4A843] border-[#D4A843]' : 'border-gray-300'}`}>{on && <span className="text-white text-[10px] leading-none">✓</span>}</span>
                           <span className="font-medium text-sm text-[#0D1B35]">{p.name}</span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1 ml-6">{lang === 'es' ? p.es : p.en}</p>
                       </button>
+
+                      {/* Porter sub-type */}
                       {on && p.subs && (
                         <div className="ml-6 mt-2 space-y-1.5">
                           <div className="text-xs font-medium text-gray-500">{tt.pickType}</div>
@@ -196,6 +233,32 @@ export default function CareersPage() {
                               </button>
                             )
                           })}
+                        </div>
+                      )}
+
+                      {/* Prior experience (Super / Concierge / Security) */}
+                      {on && EXPERIENCE_ROLES.includes(p.name) && (
+                        <div className="ml-6 mt-2">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">{tt.priorExp} {p.name}</label>
+                          <textarea rows={2} className={input} value={roleExp[p.name] || ''} onChange={e => setRoleExp(prev => ({ ...prev, [p.name]: e.target.value }))} />
+                        </div>
+                      )}
+
+                      {/* Security license */}
+                      {on && p.name === 'Security' && (
+                        <div className="ml-6 mt-2">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">{tt.licensed}</label>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => setSecurityLicensed('yes')} className={pill(securityLicensed === 'yes')}>{tt.yesLic}</button>
+                            <button type="button" onClick={() => { setSecurityLicensed('no'); setLicense(null) }} className={pill(securityLicensed === 'no')}>{tt.noLic}</button>
+                          </div>
+                          {securityLicensed === 'yes' && (
+                            <div className="mt-2">
+                              <label className="block text-xs font-medium text-gray-500 mb-1">{tt.licenseUpload}</label>
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setLicense(e.target.files?.[0] || null)}
+                                className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-gray-200 file:bg-gray-50 file:text-gray-700 file:text-sm" />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
