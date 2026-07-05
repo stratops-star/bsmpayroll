@@ -1,0 +1,75 @@
+// Shared reference data for recruiting forms
+
+export const NATIONALITIES: string[] = [
+  'Afghan', 'Albanian', 'Algerian', 'American', 'Andorran', 'Angolan', 'Antiguan', 'Argentine', 'Armenian', 'Australian',
+  'Austrian', 'Azerbaijani', 'Bahamian', 'Bahraini', 'Bangladeshi', 'Barbadian', 'Belarusian', 'Belgian', 'Belizean', 'Beninese',
+  'Bhutanese', 'Bolivian', 'Bosnian', 'Botswanan', 'Brazilian', 'British', 'Bruneian', 'Bulgarian', 'Burkinabé', 'Burmese',
+  'Burundian', 'Cambodian', 'Cameroonian', 'Canadian', 'Cape Verdean', 'Central African', 'Chadian', 'Chilean', 'Chinese', 'Colombian',
+  'Comoran', 'Congolese', 'Costa Rican', 'Croatian', 'Cuban', 'Cypriot', 'Czech', 'Danish', 'Djiboutian', 'Dominican',
+  'Dominican (Republic)', 'Dutch', 'East Timorese', 'Ecuadorian', 'Egyptian', 'Emirati', 'Equatorial Guinean', 'Eritrean', 'Estonian', 'Eswatini',
+  'Ethiopian', 'Fijian', 'Filipino', 'Finnish', 'French', 'Gabonese', 'Gambian', 'Georgian', 'German', 'Ghanaian',
+  'Greek', 'Grenadian', 'Guatemalan', 'Guinean', 'Guinea-Bissauan', 'Guyanese', 'Haitian', 'Honduran', 'Hungarian', 'Icelandic',
+  'Indian', 'Indonesian', 'Iranian', 'Iraqi', 'Irish', 'Israeli', 'Italian', 'Ivorian', 'Jamaican', 'Japanese',
+  'Jordanian', 'Kazakh', 'Kenyan', 'Kiribati', 'Kosovar', 'Kuwaiti', 'Kyrgyz', 'Laotian', 'Latvian', 'Lebanese',
+  'Liberian', 'Libyan', 'Liechtensteiner', 'Lithuanian', 'Luxembourgish', 'Macedonian', 'Malagasy', 'Malawian', 'Malaysian', 'Maldivian',
+  'Malian', 'Maltese', 'Marshallese', 'Mauritanian', 'Mauritian', 'Mexican', 'Micronesian', 'Moldovan', 'Monégasque', 'Mongolian',
+  'Montenegrin', 'Moroccan', 'Mozambican', 'Namibian', 'Nauruan', 'Nepali', 'New Zealander', 'Nicaraguan', 'Nigerien', 'Nigerian',
+  'North Korean', 'Norwegian', 'Omani', 'Pakistani', 'Palauan', 'Palestinian', 'Panamanian', 'Papua New Guinean', 'Paraguayan', 'Peruvian',
+  'Polish', 'Portuguese', 'Puerto Rican', 'Qatari', 'Romanian', 'Russian', 'Rwandan', 'Saint Lucian', 'Salvadoran', 'Samoan',
+  'San Marinese', 'São Toméan', 'Saudi', 'Senegalese', 'Serbian', 'Seychellois', 'Sierra Leonean', 'Singaporean', 'Slovak', 'Slovenian',
+  'Solomon Islander', 'Somali', 'South African', 'South Korean', 'South Sudanese', 'Spanish', 'Sri Lankan', 'Sudanese', 'Surinamese', 'Swedish',
+  'Swiss', 'Syrian', 'Taiwanese', 'Tajik', 'Tanzanian', 'Thai', 'Togolese', 'Tongan', 'Trinidadian', 'Tunisian',
+  'Turkish', 'Turkmen', 'Tuvaluan', 'Ugandan', 'Ukrainian', 'Uruguayan', 'Uzbek', 'Vanuatuan', 'Venezuelan', 'Vietnamese',
+  'Yemeni', 'Zambian', 'Zimbabwean', 'Other',
+]
+
+export const ETHNICITIES: string[] = [
+  'Hispanic / Latino',
+  'White / Caucasian',
+  'Black / African American',
+  'Afro-Latino',
+  'Asian',
+  'South Asian',
+  'Southeast Asian',
+  'East Asian',
+  'Middle Eastern / North African',
+  'Native American / Indigenous',
+  'Pacific Islander',
+  'Caribbean',
+  'Mixed / Multiracial',
+  'Other',
+  'Prefer not to say',
+]
+
+// Bilingual labels for forms (EN / ES)
+export type L = { en: string; es: string }
+export const TR = {
+  fullName: { en: 'Full name', es: 'Nombre completo' },
+  phone: { en: 'Phone', es: 'Teléfono' },
+  email: { en: 'Email', es: 'Correo electrónico' },
+  positions: { en: 'Positions', es: 'Puestos' },
+  borough: { en: 'Borough', es: 'Condado' },
+  english: { en: 'English level', es: 'Nivel de inglés' },
+  payMin: { en: 'Pay min $/hr', es: 'Pago mín $/hr' },
+  payMax: { en: 'Pay max $/hr', es: 'Pago máx $/hr' },
+  transportation: { en: 'Transportation', es: 'Transporte' },
+  availability: { en: 'Availability', es: 'Disponibilidad' },
+  notes: { en: 'Notes / experience', es: 'Notas / experiencia' },
+  addToQueue: { en: 'Add to New Queue', es: 'Agregar a la cola' },
+  addCandidate: { en: 'Add candidate', es: 'Agregar candidato' },
+  required: { en: 'required', es: 'obligatorio' },
+  selectBorough: { en: 'Borough…', es: 'Condado…' },
+  selectEnglish: { en: 'English level…', es: 'Nivel de inglés…' },
+  selectAvailability: { en: 'Availability…', es: 'Disponibilidad…' },
+  fillRequired: { en: 'Please fill all required fields.', es: 'Complete todos los campos obligatorios.' },
+  gender: { en: 'Gender', es: 'Género' },
+  age: { en: 'Age', es: 'Edad' },
+  nationality: { en: 'Nationality', es: 'Nacionalidad' },
+  ethnicity: { en: 'Ethnicity', es: 'Etnia' },
+  timeInUsa: { en: 'Time in USA', es: 'Tiempo en EE.UU.' },
+  years: { en: 'Years', es: 'Años' },
+  months: { en: 'Months', es: 'Meses' },
+  search: { en: 'Search…', es: 'Buscar…' },
+} satisfies Record<string, L>
+
+export const t2 = (l: L, lang: 'en' | 'es') => l[lang] || l.en
