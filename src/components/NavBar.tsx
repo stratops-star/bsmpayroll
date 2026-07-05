@@ -6,8 +6,8 @@ import { createClient } from '@/lib/supabase-browser'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 
 interface NavBarProps {
-  lang: Lang
-  onLangChange: (l: Lang) => void
+  lang?: Lang
+  onLangChange?: (l: Lang) => void
   userEmail?: string
   lastRefreshed?: string
   onRefresh?: () => void
@@ -23,14 +23,18 @@ const MODULE_MAP: Record<string, Mod> = {
   recruiting: { label: 'Recruiting', href: '/recruiting' },
 }
 
-export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour, syncing }: NavBarProps) {
+export default function NavBar({ lang = 'en', onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour, syncing }: NavBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const dir = TRANSLATIONS[lang].dir
 
+  const isRecruiting = !!pathname && pathname.startsWith('/recruiting')
   const isDashboard = pathname === '/dashboard'
+  const showLang = !!onLangChange && !isRecruiting
+
+  const [email, setEmail] = useState(userEmail || '')
 
   // ── Module switcher ───────────────────────────────────────────────
   const [switcherMods, setSwitcherMods] = useState<Mod[]>([])
@@ -42,8 +46,8 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: me } = await supabase
-        .from('app_users').select('role, departments, active').eq('id', user.id).single()
+      if (!userEmail && user.email) setEmail(user.email)
+      const { data: me } = await supabase.from('app_users').select('role, departments, active').eq('id', user.id).single()
       if (!me?.active) return
       const admin = me.role === 'admin'
       setIsAdmin(admin)
@@ -51,22 +55,16 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
     })()
   }, [])
 
-  // close on outside click
   useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) setSwitcherOpen(false)
-    }
+    function onClick(e: MouseEvent) { if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) setSwitcherOpen(false) }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  // The logo is a switcher only if the user has 2+ modules OR is admin
   const canSwitch = switcherMods.length > 1 || isAdmin
+  const homeHref = isRecruiting ? '/recruiting' : '/dashboard'
 
-  async function signOut() {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  async function signOut() { await supabase.auth.signOut(); router.push('/login') }
 
   const links = [
     { label: t(lang, 'nav_past_tasks'),     href: '/dashboard/past-tasks', badge: 0 },
@@ -77,12 +75,11 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
   return (
     <header className="bg-[#0D1B35] h-[48px] px-4 flex items-center justify-between gap-3 relative z-50" dir={dir}>
       <div className="flex items-center gap-3 flex-shrink-0">
-        {/* Logo — module switcher when the user has more than one module */}
         <div className="relative" ref={switcherRef}>
           <button
-            onClick={() => canSwitch ? setSwitcherOpen(o => !o) : router.push('/dashboard')}
+            onClick={() => canSwitch ? setSwitcherOpen(o => !o) : router.push(homeHref)}
             className="w-7 h-7 rounded-lg bg-[#D4A843] flex items-center justify-center font-bold text-[#0D1B35] text-xs flex-shrink-0"
-            title={canSwitch ? 'Switch module' : 'Go to dashboard'}>
+            title={canSwitch ? 'Switch module' : 'Home'}>
             B
           </button>
 
@@ -113,7 +110,9 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
         </div>
 
         <div className="w-px h-4 bg-white/15 hidden sm:block" />
-        {isDashboard ? (
+        {isRecruiting ? (
+          <span className="text-white/50 text-xs hidden sm:block">Recruiting</span>
+        ) : isDashboard ? (
           <span className="text-white/50 text-xs hidden sm:block">{t(lang, 'nav_dashboard')}</span>
         ) : (
           <button onClick={() => router.push('/dashboard')}
@@ -125,29 +124,31 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
 
       {/* Desktop nav */}
       <div className="hidden md:flex items-center gap-3">
-        <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
-          {(['en','es','yi'] as Lang[]).map(l => (
-            <button key={l} onClick={() => onLangChange(l)}
-              className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${lang === l ? 'bg-[#D4A843] text-[#0D1B35]' : 'text-white/60 hover:text-white'}`}>
-              {l === 'en' ? 'EN' : l === 'es' ? 'ES' : 'יי'}
-            </button>
-          ))}
-        </div>
+        {showLang && (
+          <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
+            {(['en','es','yi'] as Lang[]).map(l => (
+              <button key={l} onClick={() => onLangChange!(l)}
+                className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${lang === l ? 'bg-[#D4A843] text-[#0D1B35]' : 'text-white/60 hover:text-white'}`}>
+                {l === 'en' ? 'EN' : l === 'es' ? 'ES' : 'יי'}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {links.map(link => (
+        {!isRecruiting && links.map(link => (
           <button key={link.href} onClick={() => router.push(link.href)}
             className={`text-xs transition-colors flex items-center gap-1.5 ${pathname === link.href ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
             {link.label}
-            {link.badge > 0 && (
-              <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded">{link.badge}</span>
-            )}
+            {link.badge > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded">{link.badge}</span>}
           </button>
         ))}
 
-        <button onClick={() => router.push('/dashboard/help')}
-          className={`text-xs transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
-          {t(lang, 'nav_tutorial')}
-        </button>
+        {!isRecruiting && (
+          <button onClick={() => router.push('/dashboard/help')}
+            className={`text-xs transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/55 hover:text-white'}`}>
+            {t(lang, 'nav_tutorial')}
+          </button>
+        )}
         {onRelaunchTour && isDashboard && (
           <button onClick={onRelaunchTour}
             className="text-xs text-white/40 hover:text-[#D4A843] transition-colors border border-white/10 px-2 py-0.5 rounded-md"
@@ -157,20 +158,22 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
         )}
 
         <div className="w-px h-4 bg-white/15" />
-        <span className="text-white/35 text-xs truncate max-w-[120px]">{userEmail}</span>
+        <span className="text-white/35 text-xs truncate max-w-[130px]">{email}</span>
         <button onClick={signOut} className="text-white/35 text-xs hover:text-white transition-colors">{t(lang, 'nav_signout')}</button>
       </div>
 
-      {/* Mobile: lang + hamburger */}
+      {/* Mobile */}
       <div className="flex md:hidden items-center gap-2">
-        <div className="flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5">
-          {(['en','es','yi'] as Lang[]).map(l => (
-            <button key={l} onClick={() => onLangChange(l)}
-              className={`text-xs px-1.5 py-0.5 rounded-md transition-colors font-medium ${lang === l ? 'bg-[#D4A843] text-[#0D1B35]' : 'text-white/60 hover:text-white'}`}>
-              {l === 'en' ? 'EN' : l === 'es' ? 'ES' : 'יי'}
-            </button>
-          ))}
-        </div>
+        {showLang && (
+          <div className="flex items-center gap-0.5 bg-white/10 rounded-lg p-0.5">
+            {(['en','es','yi'] as Lang[]).map(l => (
+              <button key={l} onClick={() => onLangChange!(l)}
+                className={`text-xs px-1.5 py-0.5 rounded-md transition-colors font-medium ${lang === l ? 'bg-[#D4A843] text-[#0D1B35]' : 'text-white/60 hover:text-white'}`}>
+                {l === 'en' ? 'EN' : l === 'es' ? 'ES' : 'יי'}
+              </button>
+            ))}
+          </div>
+        )}
         <button onClick={() => setMenuOpen(!menuOpen)}
           className="w-8 h-8 rounded-md border border-white/10 bg-white/8 flex items-center justify-center hover:bg-white/15 transition-colors">
           {menuOpen
@@ -200,33 +203,27 @@ export default function NavBar({ lang, onLangChange, userEmail, lastRefreshed, o
                 )}
               </div>
             )}
-            {!isDashboard && (
+            {!isRecruiting && !isDashboard && (
               <button onClick={() => { router.push('/dashboard'); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
                 ← {t(lang, 'nav_dashboard')}
               </button>
             )}
-            {links.map(link => (
+            {!isRecruiting && links.map(link => (
               <button key={link.href} onClick={() => { router.push(link.href); setMenuOpen(false) }}
                 className={`w-full text-left text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3 ${pathname === link.href ? 'text-[#D4A843]' : 'text-white/70 hover:text-white'}`}>
                 {link.label}
-                {link.badge > 0 && (
-                  <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded ml-auto">{link.badge}</span>
-                )}
+                {link.badge > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-xs font-semibold px-1.5 py-0.5 rounded ml-auto">{link.badge}</span>}
               </button>
             ))}
-            <button onClick={() => { router.push('/dashboard/help'); setMenuOpen(false) }}
-              className={`w-full text-left text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/70 hover:text-white'}`}>
-              {t(lang, 'nav_tutorial')}
-            </button>
-            {onRelaunchTour && isDashboard && (
-              <button onClick={() => { onRelaunchTour(); setMenuOpen(false) }}
-                className="w-full text-left text-sm text-white/70 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-3">
-                ▶ Relaunch Tour
+            {!isRecruiting && (
+              <button onClick={() => { router.push('/dashboard/help'); setMenuOpen(false) }}
+                className={`w-full text-left text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors ${pathname === '/dashboard/help' ? 'text-[#D4A843]' : 'text-white/70 hover:text-white'}`}>
+                {t(lang, 'nav_tutorial')}
               </button>
             )}
             <div className="border-t border-white/10 pt-2 mt-2">
-              <div className="text-white/35 text-xs px-3 py-1 truncate">{userEmail}</div>
+              <div className="text-white/35 text-xs px-3 py-1 truncate">{email}</div>
               <button onClick={() => { signOut(); setMenuOpen(false) }}
                 className="w-full text-left text-sm text-white/50 hover:text-white py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors">
                 {t(lang, 'nav_signout')}
