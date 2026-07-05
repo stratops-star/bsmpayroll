@@ -95,6 +95,13 @@ export default function PoolPage() {
   async function openFile(bucket: string, path: string | null) { if (!path) return; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 120); if (data?.signedUrl) window.open(data.signedUrl, '_blank') }
   async function save(patch: Partial<Candidate>) { if (!sel) return; const { error } = await supabase.from('candidates').update(patch).eq('id', sel.id); if (error) { flash('Error: ' + error.message); return }; const u = { ...sel, ...patch }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); flash('Saved') }
 
+  async function notInterested() {
+    if (!sel) return
+    const { error } = await supabase.from('candidates').update({ status: 'rejected', stage: 'rejected', rejected_reason: 'No longer interested' }).eq('id', sel.id)
+    if (error) { flash('Error: ' + error.message); return }
+    setRows(rs => rs.filter(r => r.id !== sel.id)); setSel(null); flash('Moved to Rejected — no longer interested')
+  }
+
   async function signed(bucket: string, path: string | null) { if (!path) return undefined; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 600); return data?.signedUrl }
   async function openCand(c: Candidate) {
     setSel(c); setEditPos(false)
@@ -199,7 +206,7 @@ export default function PoolPage() {
               {canAct && (
                 <div className="p-5 border-b border-gray-100 space-y-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Tier</div><div className="flex gap-2">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => save({ profile_tier: t })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${sel.profile_tier === t ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{t}</button>)}</div></div>
-                  <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Stage</div><div className="flex flex-wrap gap-2">{STAGES.map(s => <button key={s} onClick={() => save({ stage: s })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${sel.stage === s ? 'bg-[#0D1B35] border-[#0D1B35] text-white' : 'border-gray-200 text-gray-500'}`}>{stageLabel[s]}</button>)}</div></div>
+                  <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Stage</div><div className="flex flex-wrap gap-2">{STAGES.map(s => <button key={s} onClick={() => save({ stage: s })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${sel.stage === s ? 'bg-[#0D1B35] border-[#0D1B35] text-white' : 'border-gray-200 text-gray-500'}`}>{stageLabel[s]}</button>)}<button onClick={notInterested} className="text-xs font-semibold px-3 py-1.5 rounded-full border border-red-200 text-red-600 bg-white">🚫 No longer interested</button></div></div>
                 </div>
               )}
               {/* internal details — editable */}
