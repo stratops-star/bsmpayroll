@@ -13,30 +13,32 @@ function auth() { return { Authorization: `Bearer ${process.env.ASANARECRUITER}`
 const yesNo = (v?: string) => { if (!v) return null; if (/^\s*(y|yes|si|sí)/i.test(v)) return true; if (/^\s*(n|no)/i.test(v)) return false; return null }
 
 // Jotform-style labels (end with : or ::). Value is on the following line(s), until the next label.
+// Labels may end with "?:" or "::" — the value is on the following line(s).
+// [^\n]*? stays on the label line and absorbs any trailing "?" before the colon.
 const FIELDS: [RegExp, string][] = [
-  [/full name\s*:{1,2}/i, 'full_name'],
+  [/full name[^\n]*?:{1,2}/i, 'full_name'],
   [/current address[^\n]*?:{1,2}/i, 'address'],
-  [/(?:what is your cellphone|cellphone|phone number|tel[eé]fono)\s*:{1,2}/i, 'phone'],
-  [/email address\s*:{1,2}/i, 'email'],
+  [/(?:what is your cellphone|cellphone|phone number|tel[eé]fono)[^\n]*?:{1,2}/i, 'phone'],
+  [/email address[^\n]*?:{1,2}/i, 'email'],
   [/who referred you[^\n]*?:{1,2}/i, 'referral'],
-  [/languages spoken\s*:{1,2}/i, 'languages'],
-  [/english proficiency\s*:{1,2}/i, 'english'],
+  [/languages spoken[^\n]*?:{1,2}/i, 'languages'],
+  [/english proficiency[^\n]*?:{1,2}/i, 'english'],
   [/what position[^\n]*?:{1,2}/i, 'position'],
-  [/do you have any training\s*:{1,2}/i, 'training'],
-  [/what areas are you open to work\s*:{1,2}/i, 'areas'],
-  [/valid driver['’`]?s? license\s*:{1,2}/i, 'license'],
-  [/means of transportation\s*:{1,2}/i, 'transportation'],
-  [/date available to start\s*:{1,2}/i, 'start_date'],
+  [/do you have any training[^\n]*?:{1,2}/i, 'training'],
+  [/what areas are you open to work[^\n]*?:{1,2}/i, 'areas'],
+  [/valid driver['’`]?s? license[^\n]*?:{1,2}/i, 'license'],
+  [/means of transportation[^\n]*?:{1,2}/i, 'transportation'],
+  [/date available to start[^\n]*?:{1,2}/i, 'start_date'],
   [/weekends\s*\/?\s*holidays[^\n]*?:{1,2}/i, 'weekends'],
-  [/preferred shift\s*:{1,2}/i, 'shift'],
+  [/preferred shift[^\n]*?:{1,2}/i, 'shift'],
   [/are you able to perform the essential functions[\s\S]*?:{1,2}/i, 'lift50'],
-  [/do you have a bank account\s*:{1,2}/i, 'bank'],
-  [/what is your expected pay\s*:{1,2}/i, 'pay'],
+  [/do you have a bank account[^\n]*?:{1,2}/i, 'bank'],
+  [/what is your expected pay[^\n]*?:{1,2}/i, 'pay'],
   [/legally eligible to work[^\n]*?:{1,2}/i, 'eligible'],
   [/social security number[^\n]*?:{1,2}/i, 'ss'],
-  [/highest level of education\s*:{1,2}/i, 'education'],
+  [/highest level of education[^\n]*?:{1,2}/i, 'education'],
   [/other relevant education[^\n]*?:{1,2}/i, 'other_education'],
-  [/did you graduate\s*:{1,2}/i, 'graduate'],
+  [/did you graduate[^\n]*?:{1,2}/i, 'graduate'],
   [/relevant certifications[^\n]*?:{1,2}/i, 'certifications'],
 ]
 
