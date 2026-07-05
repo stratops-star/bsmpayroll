@@ -41,6 +41,7 @@ const FILTERS = [
   { key: 'open', label: 'Open to work', opts: [['all', 'Any borough'], ...BOROUGHS.map(b => [b, b])] },
   { key: 'pos', label: 'Position', opts: [['all', 'All positions'], ...ALL_POSITIONS.map(p => [p, p])] },
   { key: 'resume', label: 'Résumé', opts: [['all', 'Any'], ['yes', 'Has résumé'], ['no', 'No résumé']] },
+  { key: 'video', label: 'Video', opts: [['all', 'Any'], ['yes', 'Has video'], ['no', 'No video']] },
   { key: 'profile', label: 'Profile', opts: [['all', 'All'], ['missing', 'Missing info'], ['complete', 'Complete']] },
 ] as const
 
@@ -60,7 +61,7 @@ export default function PoolPage() {
   const [editPos, setEditPos] = useState(false)
   const [toast, setToast] = useState('')
   const [q, setQ] = useState('')
-  const [F, setF] = useState<Record<string, string>>({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', profile: 'all' })
+  const [F, setF] = useState<Record<string, string>>({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', video: 'all', profile: 'all' })
   const [panelOpen, setPanelOpen] = useState(false)
   const [view, setView] = useState<'list' | 'photos'>('list')
   const [sort, setSort] = useState<'recent' | 'longest'>('recent')
@@ -79,7 +80,7 @@ export default function PoolPage() {
 
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
   const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
-  const clearAll = () => { setF({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', profile: 'all' }); setQ('') }
+  const clearAll = () => { setF({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', video: 'all', profile: 'all' }); setQ('') }
   const activeCount = Object.values(F).filter(v => v !== 'all').length
   const payText = (c: Candidate) => c.expected_pay || (c.pay_min != null && c.pay_max != null ? `$${c.pay_min}–${c.pay_max}/hr` : '—')
   const ageOk = (a: number | null) => F.age === 'all' || (a != null && ((F.age === 'u30' && a < 30) || (F.age === '30-45' && a >= 30 && a <= 45) || (F.age === '45p' && a > 45)))
@@ -87,7 +88,7 @@ export default function PoolPage() {
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase()
-    const out = rows.filter(c => (F.tier === 'all' || c.profile_tier === F.tier) && (F.stage === 'all' || c.stage === F.stage) && (F.gender === 'all' || c.gender === F.gender) && ageOk(c.age) && (F.trans === 'all' || (c.transportation || '').toLowerCase().includes(F.trans.toLowerCase())) && (F.lives === 'all' || c.borough === F.lives) && (F.open === 'all' || (c.work_areas || []).includes(F.open)) && posOk(c) && (F.resume === 'all' || (F.resume === 'yes' ? !!c.resume_path : !c.resume_path)) && (F.profile === 'all' || (F.profile === 'missing' ? missingFields(c).length > 0 : missingFields(c).length === 0)) && (c.full_name.toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.positions || []).join(' ').toLowerCase().includes(s)))
+    const out = rows.filter(c => (F.tier === 'all' || c.profile_tier === F.tier) && (F.stage === 'all' || c.stage === F.stage) && (F.gender === 'all' || c.gender === F.gender) && ageOk(c.age) && (F.trans === 'all' || (c.transportation || '').toLowerCase().includes(F.trans.toLowerCase())) && (F.lives === 'all' || c.borough === F.lives) && (F.open === 'all' || (c.work_areas || []).includes(F.open)) && posOk(c) && (F.resume === 'all' || (F.resume === 'yes' ? !!c.resume_path : !c.resume_path)) && (F.video === 'all' || (F.video === 'yes' ? !!c.video_path : !c.video_path)) && (F.profile === 'all' || (F.profile === 'missing' ? missingFields(c).length > 0 : missingFields(c).length === 0)) && (c.full_name.toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.positions || []).join(' ').toLowerCase().includes(s)))
     return out.sort((a, b) => sort === 'recent' ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime() : new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   }, [rows, q, F, sort])
 
