@@ -11,7 +11,7 @@ type Candidate = {
   transportation: string | null; availability: string | null; english_level: string | null
   referral_source: string | null; experience: string | null; strengths: string | null; security_licensed: boolean | null
   license_path: string | null; resume_path: string | null; photo_path: string | null; video_path: string | null
-  profile_tier: string | null; stage: string
+  profile_tier: string | null; stage: string; asana_url: string | null
   gender: string | null; age: number | null; nationality: string | null; ethnicity: string | null
   time_in_usa: string | null; has_tax_id: boolean | null; has_ss: boolean | null; has_bank_account: boolean | null
 }
@@ -24,6 +24,7 @@ const stageLabel: Record<string, string> = { available: 'Available', '2nd_interv
 const BOROUGHS = ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island']
 const TRANSPORT = ['Bicycle', 'Scooter', 'Train', 'Bus', 'Car']
 const ALL_POSITIONS = ['Garbage Porter', 'Cleaning Porter', 'Morning Garbage Porter', 'Janitorial', 'Concierge', 'Superintendent', 'Security (Licensed)', 'Security (Unlicensed)', 'Handyman', 'Maintenance', 'Valet Parking', 'Parking Attendant', 'Nanny', 'Lease Coordinator', 'Area Supervisor', 'Operations Supervisor', 'Operations Manager', 'Sr. Operations Manager']
+const POS_EDIT = ['Garbage Porter', 'Cleaning Porter', 'Morning Garbage Porter', 'Porter', 'Janitorial', 'Concierge', 'Superintendent', 'Security', 'Handyman', 'Maintenance', 'Valet Parking', 'Parking Attendant', 'Nanny', 'Lease Coordinator', 'Area Supervisor', 'Operations Supervisor', 'Operations Manager', 'Sr. Operations Manager']
 
 const daysIn = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -39,7 +40,14 @@ const FILTERS = [
   { key: 'lives', label: 'Lives in', opts: [['all', 'Any borough'], ...BOROUGHS.map(b => [b, b])] },
   { key: 'open', label: 'Open to work', opts: [['all', 'Any borough'], ...BOROUGHS.map(b => [b, b])] },
   { key: 'pos', label: 'Position', opts: [['all', 'All positions'], ...ALL_POSITIONS.map(p => [p, p])] },
+  { key: 'resume', label: 'Résumé', opts: [['all', 'Any'], ['yes', 'Has résumé'], ['no', 'No résumé']] },
+  { key: 'profile', label: 'Profile', opts: [['all', 'All'], ['missing', 'Missing info'], ['complete', 'Complete']] },
 ] as const
+
+const REQUIRED: [keyof Candidate, string][] = [['phone', 'Phone'], ['email', 'Email'], ['positions', 'Position'], ['expected_pay', 'Pay'], ['transportation', 'Transportation'], ['english_level', 'English'], ['borough', 'Borough']]
+function missingFields(c: Candidate): string[] {
+  return REQUIRED.filter(([k]) => { const v = (c as any)[k]; return Array.isArray(v) ? v.length === 0 : v == null || v === '' }).map(([, label]) => label)
+}
 
 export default function PoolPage() {
   const [supabase] = useState(() => createClient())
@@ -48,9 +56,11 @@ export default function PoolPage() {
   const [loading, setLoading] = useState(true)
   const [canAct, setCanAct] = useState(false)
   const [sel, setSel] = useState<Candidate | null>(null)
+  const [media, setMedia] = useState<{ photo?: string; video?: string; resume?: string }>({})
+  const [editPos, setEditPos] = useState(false)
   const [toast, setToast] = useState('')
   const [q, setQ] = useState('')
-  const [F, setF] = useState<Record<string, string>>({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all' })
+  const [F, setF] = useState<Record<string, string>>({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', profile: 'all' })
   const [panelOpen, setPanelOpen] = useState(false)
   const [view, setView] = useState<'list' | 'photos'>('list')
   const [sort, setSort] = useState<'recent' | 'longest'>('recent')
@@ -69,7 +79,7 @@ export default function PoolPage() {
 
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
   const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
-  const clearAll = () => { setF({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all' }); setQ('') }
+  const clearAll = () => { setF({ tier: 'all', stage: 'all', gender: 'all', age: 'all', trans: 'all', lives: 'all', open: 'all', pos: 'all', resume: 'all', profile: 'all' }); setQ('') }
   const activeCount = Object.values(F).filter(v => v !== 'all').length
   const payText = (c: Candidate) => c.expected_pay || (c.pay_min != null && c.pay_max != null ? `$${c.pay_min}–${c.pay_max}/hr` : '—')
   const ageOk = (a: number | null) => F.age === 'all' || (a != null && ((F.age === 'u30' && a < 30) || (F.age === '30-45' && a >= 30 && a <= 45) || (F.age === '45p' && a > 45)))
@@ -77,12 +87,36 @@ export default function PoolPage() {
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase()
-    const out = rows.filter(c => (F.tier === 'all' || c.profile_tier === F.tier) && (F.stage === 'all' || c.stage === F.stage) && (F.gender === 'all' || c.gender === F.gender) && ageOk(c.age) && (F.trans === 'all' || (c.transportation || '').toLowerCase().includes(F.trans.toLowerCase())) && (F.lives === 'all' || c.borough === F.lives) && (F.open === 'all' || (c.work_areas || []).includes(F.open)) && posOk(c) && (c.full_name.toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.positions || []).join(' ').toLowerCase().includes(s)))
+    const out = rows.filter(c => (F.tier === 'all' || c.profile_tier === F.tier) && (F.stage === 'all' || c.stage === F.stage) && (F.gender === 'all' || c.gender === F.gender) && ageOk(c.age) && (F.trans === 'all' || (c.transportation || '').toLowerCase().includes(F.trans.toLowerCase())) && (F.lives === 'all' || c.borough === F.lives) && (F.open === 'all' || (c.work_areas || []).includes(F.open)) && posOk(c) && (F.resume === 'all' || (F.resume === 'yes' ? !!c.resume_path : !c.resume_path)) && (F.profile === 'all' || (F.profile === 'missing' ? missingFields(c).length > 0 : missingFields(c).length === 0)) && (c.full_name.toLowerCase().includes(s) || (c.email || '').toLowerCase().includes(s) || (c.phone || '').includes(s) || (c.positions || []).join(' ').toLowerCase().includes(s)))
     return out.sort((a, b) => sort === 'recent' ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime() : new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   }, [rows, q, F, sort])
 
   async function openFile(bucket: string, path: string | null) { if (!path) return; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 120); if (data?.signedUrl) window.open(data.signedUrl, '_blank') }
   async function save(patch: Partial<Candidate>) { if (!sel) return; const { error } = await supabase.from('candidates').update(patch).eq('id', sel.id); if (error) { flash('Error: ' + error.message); return }; const u = { ...sel, ...patch }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); flash('Saved') }
+
+  async function signed(bucket: string, path: string | null) { if (!path) return undefined; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 600); return data?.signedUrl }
+  async function openCand(c: Candidate) {
+    setSel(c); setEditPos(false)
+    setMedia({ photo: photos[c.id], video: await signed('candidate-videos', c.video_path), resume: await signed('candidate-resumes', c.resume_path) })
+  }
+  async function uploadMedia(kind: 'photo' | 'video' | 'resume', file: File | null) {
+    if (!sel || !file) return
+    const bucket = kind === 'photo' ? 'candidate-photos' : kind === 'video' ? 'candidate-videos' : 'candidate-resumes'
+    const col = kind === 'photo' ? 'photo_path' : kind === 'video' ? 'video_path' : 'resume_path'
+    const ext = file.name.split('.').pop() || 'bin'
+    const path = `${sel.id}-${kind}.${ext}`
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type })
+    if (error) { flash('Upload failed: ' + error.message); return }
+    await save({ [col]: path } as any)
+    const url = await signed(bucket, path)
+    setMedia(m => ({ ...m, [kind]: url }))
+    if (kind === 'photo' && url) setPhotos(p => ({ ...p, [sel.id]: url }))
+  }
+  function togglePos(p: string) {
+    if (!sel) return
+    const cur = sel.positions || []
+    save({ positions: cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p] } as any)
+  }
 
   const tierPill = (t: string | null) => { const c = t === 'high' ? 'bg-[#F3E4BE] text-[#8A6D1E]' : t === 'medium' ? 'bg-blue-100 text-blue-800' : t === 'low' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'; return <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full capitalize ${c}`}>{t || '—'}</span> }
   const chipLabel = (v: string) => ({ u30: 'Under 30', '30-45': '30–45', '45p': '45+' } as Record<string, string>)[v] || stageLabel[v] || (v[0].toUpperCase() + v.slice(1))
@@ -105,6 +139,7 @@ export default function PoolPage() {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
           <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">⛃ Filters {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
           <select value={sort} onChange={e => setSort(e.target.value as any)} className="border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm text-gray-600"><option value="recent">Sort: Recently added</option><option value="longest">Sort: Longest in funnel</option></select>
+          {(() => { const n = rows.filter(c => missingFields(c).length > 0).length; return <button onClick={() => setF1('profile', F.profile === 'missing' ? 'all' : 'missing')} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border ${F.profile === 'missing' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}>⚠ Missing info{n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${F.profile === 'missing' ? 'bg-white/25' : 'bg-amber-100'}`}>{n}</span>}</button> })()}
           <div className="ml-auto flex gap-1 bg-white border border-gray-200 rounded-lg p-0.5">{(['list', 'photos'] as const).map(v => <button key={v} onClick={() => setView(v)} className={`text-xs font-semibold px-3 py-1.5 rounded-md ${view === v ? 'bg-[#0D1B35] text-white' : 'text-gray-500'}`}>{v === 'list' ? '▤ List' : '▦ Photos'}</button>)}</div>
         </div>
 
@@ -124,7 +159,7 @@ export default function PoolPage() {
           : view === 'photos' ? (
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))' }}>
               {filtered.map(c => { const d = daysIn(c.created_at); return (
-                <button key={c.id} onClick={() => setSel(c)} className="bg-white border border-gray-200 rounded-xl overflow-hidden text-left hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                <button key={c.id} onClick={() => openCand(c)} className="bg-white border border-gray-200 rounded-xl overflow-hidden text-left hover:shadow-lg hover:-translate-y-0.5 transition-all">
                   <div className="h-36 grid place-items-center text-white text-3xl font-semibold relative" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}<span className={`absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${funnelColor(d)}`}>{d}d</span></div>
                   <div className="p-3"><div className="font-semibold text-sm text-[#0D1B35]">{c.full_name}</div><div className="text-xs text-gray-500 mt-0.5">{(c.positions || [])[0] || '—'} · {c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() + c.gender.slice(1) : '—'}</div><div className="flex gap-1.5 mt-2">{tierPill(c.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[c.stage]}</span></div></div>
                 </button>) })}
@@ -133,8 +168,8 @@ export default function PoolPage() {
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200"><th className="px-4 py-3">Candidate</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Age / Sex</th><th className="px-4 py-3">Tier</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Added</th><th className="px-4 py-3">In funnel</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
-                  <tr key={c.id} onClick={() => setSel(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35]">{c.full_name}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div></div></div></td>
+                  <tr key={c.id} onClick={() => openCand(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35] flex items-center gap-1.5">{c.full_name}{missingFields(c).length > 0 && <span className="text-amber-500" title={'Missing: ' + missingFields(c).join(', ')}>⚠</span>}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div></div></div></td>
                     <td className="px-4 py-3 text-gray-600">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-gray-500">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -156,8 +191,10 @@ export default function PoolPage() {
               <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
                 <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span></div></div></div>
               <div className="text-xs text-gray-500 mt-2">Added {fmtDate(sel.created_at)} · <b className="text-[#0D1B35]">{daysIn(sel.created_at)} days</b> in funnel</div>
+              {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ View original in Asana</a>}
             </div>
             <div className="overflow-auto flex-1">
+              {missingFields(sel).length > 0 && <div className="mx-5 mt-4 mb-1 text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded-lg px-3 py-2">⚠ Missing: {missingFields(sel).join(', ')}</div>}
               {canAct && (
                 <div className="p-5 border-b border-gray-100 space-y-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Tier</div><div className="flex gap-2">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => save({ profile_tier: t })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${sel.profile_tier === t ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{t}</button>)}</div></div>
@@ -194,15 +231,61 @@ export default function PoolPage() {
                 )}
               </div>
               <Sec title="Applied for">
-                <div className="flex flex-wrap gap-1.5">{(sel.positions || []).map(p => <span key={p} className="text-xs bg-[#0D1B35]/5 text-[#0D1B35] font-medium px-2.5 py-1 rounded-full">{p}</span>)}</div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex flex-wrap gap-1.5">{(sel.positions || []).length ? (sel.positions || []).map(p => <span key={p} className="text-xs bg-[#0D1B35]/5 text-[#0D1B35] font-medium px-2.5 py-1 rounded-full">{p}</span>) : <span className="text-xs text-gray-400">None</span>}</div>
+                  {canAct && <button onClick={() => setEditPos(v => !v)} className="text-xs text-blue-600 font-medium flex-shrink-0 ml-2">{editPos ? 'Done' : 'Edit'}</button>}
+                </div>
+                {editPos && canAct && (
+                  <div className="flex flex-wrap gap-1.5 mt-2 bg-[#F5F6FA] rounded-lg p-2">
+                    {POS_EDIT.map(p => { const on = (sel.positions || []).includes(p); return <button key={p} onClick={() => togglePos(p)} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>{p}</button> })}
+                  </div>
+                )}
                 {sel.positions?.includes('Security') && <div className="mt-2 text-xs">Security license: <b>{sel.security_licensed === true ? 'Licensed' : sel.security_licensed === false ? 'Unlicensed' : '—'}</b>{sel.license_path && <button onClick={() => openFile('candidate-licenses', sel.license_path)} className="ml-2 text-blue-600 font-medium">View license</button>}</div>}
               </Sec>
-              <Sec title="Contact"><Rw k="Phone" v={sel.phone} /><Rw k="Email" v={sel.email} /></Sec>
-              <Sec title="Job fit"><Rw k="Expected pay" v={payText(sel)} /><Rw k="Availability" v={sel.availability} /><Rw k="Transportation" v={sel.transportation} /><Rw k="English" v={sel.english_level} /></Sec>
-              <Sec title="Location"><Rw k="Lives in" v={[sel.borough, sel.city, sel.state].filter(Boolean).join(', ')} /><Rw k="Open to work in" v={(sel.work_areas || []).join(', ')} /></Sec>
+              {canAct ? (<>
+                <Sec title="Contact">
+                  <EField label="Phone" value={sel.phone} onSave={v => save({ phone: v || null } as any)} />
+                  <EField label="Email" value={sel.email} onSave={v => save({ email: v || null } as any)} />
+                </Sec>
+                <Sec title="Job fit">
+                  <EField label="Expected pay" value={sel.expected_pay} onSave={v => save({ expected_pay: v || null } as any)} />
+                  <ESelect label="Availability" value={sel.availability} opts={['', 'Weekdays', 'Weekends & Holidays', 'All']} onSave={v => save({ availability: v || null } as any)} />
+                  <EField label="Transportation" value={sel.transportation} onSave={v => save({ transportation: v || null } as any)} />
+                  <ESelect label="English level" value={sel.english_level} opts={['', 'Basic', 'Intermediate', 'Fluent']} onSave={v => save({ english_level: v || null } as any)} />
+                </Sec>
+                <Sec title="Location">
+                  <ESelect label="Lives in (borough)" value={sel.borough} opts={['', ...BOROUGHS]} onSave={v => save({ borough: v || null, state: v ? 'NY' : sel.state } as any)} />
+                  <div className="py-1"><div className="text-[11px] text-gray-500 mb-1">Open to work in</div><div className="flex flex-wrap gap-1.5">{BOROUGHS.map(b => { const on = (sel.work_areas || []).includes(b); return <button key={b} onClick={() => { const cur = sel.work_areas || []; save({ work_areas: cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b] } as any) }} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>{b}</button> })}</div></div>
+                </Sec>
+              </>) : (<>
+                <Sec title="Contact"><Rw k="Phone" v={sel.phone} /><Rw k="Email" v={sel.email} /></Sec>
+                <Sec title="Job fit"><Rw k="Expected pay" v={payText(sel)} /><Rw k="Availability" v={sel.availability} /><Rw k="Transportation" v={sel.transportation} /><Rw k="English" v={sel.english_level} /></Sec>
+                <Sec title="Location"><Rw k="Lives in" v={[sel.borough, sel.city, sel.state].filter(Boolean).join(', ')} /><Rw k="Open to work in" v={(sel.work_areas || []).join(', ')} /></Sec>
+              </>)}
               {sel.experience && <Sec title="Experience"><p className="text-xs text-gray-600 leading-relaxed bg-[#F5F6FA] rounded-lg p-3 whitespace-pre-line">{sel.experience}</p></Sec>}
               {sel.strengths && <Sec title="Strengths"><p className="text-xs text-gray-600 leading-relaxed">{sel.strengths}</p></Sec>}
-              <Sec title="Files"><Rw k="Heard via" v={sel.referral_source} />{sel.resume_path ? <button onClick={() => openFile('candidate-resumes', sel.resume_path)} className="mt-1 inline-flex items-center gap-2 bg-[#F5F6FA] border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-[#0D1B35]"><span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">PDF</span> View résumé</button> : <div className="text-xs text-gray-400 mt-1">No résumé</div>}</Sec>
+              {canAct && (
+                <div className="p-5 border-b border-gray-100">
+                  <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2.5">Photo & video</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      {media.photo ? <img src={media.photo} alt="" className="w-full h-32 object-cover rounded-lg mb-1.5" /> : <div className="w-full h-32 bg-[#F5F6FA] rounded-lg grid place-items-center text-gray-400 text-xs mb-1.5">No photo</div>}
+                      <label className="text-xs text-[#0D1B35] font-medium cursor-pointer">{media.photo ? 'Replace photo' : 'Add photo'}<input type="file" accept="image/*" className="hidden" onChange={e => uploadMedia('photo', e.target.files?.[0] || null)} /></label>
+                    </div>
+                    <div>
+                      {media.video ? <video src={media.video} controls className="w-full h-32 object-cover rounded-lg mb-1.5 bg-black" /> : <div className="w-full h-32 bg-[#F5F6FA] rounded-lg grid place-items-center text-gray-400 text-xs mb-1.5">No video</div>}
+                      <label className="text-xs text-[#0D1B35] font-medium cursor-pointer">{media.video ? 'Replace video' : 'Add video'}<input type="file" accept="video/*" className="hidden" onChange={e => uploadMedia('video', e.target.files?.[0] || null)} /></label>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <Sec title="Résumé & source">
+                <Rw k="Heard via" v={sel.referral_source} />
+                <div className="flex items-center gap-3 mt-1.5">
+                  {media.resume ? <a href={media.resume} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-[#F5F6FA] border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-[#0D1B35]"><span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">PDF</span> View résumé</a> : <span className="text-xs text-gray-400">No résumé</span>}
+                  {canAct && <label className="text-xs text-blue-600 font-medium cursor-pointer">{media.resume ? 'Replace' : 'Upload résumé'}<input type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={e => uploadMedia('resume', e.target.files?.[0] || null)} /></label>}
+                </div>
+              </Sec>
             </div>
           </aside>
         </>
@@ -214,3 +297,9 @@ export default function PoolPage() {
 
 function Sec({ title, children }: { title: string; children: React.ReactNode }) { return <div className="p-5 border-b border-gray-100"><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2.5">{title}</div>{children}</div> }
 function Rw({ k, v }: { k: string; v: string | null | undefined }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-gray-500">{k}</span><span className="text-gray-800 font-medium text-right">{v || '—'}</span></div> }
+function EField({ label, value, onSave }: { label: string; value: string | null | undefined; onSave: (v: string) => void }) {
+  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}</div><input defaultValue={value || ''} onBlur={e => e.target.value !== (value || '') && onSave(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" /></div>
+}
+function ESelect({ label, value, opts, onSave }: { label: string; value: string | null | undefined; opts: string[]; onSave: (v: string) => void }) {
+  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}</div><select defaultValue={value || ''} onChange={e => onSave(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white">{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
+}
