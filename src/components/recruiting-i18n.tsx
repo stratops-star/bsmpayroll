@@ -172,6 +172,11 @@ export const DICT: Record<string, { en: string; es: string }> = {
   f_gender: { en: 'Gender', es: 'Género' },
   f_age: { en: 'Age', es: 'Edad' },
   f_open: { en: 'Open to work', es: 'Dispuesto a trabajar' },
+  src_label: { en: 'Source', es: 'Origen' },
+  src_website: { en: 'Website', es: 'Sitio web' },
+  src_asana: { en: 'Asana', es: 'Asana' },
+  src_manual: { en: 'Manual', es: 'Manual' },
+  src_referral: { en: 'Referral', es: 'Referido' },
 }
 
 type Ctx = { lang: RLang; setLang: (l: RLang) => void; t: (k: string) => string }
@@ -188,3 +193,17 @@ export function RecruitingLangProvider({ children }: { children: ReactNode }) {
 }
 
 export const useRecruitingLang = () => useContext(LangCtx)
+
+const SRC_MAP: Record<string, { key: string; cls: string }> = {
+  public_form: { key: 'src_website', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  shared_link: { key: 'src_website', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  asana_import: { key: 'src_asana', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  manual: { key: 'src_manual', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  referral: { key: 'src_referral', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+}
+
+export function SourceBadge({ channel, className = '' }: { channel?: string | null; className?: string }) {
+  const { t } = useRecruitingLang()
+  const m = SRC_MAP[channel || ''] || { key: 'src_manual', cls: 'bg-gray-50 text-gray-600 border-gray-200' }
+  return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${m.cls} ${className}`}>{t(m.key)}</span>
+}
