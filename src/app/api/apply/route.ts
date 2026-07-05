@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     const resume_path = await upload('candidate-resumes', fd.get('resume') as File | null)
     const license_path = await upload('candidate-licenses', fd.get('license') as File | null)
 
-    const { error } = await supabase.from('candidates').insert({
+    const { data: inserted, error } = await supabase.from('candidates').insert({
       intake_channel: 'public_form',
       status: 'applied',
       stage: 'applied',
@@ -75,12 +75,26 @@ export async function POST(req: NextRequest) {
       referral_source: get('referral_source') || null,
       experience: get('experience') || null,
       resume_path, license_path,
-    })
+    }).select('id').single()
 
     if (error) {
       console.error('Candidate insert error:', error.message)
       return NextResponse.json({ error: 'Could not save application' }, { status: 500 })
     }
+
+    // Mirror the application into Asana (as a task) and store the link back.
+    // The task carries a BSM_ID marker so the importer never re-pulls it.
+    try {
+      const asana = await pushToAsana(inserted.id, {
+        full_name, phone, email, preferred_lang, positions, security_licensed,
+        location: [get('borough'), get('city'), get('state')].filter(Boolean).join(', '),
+        work_areas, expected_pay,
+        transportation: transportation.join(', '),
+        availability: get('availability'), english_level: get('english_level'),
+        referral_source: get('referral_source'), experience: get('experience'),
+      })
+      if (asana) await supabase.from('candidates').update({ asana_task_id: asana.gid, asana_url: asana.url }).eq('id', inserted.id)
+    } catch (e: any) { console.error('Asana push failed:', e?.message) }
 
     sendConfirmation(email, full_name, positions.join(', '), preferred_lang).catch(() => {})
     return NextResponse.json({ ok: true })
@@ -104,4 +118,53 @@ async function sendConfirmation(email: string, name: string, roles: string, lang
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: FROM, to: [email], subject, html: body }),
   })
+}
+
+// ── Asana mirror ───────────────────────────────────────────────────────
+const ASANA_PROJECT = '1207417865507098' // Prospective Candidates
+
+type AsanaPayload = {
+  full_name: string; phone: string; email: string; preferred_lang: string
+  positions: string[]; security_licensed: boolean | null; location: string
+  work_areas: string[]; expected_pay: string | null; transportation: string
+  availability: string; english_level: string; referral_source: string; experience: string
+}
+
+function buildNotes(candidateId: string, c: AsanaPayload): string {
+  const sec = c.security_licensed === true ? 'Licensed' : c.security_licensed === false ? 'Unlicensed' : '—'
+  const L = (k: string, v: string) => `${k}:: ${v || '—'}`
+  return [
+    'SOURCE:: BSM Careers Website',
+    `BSM_ID:: ${candidateId}`,
+    '(Already in the BSM system — do not import.)',
+    '',
+    L('Full Name', c.full_name),
+    L('Phone', c.phone),
+    L('Email', c.email),
+    L('Preferred language', c.preferred_lang === 'es' ? 'Español' : 'English'),
+    L('Position(s)', c.positions.join(', ')),
+    L('Security licensed', sec),
+    L('Location', c.location),
+    L('Open to work in', c.work_areas.join(', ')),
+    L('Expected pay', c.expected_pay || '—'),
+    L('Transportation', c.transportation),
+    L('Availability', c.availability),
+    L('English level', c.english_level),
+    L('Heard via', c.referral_source),
+    L('Experience', c.experience),
+  ].join('\n')
+}
+
+async function pushToAsana(candidateId: string, c: AsanaPayload): Promise<{ gid: string; url: string } | null> {
+  const token = process.env.ASANARECRUITER
+  if (!token) return null
+  const res = await fetch('https://app.asana.com/api/1.0/tasks', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: { name: c.full_name, notes: buildNotes(candidateId, c), projects: [ASANA_PROJECT] } }),
+  })
+  if (!res.ok) { console.error('Asana create failed:', res.status, await res.text().catch(() => '')); return null }
+  const j = await res.json()
+  const gid = j?.data?.gid
+  return gid ? { gid, url: `https://app.asana.com/0/${ASANA_PROJECT}/${gid}` } : null
 }
