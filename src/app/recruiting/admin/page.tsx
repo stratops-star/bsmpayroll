@@ -75,14 +75,9 @@ export default function AdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#F5F6FA', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ background: NAVY, color: '#fff', padding: '20px 24px', borderBottom: `3px solid ${GOLD}` }}>
-        <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <a href="/hub" style={{ color: '#8895AC', textDecoration: 'none', fontSize: 13 }}>← Hub</a>
-          <div style={{ marginLeft: 6 }}>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>User Access</div>
-            <div style={{ fontSize: 12, color: '#8895AC' }}>Assign roles, departments, and contact details</div>
-          </div>
-        </div>
+      <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 24px 0' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: NAVY }}>User Access</div>
+        <div style={{ fontSize: 12, color: '#6B7280' }}>Assign roles, departments, and contact details</div>
       </div>
 
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 24px 60px' }}>
