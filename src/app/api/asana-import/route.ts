@@ -63,6 +63,7 @@ function extract(notes: string) {
 }
 
 function toCandidate(gid: string, permalink: string, title: string, notes: string) {
+  if (/BSM_ID\s*:{1,2}/i.test(notes || '')) return null // originated from our website — already in the system, never re-import
   if (!/full name\s*:{1,2}/i.test(notes || '')) return null // not a candidate profile
   const f = extract(notes || '')
   const titleName = (title || '').split(',')[0].trim()
