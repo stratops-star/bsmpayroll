@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
+import { useRecruitingChrome } from '@/components/RecruitingChrome'
 import RecruitingTabs from '@/components/RecruitingTabs'
 import { SearchSelect, YearsMonths } from '@/components/SearchSelect'
 import { NATIONALITIES, ETHNICITIES } from '@/lib/recruiting-data'
@@ -80,6 +81,8 @@ export default function PoolPage() {
     setPhotos(map)
   }
   useEffect(() => { load() }, [])
+  const { setActions } = useRecruitingChrome()
+  useEffect(() => { setActions(<ShareCareers />); return () => setActions(null) }, [])
 
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
   const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
@@ -135,10 +138,7 @@ export default function PoolPage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="max-w-6xl mx-auto px-6 py-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div><h1 className="text-xl font-semibold text-[#0D1B35]">Candidate Pool</h1><p className="text-xs text-gray-500">Interviewed · rated · ready to place</p></div>
-          <ShareCareers />
-        </div>
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">Candidate Pool</h1><p className="text-xs text-gray-500">Interviewed · rated · ready to place</p></div>
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
           <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">⛃ Filters {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
