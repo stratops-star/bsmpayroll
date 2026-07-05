@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
+import RecruitingTabs from '@/components/RecruitingTabs'
 
 type Candidate = {
   id: string; created_at: string; full_name: string; phone: string | null; email: string | null
@@ -131,18 +132,11 @@ export default function PoolPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <div className="bg-[#0D1B35] text-white px-6 py-4 border-b-[3px] border-[#D4A843]">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-3">
-            <a href="/hub" className="text-white/50 text-sm">← Hub</a>
-            <div><div className="text-lg font-semibold">Candidate Pool</div><div className="text-xs text-white/50">Interviewed · rated · ready to place</div></div>
-            <div className="ml-auto"><ShareCareers /></div>
-          </div>
-          <div className="flex gap-1 mt-3 flex-wrap">{[['New Queue', '/recruiting'], ['Interview', '/recruiting/interview'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']].map(([l, h]) => <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'Candidate Pool' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>)}</div>
-        </div>
-      </div>
-
       <div className="max-w-6xl mx-auto px-6 py-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div><h1 className="text-xl font-semibold text-[#0D1B35]">Candidate Pool</h1><p className="text-xs text-gray-500">Interviewed · rated · ready to place</p></div>
+          <ShareCareers />
+        </div>
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
           <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">⛃ Filters {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
@@ -161,6 +155,8 @@ export default function PoolPage() {
             <div className="flex justify-end mt-3"><button onClick={clearAll} className="text-xs text-gray-500 underline">Clear all filters</button></div>
           </div>
         )}
+
+        <RecruitingTabs />
 
         {loading ? <p className="text-gray-400 text-sm">Loading…</p>
           : filtered.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No candidates match these filters.</div>
