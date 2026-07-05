@@ -241,8 +241,15 @@ export default function PoolPage() {
                   {canAct && <button onClick={() => setEditPos(v => !v)} className="text-xs text-blue-600 font-medium flex-shrink-0 ml-2">{editPos ? 'Done' : 'Edit'}</button>}
                 </div>
                 {editPos && canAct && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 bg-[#F5F6FA] rounded-lg p-2">
-                    {POS_EDIT.map(p => { const on = (sel.positions || []).includes(p); return <button key={p} onClick={() => togglePos(p)} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>{p}</button> })}
+                  <div className="mt-2 bg-[#F5F6FA] rounded-lg p-2.5">
+                    <div className="text-[11px] text-gray-500 mb-1.5">Current — tap ✕ to remove:</div>
+                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                      {(sel.positions || []).length ? (sel.positions || []).map(p => <button key={p} onClick={() => togglePos(p)} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#0D1B35] text-white flex items-center gap-1">{p} <span className="opacity-70">✕</span></button>) : <span className="text-[11px] text-gray-400">None</span>}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mb-1.5">Add a position:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {POS_EDIT.filter(p => !(sel.positions || []).includes(p)).map(p => <button key={p} onClick={() => togglePos(p)} className="text-[11px] font-medium px-2.5 py-1 rounded-full border bg-white text-gray-600 border-gray-200">+ {p}</button>)}
+                    </div>
                   </div>
                 )}
                 {sel.positions?.includes('Security') && <div className="mt-2 text-xs">Security license: <b>{sel.security_licensed === true ? 'Licensed' : sel.security_licensed === false ? 'Unlicensed' : '—'}</b>{sel.license_path && <button onClick={() => openFile('candidate-licenses', sel.license_path)} className="ml-2 text-blue-600 font-medium">View license</button>}</div>}
