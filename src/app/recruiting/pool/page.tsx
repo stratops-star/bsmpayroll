@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 import { useRecruitingChrome } from '@/components/RecruitingChrome'
 import RecruitingTabs from '@/components/RecruitingTabs'
-import { useRecruitingLang } from '@/components/recruiting-i18n'
+import { useRecruitingLang, SourceBadge } from '@/components/recruiting-i18n'
 import { SearchSelect, YearsMonths } from '@/components/SearchSelect'
 import { NATIONALITIES, ETHNICITIES } from '@/lib/recruiting-data'
 
@@ -16,7 +16,7 @@ type Candidate = {
   transportation: string | null; availability: string | null; english_level: string | null
   referral_source: string | null; experience: string | null; strengths: string | null; security_licensed: boolean | null
   license_path: string | null; resume_path: string | null; photo_path: string | null; video_path: string | null
-  profile_tier: string | null; stage: string; asana_url: string | null
+  profile_tier: string | null; stage: string; asana_url: string | null; intake_channel: string | null
   gender: string | null; age: number | null; nationality: string | null; ethnicity: string | null
   time_in_usa: string | null; has_tax_id: boolean | null; has_ss: boolean | null; has_bank_account: boolean | null
 }
@@ -178,7 +178,7 @@ export default function PoolPage() {
               <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200"><th className="px-4 py-3">{t('th_candidate')}</th><th className="px-4 py-3">{t('th_position')}</th><th className="px-4 py-3">{t('th_age_sex')}</th><th className="px-4 py-3">{t('th_tier')}</th><th className="px-4 py-3">{t('th_stage')}</th><th className="px-4 py-3">{t('th_added')}</th><th className="px-4 py-3">{t('th_in_funnel')}</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
                   <tr key={c.id} onClick={() => openCand(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35]">{c.full_name}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} /></div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
                     <td className="px-4 py-3 text-gray-600">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-gray-500">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -198,7 +198,7 @@ export default function PoolPage() {
             <div className="p-5 border-b border-gray-100 relative">
               <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
               <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span></div></div></div>
+                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} /></div></div></div>
               <div className="text-xs text-gray-500 mt-2">{t('th_added')} {fmtDate(sel.created_at)} · <b className="text-[#0D1B35]">{daysIn(sel.created_at)} {lang==='es'?'días':'days'}</b> {t('th_in_funnel').toLowerCase()}</div>
               {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ {t('view_in_asana')}</a>}
             </div>
