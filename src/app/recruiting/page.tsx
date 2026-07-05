@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 import RecruitingTabs from '@/components/RecruitingTabs'
 import { useRecruitingChrome } from '@/components/RecruitingChrome'
+import { useRecruitingLang } from '@/components/recruiting-i18n'
 import { TR, t2 } from '@/lib/recruiting-data'
 
 type Candidate = {
@@ -40,6 +41,7 @@ export default function NewQueuePage() {
   const [newCount, setNewCount] = useState(0)
   const [showAdd, setShowAdd] = useState(false)
   const { setActions } = useRecruitingChrome()
+  const { t, lang } = useRecruitingLang()
   const rowsRef = useRef<Candidate[]>([]); rowsRef.current = rows
 
   // filters
@@ -67,13 +69,13 @@ export default function NewQueuePage() {
   useEffect(() => {
     setActions(
       <>
-        {isAdmin && <a href="/recruiting/import" className="text-sm bg-white/10 hover:bg-white/20 text-white border border-white/15 font-medium rounded-lg px-3 py-1.5 whitespace-nowrap">⭳ Import</a>}
-        {canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5 whitespace-nowrap">+ Add candidate</button>}
+        {isAdmin && <a href="/recruiting/import" className="text-sm bg-white/10 hover:bg-white/20 text-white border border-white/15 font-medium rounded-lg px-3 py-1.5 whitespace-nowrap">⭳ {t('import')}</a>}
+        {canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5 whitespace-nowrap">+ {t('add_candidate')}</button>}
         <ShareCareers />
       </>
     )
     return () => setActions(null)
-  }, [isAdmin, canAct])
+  }, [isAdmin, canAct, lang])
 
   function open(c: Candidate) { setSel(c); setTier(c.profile_tier); setReason('') }
   function close() { setSel(null) }
@@ -82,8 +84,8 @@ export default function NewQueuePage() {
   const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
   const clearAll = () => { setF({ pos: 'all', lives: 'all', trans: 'all', lang: 'all', channel: 'all', date: 'all' }); setFrom(''); setTo(''); setQ('') }
 
-  async function toInterview() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'interview', stage: 'initial_interview', profile_tier: tier }).eq('id', sel.id); setBusy(false); if (error) { flash('Error: ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash('Moved to Interview') }
-  async function reject() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'rejected', stage: 'rejected', rejected_reason: reason || null }).eq('id', sel.id); setBusy(false); if (error) { flash('Error: ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash('Moved to Rejected') }
+  async function toInterview() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'interview', stage: 'initial_interview', profile_tier: tier }).eq('id', sel.id); setBusy(false); if (error) { flash(t('error') + ': ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash(t('moved_interview')) }
+  async function reject() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'rejected', stage: 'rejected', rejected_reason: reason || null }).eq('id', sel.id); setBusy(false); if (error) { flash(t('error') + ': ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash(t('moved_rejected')) }
 
   const positions = useMemo(() => [...new Set(rows.flatMap(r => r.positions || []))].sort(), [rows])
   const channels = useMemo(() => [...new Set(rows.map(r => r.intake_channel).filter(Boolean))] as string[], [rows])
@@ -122,36 +124,36 @@ export default function NewQueuePage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="max-w-5xl mx-auto px-6 py-5">
-        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">New Queue</h1><p className="text-xs text-gray-500">Applications waiting for first review</p></div>
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">{t('tab_queue')}</h1><p className="text-xs text-gray-500">{t('queue_sub')}</p></div>
 
         {/* filter bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
-          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">⛃ Filters {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
-          {(activeCount > 0 || q) && <button onClick={clearAll} className="text-xs text-gray-500 underline">Clear</button>}
-          <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />Live</span>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search_ph')} className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
+          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-gray-200 bg-white rounded-lg px-3.5 py-2 text-sm font-semibold text-[#0D1B35]">⛃ {t('filters')} {activeCount > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
+          {(activeCount > 0 || q) && <button onClick={clearAll} className="text-xs text-gray-500 underline">{t('clear_filters')}</button>}
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />{t('live')}</span>
         </div>
 
         {panelOpen && (
           <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))' }}>
-              <Field k="pos" label="Position" opts={[['all', 'All positions'], ...positions.map(p => [p, p] as [string, string])]} />
-              <Field k="lives" label="Lives in" opts={[['all', 'Any borough'], ...BOROUGHS.map(b => [b, b] as [string, string])]} />
-              <Field k="trans" label="Transportation" opts={[['all', 'Any transport'], ...TRANSPORT.map(t => [t, t] as [string, string])]} />
-              <Field k="lang" label="Language" opts={[['all', 'Any language'], ['en', 'English'], ['es', 'Español']]} />
-              <Field k="channel" label="Source" opts={[['all', 'Any source'], ...channels.map(c => [c, chan(c)] as [string, string])]} />
-              <Field k="date" label="Date added" opts={[['all', 'Any time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']]} />
-              <div><label className="block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1">From date</label><input type="date" value={from} onChange={e => { setFrom(e.target.value); setF1('date', 'all') }} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm" /></div>
-              <div><label className="block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1">To date</label><input type="date" value={to} onChange={e => { setTo(e.target.value); setF1('date', 'all') }} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm" /></div>
+              <Field k="pos" label={t('f_position')} opts={[['all', t('f_any_position')], ...positions.map(p => [p, p] as [string, string])]} />
+              <Field k="lives" label={t('f_lives')} opts={[['all', t('f_any_borough')], ...BOROUGHS.map(b => [b, b] as [string, string])]} />
+              <Field k="trans" label={t('f_transport')} opts={[['all', t('f_any_transport')], ...TRANSPORT.map(t => [t, t] as [string, string])]} />
+              <Field k="lang" label={t('f_language')} opts={[['all', t('f_any_language')], ['en', t('f_english')], ['es', t('f_spanish')]]} />
+              <Field k="channel" label={t('f_source')} opts={[['all', t('f_any_source')], ...channels.map(c => [c, chan(c)] as [string, string])]} />
+              <Field k="date" label={t('f_date')} opts={[['all', t('f_any_time')], ['today', t('f_today')], ['7d', t('f_7d')], ['30d', t('f_30d')]]} />
+              <div><label className="block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1">{t('f_from')}</label><input type="date" value={from} onChange={e => { setFrom(e.target.value); setF1('date', 'all') }} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm" /></div>
+              <div><label className="block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1">{t('f_to')}</label><input type="date" value={to} onChange={e => { setTo(e.target.value); setF1('date', 'all') }} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm" /></div>
             </div>
-            <div className="flex justify-end mt-3"><button onClick={clearAll} className="text-xs text-gray-500 underline">Clear all filters</button></div>
+            <div className="flex justify-end mt-3"><button onClick={clearAll} className="text-xs text-gray-500 underline">{t('clear_filters')}</button></div>
           </div>
         )}
 
         <RecruitingTabs newCount={newCount} />
 
-        {loading ? <p className="text-gray-400 text-sm">Loading…</p>
-          : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No new applications right now.</div>
+        {loading ? <p className="text-gray-400 text-sm">{t('loading')}</p>
+          : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">{t('no_new_apps')}</div>
           : (<>
             <div className="flex items-center gap-2 mb-4">
               <span className="font-semibold text-[#0D1B35]">{filtered.length}{filtered.length !== rows.length ? ` of ${rows.length}` : ''} application{rows.length > 1 ? 's' : ''}</span>
@@ -184,32 +186,32 @@ export default function NewQueuePage() {
             </div>
             <div className="overflow-auto flex-1">
               {canAct ? (
-                <Sec title="Review">
-                  <div className="text-xs text-gray-500 mb-1.5">Profile tier (optional)</div>
-                  <div className="flex gap-2 mb-3">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => setTier(t)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${tier === t ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{t}</button>)}</div>
+                <Sec title={t('initial_review')}>
+                  <div className="text-xs text-gray-500 mb-1.5">{t('profile_tier')}</div>
+                  <div className="flex gap-2 mb-3">{['high', 'medium', 'low'].map(tk => <button key={tk} onClick={() => setTier(tk)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${tier === tk ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{tk}</button>)}</div>
                   <div className="flex gap-2">
-                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[#0D1B35] text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">📅 Interview</button>
-                    <button disabled={busy} onClick={reject} className="flex-1 bg-white border border-red-200 text-red-600 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">✕ Reject</button>
+                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[#0D1B35] text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">📅 {t('send_interview')}</button>
+                    <button disabled={busy} onClick={reject} className="flex-1 bg-white border border-red-200 text-red-600 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">✕ {t('reject')}</button>
                   </div>
-                  <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason for rejection (optional)" className="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-xs" />
+                  <input value={reason} onChange={e => setReason(e.target.value)} placeholder={t('reject_reason_ph')} className="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-xs" />
                 </Sec>
-              ) : <Sec title="View only"><p className="text-xs text-gray-500">Read-only access.</p></Sec>}
-              <Sec title="Applied for">
+              ) : <Sec title={t('view_only')}><p className="text-xs text-gray-500">{t('view_only_msg')}</p></Sec>}
+              <Sec title={t('s_applied_for')}>
                 <div className="flex flex-wrap gap-1.5">{(sel.positions || []).map(p => <span key={p} className="text-xs bg-[#0D1B35]/5 text-[#0D1B35] font-medium px-2.5 py-1 rounded-full">{p}</span>)}</div>
-                {sel.positions?.includes('Security') && <div className="mt-2 text-xs">Security license: <b>{sel.security_licensed === true ? 'Licensed' : sel.security_licensed === false ? 'Unlicensed' : '—'}</b>{sel.license_path && <button onClick={() => openFile('candidate-licenses', sel.license_path)} className="ml-2 text-blue-600 font-medium">View license</button>}</div>}
+                {sel.positions?.includes('Security') && <div className="mt-2 text-xs">{t('sec_license')}: <b>{sel.security_licensed === true ? t('licensed') : sel.security_licensed === false ? t('unlicensed') : '—'}</b>{sel.license_path && <button onClick={() => openFile('candidate-licenses', sel.license_path)} className="ml-2 text-blue-600 font-medium">{t('view_license')}</button>}</div>}
               </Sec>
-              <Sec title="Contact"><Rw k="Phone" v={sel.phone} /><Rw k="Email" v={sel.email} /><Rw k="Source" v={sel.intake_channel ? chan(sel.intake_channel) : null} /></Sec>
-              <Sec title="Job fit"><Rw k="Expected pay" v={payText(sel)} /><Rw k="Availability" v={sel.availability} /><Rw k="Transportation" v={sel.transportation} /><Rw k="English level" v={sel.english_level} /></Sec>
-              <Sec title="Location"><Rw k="Lives in" v={[sel.borough, sel.city, sel.state].filter(Boolean).join(', ')} /><Rw k="Open to work in" v={(sel.work_areas || []).join(', ')} /></Sec>
-              {sel.experience && <Sec title="Experience"><p className="text-xs text-gray-600 leading-relaxed bg-[#F5F6FA] rounded-lg p-3 whitespace-pre-line">{sel.experience}</p></Sec>}
+              <Sec title={t('s_contact')}><Rw k={t('l_phone')} v={sel.phone} /><Rw k={t('l_email')} v={sel.email} /><Rw k={t('f_source')} v={sel.intake_channel ? chan(sel.intake_channel) : null} /></Sec>
+              <Sec title={t('s_job_fit')}><Rw k={t('l_expected_pay')} v={payText(sel)} /><Rw k={t('l_availability')} v={sel.availability} /><Rw k={t('l_transportation')} v={sel.transportation} /><Rw k={t('l_english')} v={sel.english_level} /></Sec>
+              <Sec title={t('s_location')}><Rw k={t('l_lives_in')} v={[sel.borough, sel.city, sel.state].filter(Boolean).join(', ')} /><Rw k={t('l_open_to')} v={(sel.work_areas || []).join(', ')} /></Sec>
+              {sel.experience && <Sec title={t('s_experience')}><p className="text-xs text-gray-600 leading-relaxed bg-[#F5F6FA] rounded-lg p-3 whitespace-pre-line">{sel.experience}</p></Sec>}
               {sel.strengths && <Sec title="Strengths"><p className="text-xs text-gray-600 leading-relaxed">{sel.strengths}</p></Sec>}
-              <Sec title="Files"><Rw k="Heard via" v={sel.referral_source} />{sel.resume_path ? <button onClick={() => openFile('candidate-resumes', sel.resume_path)} className="mt-1 inline-flex items-center gap-2 bg-[#F5F6FA] border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-[#0D1B35]"><span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">PDF</span> View résumé</button> : <div className="text-xs text-gray-400 mt-1">No résumé</div>}</Sec>
+              <Sec title={t('s_source_files')}><Rw k={t('l_heard_via')} v={sel.referral_source} />{sel.resume_path ? <button onClick={() => openFile('candidate-resumes', sel.resume_path)} className="mt-1 inline-flex items-center gap-2 bg-[#F5F6FA] border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-[#0D1B35]"><span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">PDF</span> {t('view_resume')}</button> : <div className="text-xs text-gray-400 mt-1">{t('no_resume')}</div>}</Sec>
             </div>
           </aside>
         </>
       )}
 
-      {showAdd && <AddCandidate supabase={supabase} onClose={() => setShowAdd(false)} onAdded={(c) => { setRows(rs => [c, ...rs]); setShowAdd(false); flash('Candidate added to queue') }} />}
+      {showAdd && <AddCandidate supabase={supabase} onClose={() => setShowAdd(false)} onAdded={(c) => { setRows(rs => [c, ...rs]); setShowAdd(false); flash(t('add_candidate')) }} />}
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
     </div>
   )
