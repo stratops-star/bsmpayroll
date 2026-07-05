@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
+import RecruitingTabs from '@/components/RecruitingTabs'
 
 type Candidate = {
   id: string; created_at: string; full_name: string; phone: string | null; email: string | null
@@ -22,16 +23,13 @@ const MANUAL_POS = ['Garbage Porter', 'Cleaning Porter', 'Morning Garbage Porter
 const BOROUGHS = ['Bronx', 'Brooklyn', 'Manhattan', 'Queens', 'Staten Island']
 const TRANSPORT = ['Bicycle', 'Scooter', 'Train', 'Bus', 'Car']
 
-function Tabs({ badge }: { badge: number }) {
-  const items = [['New Queue', '/recruiting'], ['Interview', '/recruiting/interview'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']]
-  return <div className="flex gap-1 mt-3 flex-wrap">{items.map(([l, h]) => <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${l === 'New Queue' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}{l === 'New Queue' && badge > 0 && <span className="bg-[#D4A843] text-[#0D1B35] text-[11px] font-bold rounded-full px-1.5">{badge}</span>}</a>)}</div>
-}
 
 export default function NewQueuePage() {
   const [supabase] = useState(() => createClient())
   const [rows, setRows] = useState<Candidate[]>([])
   const [loading, setLoading] = useState(true)
   const [canAct, setCanAct] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [sel, setSel] = useState<Candidate | null>(null)
   const [tier, setTier] = useState<string | null>(null)
   const [reason, setReason] = useState('')
@@ -50,7 +48,7 @@ export default function NewQueuePage() {
   async function load() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) { const { data: me } = await supabase.from('app_users').select('role').eq('id', user.id).single(); setCanAct(me?.role === 'admin' || me?.role === 'recruiter') }
+    if (user) { const { data: me } = await supabase.from('app_users').select('role').eq('id', user.id).single(); setCanAct(me?.role === 'admin' || me?.role === 'recruiter'); setIsAdmin(me?.role === 'admin') }
     const { data } = await supabase.from('candidates').select('*').eq('status', 'applied').order('created_at', { ascending: false })
     setRows(data ?? []); setLoading(false)
   }
@@ -109,18 +107,12 @@ export default function NewQueuePage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <div className="bg-[#0D1B35] text-white px-6 py-4 border-b-[3px] border-[#D4A843]">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-3">
-            <a href="/hub" className="text-white/50 text-sm">← Hub</a>
-            <div><div className="text-lg font-semibold">New Queue</div><div className="text-xs text-white/50">Applications waiting for first review</div></div>
-            <div className="ml-auto flex items-center gap-2">{canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">+ Add candidate</button>}<ShareCareers /></div>
-          </div>
-          <Tabs badge={newCount} />
-        </div>
-      </div>
-
       <div className="max-w-5xl mx-auto px-6 py-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div><h1 className="text-xl font-semibold text-[#0D1B35]">New Queue</h1><p className="text-xs text-gray-500">Applications waiting for first review</p></div>
+          <div className="flex items-center gap-2">{isAdmin && <a href="/recruiting/import" className="text-sm bg-white border border-gray-200 text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">⭳ Import</a>}{canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">+ Add candidate</button>}<ShareCareers /></div>
+        </div>
+
         {/* filter bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, position…" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
@@ -144,6 +136,8 @@ export default function NewQueuePage() {
             <div className="flex justify-end mt-3"><button onClick={clearAll} className="text-xs text-gray-500 underline">Clear all filters</button></div>
           </div>
         )}
+
+        <RecruitingTabs newCount={newCount} />
 
         {loading ? <p className="text-gray-400 text-sm">Loading…</p>
           : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No new applications right now.</div>
