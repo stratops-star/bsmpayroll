@@ -315,6 +315,7 @@ function EField({ label, value, onSave, flag }: { label: string; value: string |
   return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}{flag && empty && <Miss />}</div><input defaultValue={value || ''} onBlur={e => e.target.value !== (value || '') && onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-gray-200'}`} /></div>
 }
 function ESelect({ label, value, opts, onSave, flag }: { label: string; value: string | null | undefined; opts: string[]; onSave: (v: string) => void; flag?: boolean }) {
-  const empty = value == null || value === ''
-  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}{flag && empty && <Miss />}</div><select defaultValue={value || ''} onChange={e => onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-gray-200'} bg-white`}>{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
+  const valid = opts.filter(Boolean)
+  const empty = value == null || value === '' || !valid.includes(value)
+  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}{flag && empty && <Miss />}</div><select defaultValue={valid.includes(value || '') ? (value || '') : ''} onChange={e => onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-gray-200'} bg-white`}>{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
 }
