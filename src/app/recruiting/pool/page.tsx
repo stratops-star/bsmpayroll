@@ -200,7 +200,6 @@ export default function PoolPage() {
               {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ View original in Asana</a>}
             </div>
             <div className="overflow-auto flex-1">
-              {missingFields(sel).length > 0 && <div className="mx-5 mt-4 mb-1 text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded-lg px-3 py-2">⚠ Missing: {missingFields(sel).join(', ')}</div>}
               {canAct && (
                 <div className="p-5 border-b border-gray-100 space-y-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Tier</div><div className="flex gap-2">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => save({ profile_tier: t })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${sel.profile_tier === t ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{t}</button>)}</div></div>
@@ -213,15 +212,15 @@ export default function PoolPage() {
                 {canAct ? (
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="text-xs text-gray-600">Gender<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
-                      <label className="text-xs text-gray-600">Age<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <div className="text-xs text-gray-600">Nationality<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder="Nationality…" /></div></div>
-                      <div className="text-xs text-gray-600">Ethnicity<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder="Ethnicity…" /></div></div>
-                      <div className="text-xs text-gray-600 col-span-2">Time in USA<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} /></div></div>
+                      <label className="text-xs text-gray-600">Gender{!sel.gender && <Miss />}<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className={`w-full mt-1 border rounded-lg px-2 py-1.5 text-sm ${!sel.gender ? 'border-red-200 bg-red-50/40' : 'border-gray-200'}`}><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
+                      <label className="text-xs text-gray-600">Age{sel.age == null && <Miss />}<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className={`w-full mt-1 border rounded-lg px-2 py-1.5 text-sm ${sel.age == null ? 'border-red-200 bg-red-50/40' : 'border-gray-200'}`} /></label>
+                      <div className="text-xs text-gray-600">Nationality{!sel.nationality && <Miss />}<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder="Nationality…" /></div></div>
+                      <div className="text-xs text-gray-600">Ethnicity{!sel.ethnicity && <Miss />}<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder="Ethnicity…" /></div></div>
+                      <div className="text-xs text-gray-600 col-span-2">Time in USA{!sel.time_in_usa && <Miss />}<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} /></div></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {([['Tax ID', 'has_tax_id'], ['SS', 'has_ss'], ['Bank Acct', 'has_bank_account']] as [string, keyof Candidate][]).map(([label, key]) => (
-                        <div key={key}><div className="text-xs text-gray-600 mb-1">{label}</div><div className="flex gap-1.5">
+                        <div key={key}><div className="text-xs text-gray-600 mb-1">{label}{sel[key] == null && <Miss />}</div><div className="flex gap-1.5">
                           {[['Yes', true], ['No', false]].map(([l, v]) => <button key={l as string} onClick={() => save({ [key]: v } as any)} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${sel[key] === v ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{l}</button>)}
                         </div></div>
                       ))}
@@ -250,17 +249,17 @@ export default function PoolPage() {
               </Sec>
               {canAct ? (<>
                 <Sec title="Contact">
-                  <EField label="Phone" value={sel.phone} onSave={v => save({ phone: v || null } as any)} />
-                  <EField label="Email" value={sel.email} onSave={v => save({ email: v || null } as any)} />
+                  <EField label="Phone" value={sel.phone} onSave={v => save({ phone: v || null } as any)} flag />
+                  <EField label="Email" value={sel.email} onSave={v => save({ email: v || null } as any)} flag />
                 </Sec>
                 <Sec title="Job fit">
-                  <EField label="Expected pay" value={sel.expected_pay} onSave={v => save({ expected_pay: v || null } as any)} />
-                  <ESelect label="Availability" value={sel.availability} opts={['', 'Weekdays', 'Weekends & Holidays', 'All']} onSave={v => save({ availability: v || null } as any)} />
-                  <EField label="Transportation" value={sel.transportation} onSave={v => save({ transportation: v || null } as any)} />
-                  <ESelect label="English level" value={sel.english_level} opts={['', 'Basic', 'Intermediate', 'Fluent']} onSave={v => save({ english_level: v || null } as any)} />
+                  <EField label="Expected pay" value={sel.expected_pay} onSave={v => save({ expected_pay: v || null } as any)} flag />
+                  <ESelect label="Availability" value={sel.availability} opts={['', 'Weekdays', 'Weekends & Holidays', 'All']} onSave={v => save({ availability: v || null } as any)} flag />
+                  <EField label="Transportation" value={sel.transportation} onSave={v => save({ transportation: v || null } as any)} flag />
+                  <ESelect label="English level" value={sel.english_level} opts={['', 'Basic', 'Intermediate', 'Fluent']} onSave={v => save({ english_level: v || null } as any)} flag />
                 </Sec>
                 <Sec title="Location">
-                  <ESelect label="Lives in (borough)" value={sel.borough} opts={['', ...BOROUGHS]} onSave={v => save({ borough: v || null, state: v ? 'NY' : sel.state } as any)} />
+                  <ESelect label="Lives in (borough)" value={sel.borough} opts={['', ...BOROUGHS]} onSave={v => save({ borough: v || null, state: v ? 'NY' : sel.state } as any)} flag />
                   <div className="py-1"><div className="text-[11px] text-gray-500 mb-1">Open to work in</div><div className="flex flex-wrap gap-1.5">{BOROUGHS.map(b => { const on = (sel.work_areas || []).includes(b); return <button key={b} onClick={() => { const cur = sel.work_areas || []; save({ work_areas: cur.includes(b) ? cur.filter(x => x !== b) : [...cur, b] } as any) }} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`}>{b}</button> })}</div></div>
                 </Sec>
               </>) : (<>
@@ -303,9 +302,12 @@ export default function PoolPage() {
 
 function Sec({ title, children }: { title: string; children: React.ReactNode }) { return <div className="p-5 border-b border-gray-100"><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2.5">{title}</div>{children}</div> }
 function Rw({ k, v }: { k: string; v: string | null | undefined }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-gray-500">{k}</span><span className="text-gray-800 font-medium text-right">{v || '—'}</span></div> }
-function EField({ label, value, onSave }: { label: string; value: string | null | undefined; onSave: (v: string) => void }) {
-  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}</div><input defaultValue={value || ''} onBlur={e => e.target.value !== (value || '') && onSave(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" /></div>
+function Miss() { return <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0.5 ml-1.5 align-middle">missing</span> }
+function EField({ label, value, onSave, flag }: { label: string; value: string | null | undefined; onSave: (v: string) => void; flag?: boolean }) {
+  const empty = value == null || value === ''
+  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}{flag && empty && <Miss />}</div><input defaultValue={value || ''} onBlur={e => e.target.value !== (value || '') && onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-gray-200'}`} /></div>
 }
-function ESelect({ label, value, opts, onSave }: { label: string; value: string | null | undefined; opts: string[]; onSave: (v: string) => void }) {
-  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}</div><select defaultValue={value || ''} onChange={e => onSave(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white">{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
+function ESelect({ label, value, opts, onSave, flag }: { label: string; value: string | null | undefined; opts: string[]; onSave: (v: string) => void; flag?: boolean }) {
+  const empty = value == null || value === ''
+  return <div className="py-1"><div className="text-[11px] text-gray-500 mb-0.5">{label}{flag && empty && <Miss />}</div><select defaultValue={value || ''} onChange={e => onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-gray-200'} bg-white`}>{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
 }
