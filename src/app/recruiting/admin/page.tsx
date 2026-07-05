@@ -10,6 +10,7 @@ type AppUser = {
   id: string
   email: string
   full_name: string | null
+  phone: string | null
   role: string
   departments: string[]
   active: boolean
@@ -17,7 +18,6 @@ type AppUser = {
 
 const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'viewer']
 const DEPTS = ['recruiting', 'payroll']
-// Picking a role auto-grants the matching module(s); pills can still override.
 const ROLE_DEPTS: Record<string, string[]> = {
   admin: ['recruiting', 'payroll'],
   payroll: ['payroll'],
@@ -28,6 +28,7 @@ const ROLE_DEPTS: Record<string, string[]> = {
 const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706', '#4F46E5', '#BE123C']
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const hue = (s: string) => AV[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AV.length]
+const fieldStyle: React.CSSProperties = { padding: '6px 9px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'inherit', outline: 'none', width: '100%' }
 
 export default function AdminPage() {
   const [supabase] = useState(() => createClient())
@@ -49,17 +50,15 @@ export default function AdminPage() {
     })()
   }, [supabase])
 
-  function patch(id: string, p: Partial<AppUser>) {
-    setUsers(us => us.map(u => (u.id === id ? { ...u, ...p } : u)))
-  }
+  function patch(id: string, p: Partial<AppUser>) { setUsers(us => us.map(u => (u.id === id ? { ...u, ...p } : u))) }
   function toggleDept(u: AppUser, d: string) {
     const has = u.departments?.includes(d)
     patch(u.id, { departments: has ? u.departments.filter(x => x !== d) : [...(u.departments || []), d] })
   }
   async function save(u: AppUser) {
     const { error } = await supabase.from('app_users')
-      .update({ role: u.role, departments: u.departments, active: u.active }).eq('id', u.id)
-    flash(error ? 'Error: ' + error.message : `Saved ${u.email.split('@')[0]}`)
+      .update({ role: u.role, departments: u.departments, active: u.active, full_name: u.full_name || null, phone: u.phone || null }).eq('id', u.id)
+    flash(error ? 'Error: ' + error.message : `Saved ${u.full_name || u.email.split('@')[0]}`)
   }
   let t: any
   function flash(m: string) { setToast(m); clearTimeout(t); t = setTimeout(() => setToast(''), 2200) }
@@ -76,29 +75,24 @@ export default function AdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#F5F6FA', fontFamily: 'system-ui, sans-serif' }}>
-      {/* header */}
       <div style={{ background: NAVY, color: '#fff', padding: '20px 24px', borderBottom: `3px solid ${GOLD}` }}>
-        <div style={{ maxWidth: 940, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <a href="/hub" style={{ color: '#8895AC', textDecoration: 'none', fontSize: 13 }}>← Hub</a>
           <div style={{ marginLeft: 6 }}>
             <div style={{ fontSize: 20, fontWeight: 700 }}>User Access</div>
-            <div style={{ fontSize: 12, color: '#8895AC' }}>Assign roles and departments</div>
+            <div style={{ fontSize: 12, color: '#8895AC' }}>Assign roles, departments, and contact details</div>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 940, margin: '0 auto', padding: '22px 24px 60px' }}>
-        <input
-          value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…"
-          style={{ width: '100%', maxWidth: 360, padding: '10px 14px', borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', marginBottom: 22 }}
-        />
+      <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 24px 60px' }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…"
+          style={{ width: '100%', maxWidth: 360, padding: '10px 14px', borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 14, fontFamily: 'inherit', outline: 'none', marginBottom: 22 }} />
 
-        {pending.length > 0 && (
-          <>
-            <SectionLabel>Pending assignment · {pending.length}</SectionLabel>
-            {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} pending />)}
-          </>
-        )}
+        {pending.length > 0 && (<>
+          <SectionLabel>Pending assignment · {pending.length}</SectionLabel>
+          {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} pending />)}
+        </>)}
 
         <SectionLabel>Active users · {assigned.length}</SectionLabel>
         {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} />)}
@@ -123,15 +117,15 @@ function Row({ u, patch, toggleDept, save, pending }: {
 }) {
   const name = u.full_name || u.email.split('@')[0]
   return (
-    <div style={{
-      background: '#fff', border: `1px solid ${pending ? '#FDE68A' : '#EEF0F4'}`, borderRadius: 14,
-      padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-    }}>
+    <div style={{ background: '#fff', border: `1px solid ${pending ? '#FDE68A' : '#EEF0F4'}`, borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
       <div style={{ width: 40, height: 40, borderRadius: '50%', background: hue(u.email), color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{ini(name)}</div>
 
-      <div style={{ minWidth: 160, flex: '1 1 160px' }}>
-        <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{name}</div>
+      <div style={{ minWidth: 220, flex: '1 1 220px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <input value={u.full_name || ''} onChange={e => patch(u.id, { full_name: e.target.value })} placeholder="Full name"
+          style={{ ...fieldStyle, fontWeight: 600, color: NAVY }} />
         <div style={{ color: '#6B7280', fontSize: 12 }}>{u.email}</div>
+        <input value={u.phone || ''} onChange={e => patch(u.id, { phone: e.target.value })} placeholder="Cellphone (for interview texts)"
+          style={fieldStyle} />
       </div>
 
       <select value={u.role} onChange={e => { const r = e.target.value; patch(u.id, { role: r, departments: ROLE_DEPTS[r] ?? u.departments }) }}
@@ -144,11 +138,7 @@ function Row({ u, patch, toggleDept, save, pending }: {
           const on = u.departments?.includes(d)
           return (
             <button key={d} onClick={() => toggleDept(u, d)}
-              style={{
-                padding: '7px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                border: on ? `1px solid ${NAVY}` : '1px solid #E5E7EB',
-                background: on ? NAVY : '#fff', color: on ? '#fff' : '#9CA3AF',
-              }}>
+              style={{ padding: '7px 12px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: on ? `1px solid ${NAVY}` : '1px solid #E5E7EB', background: on ? NAVY : '#fff', color: on ? '#fff' : '#9CA3AF' }}>
               {on ? '✓ ' : ''}{d}
             </button>
           )
