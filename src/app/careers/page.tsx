@@ -156,8 +156,12 @@ export default function CareersPage() {
 
   async function submit() {
     setErr('')
-    if (!f.full_name || !f.phone || !f.email || positions.length === 0) { setErr(tt.reqCore); return }
-    if (!f.pay_min || !f.pay_max) { setErr(tt.reqPay); return }
+    const emailOk = /^\S+@\S+\.\S+$/.test(f.email)
+    const boroughNeeded = f.state === 'NY'
+    if (!f.full_name || !f.phone || !f.email || positions.length === 0 || !f.state || !f.city || (boroughNeeded && !f.borough) || workAreas.length === 0 || !f.english_level || transport.length === 0 || !availability || !f.pay_min || !f.pay_max || (has('Security') && !securityLicensed)) {
+      setErr(lang === 'es' ? 'Complete todos los campos obligatorios.' : 'Please complete all required fields.'); return
+    }
+    if (!emailOk) { setErr(lang === 'es' ? 'Ingrese un correo electrónico válido.' : 'Please enter a valid email.'); return }
     if (Number(f.pay_min) > Number(f.pay_max)) { setErr(tt.payOrder); return }
     setBusy(true)
     try {
@@ -302,17 +306,17 @@ export default function CareersPage() {
             {/* Location */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={label}>{tt.state}</label>
+                <label className={label}>{tt.state} *</label>
                 <select className={input} value={f.state} onChange={e => { set('state', e.target.value); if (e.target.value !== 'NY') set('borough', '') }}>
                   <option value="">{tt.chooseState}</option>
                   {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              <div><label className={label}>{tt.city}</label><input className={input} value={f.city} onChange={e => set('city', e.target.value)} /></div>
+              <div><label className={label}>{tt.city} *</label><input className={input} value={f.city} onChange={e => set('city', e.target.value)} /></div>
             </div>
             {f.state === 'NY' && (
               <div>
-                <label className={label}>{tt.borough}</label>
+                <label className={label}>{tt.borough} *</label>
                 <select className={input} value={f.borough} onChange={e => set('borough', e.target.value)}>
                   <option value="">{tt.chooseBorough}</option>
                   {BOROUGHS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -321,7 +325,7 @@ export default function CareersPage() {
             )}
 
             <div>
-              <label className={label}>{tt.workAreas}</label>
+              <label className={label}>{tt.workAreas} *</label>
               <div className="flex flex-wrap gap-2">
                 {BOROUGHS.map(b => <button key={b} type="button" onClick={() => toggle(workAreas, setWorkAreas, b)} className={pill(workAreas.includes(b))}>{b}</button>)}
               </div>
@@ -333,21 +337,21 @@ export default function CareersPage() {
             </div>
 
             <div>
-              <label className={label}>{tt.transport}</label>
+              <label className={label}>{tt.transport} *</label>
               <div className="flex flex-wrap gap-2">
                 {TRANSPORT.map(t => <button key={t.v} type="button" onClick={() => toggle(transport, setTransport, t.v)} className={pill(transport.includes(t.v))}>{lang === 'es' ? t.es : t.en}</button>)}
               </div>
             </div>
 
             <div>
-              <label className={label}>{tt.avail}</label>
+              <label className={label}>{tt.avail} *</label>
               <div className="flex flex-wrap gap-2">
                 {AVAIL.map(a => <button key={a.v} type="button" onClick={() => setAvailability(a.v)} className={pill(availability === a.v)}>{lang === 'es' ? a.es : a.en}</button>)}
               </div>
             </div>
 
             <div>
-              <label className={label}>{tt.english}</label>
+              <label className={label}>{tt.english} *</label>
               <select className={input} value={f.english_level} onChange={e => set('english_level', e.target.value)}>
                 <option value=""></option>
                 <option value="Basic">{tt.basic}</option>
@@ -355,8 +359,8 @@ export default function CareersPage() {
                 <option value="Fluent">{tt.fluent}</option>
               </select>
             </div>
-            <div><label className={label}>{tt.source}</label><input className={input} value={f.referral_source} onChange={e => set('referral_source', e.target.value)} /></div>
-            <div><label className={label}>{tt.experience}</label><textarea rows={3} className={input} value={f.experience} onChange={e => set('experience', e.target.value)} /></div>
+            <div><label className={label}>{tt.source} <span className="text-gray-400 font-normal">({lang==='es'?'opcional':'optional'})</span></label><input className={input} value={f.referral_source} onChange={e => set('referral_source', e.target.value)} /></div>
+            <div><label className={label}>{tt.experience} <span className="text-gray-400 font-normal">({lang==='es'?'opcional':'optional'})</span></label><textarea rows={3} className={input} value={f.experience} onChange={e => set('experience', e.target.value)} /></div>
             <div>
               <label className={label}>{tt.resume}</label>
               <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={e => setResume(e.target.files?.[0] || null)}
