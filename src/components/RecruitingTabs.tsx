@@ -5,7 +5,8 @@ import { useRecruitingLang } from '@/components/recruiting-i18n'
 
 const TABS: [string, string][] = [
   ['tab_queue', '/recruiting'],
-  ['tab_interview', '/recruiting/interview'],
+  ['tab_virtual', '/recruiting/virtual'],
+  ['tab_inperson', '/recruiting/inperson'],
   ['tab_pool', '/recruiting/pool'],
   ['tab_rejected', '/recruiting/rejected'],
 ]
