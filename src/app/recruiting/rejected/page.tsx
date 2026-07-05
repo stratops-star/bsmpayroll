@@ -26,7 +26,13 @@ export default function RejectedPage() {
   }
   useEffect(() => { load() }, [])
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
-  async function restore(c: Candidate) { const { error } = await supabase.from('candidates').update({ status: 'applied', stage: 'applied' }).eq('id', c.id); if (error) { flash('Error: ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== c.id)); flash('Restored to New Queue') }
+  async function restore(c: Candidate) {
+    const toPool = c.rejected_reason === 'No longer interested'
+    const patch = toPool ? { status: 'in_pool', in_pool: true, stage: 'available' } : { status: 'applied', stage: 'applied' }
+    const { error } = await supabase.from('candidates').update(patch).eq('id', c.id)
+    if (error) { flash('Error: ' + error.message); return }
+    setRows(rs => rs.filter(r => r.id !== c.id)); flash(toPool ? 'Restored to Candidate Pool' : 'Restored to New Queue')
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
@@ -51,7 +57,7 @@ export default function RejectedPage() {
                     <td className="px-4 py-3 text-gray-500">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-[220px]">{c.rejected_reason || <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{fmtDate(c.created_at)}</td>
-                    {canAct && <td className="px-4 py-3 text-right"><button onClick={() => restore(c)} className="text-xs border border-gray-200 text-gray-600 rounded-lg px-2.5 py-1 hover:bg-gray-50">↩ Restore</button></td>}
+                    {canAct && <td className="px-4 py-3 text-right"><button onClick={() => restore(c)} className="text-xs border border-gray-200 text-gray-600 rounded-lg px-2.5 py-1 hover:bg-gray-50 whitespace-nowrap">↩ Restore to {c.rejected_reason === 'No longer interested' ? 'Pool' : 'Queue'}</button></td>}
                   </tr>))}
                 </tbody></table>
             </div>
