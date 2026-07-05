@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import RecruitingTabs from '@/components/RecruitingTabs'
+import { SearchSelect, YearsMonths } from '@/components/SearchSelect'
+import { NATIONALITIES, ETHNICITIES } from '@/lib/recruiting-data'
 
 type Candidate = {
   id: string; created_at: string; interview_at: string | null; interviewer_id: string | null; full_name: string; phone: string | null; email: string | null
@@ -163,9 +165,9 @@ export default function InterviewPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <label className="text-xs text-gray-600">Gender<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
                       <label className="text-xs text-gray-600">Age<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600">Nationality<input defaultValue={sel.nationality || ''} onBlur={e => e.target.value !== (sel.nationality || '') && save({ nationality: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600">Ethnicity<input defaultValue={sel.ethnicity || ''} onBlur={e => e.target.value !== (sel.ethnicity || '') && save({ ethnicity: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600 col-span-2">Time in USA<input defaultValue={sel.time_in_usa || ''} onBlur={e => e.target.value !== (sel.time_in_usa || '') && save({ time_in_usa: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <div className="text-xs text-gray-600">Nationality<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder="Nationality…" /></div></div>
+                      <div className="text-xs text-gray-600">Ethnicity<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder="Ethnicity…" /></div></div>
+                      <div className="text-xs text-gray-600 col-span-2">Time in USA<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} /></div></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {([['Tax ID', 'has_tax_id'], ['SS', 'has_ss'], ['Bank Acct', 'has_bank_account']] as [string, keyof Candidate][]).map(([label, key]) => (
