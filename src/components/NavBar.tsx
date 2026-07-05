@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
 import { useRecruitingChrome } from '@/components/RecruitingChrome'
+import { useRecruitingLang } from '@/components/recruiting-i18n'
 
 interface NavBarProps {
   lang?: Lang
@@ -28,6 +29,7 @@ export default function NavBar({ lang = 'en', onLangChange, userEmail, lastRefre
   const router = useRouter()
   const pathname = usePathname()
   const chrome = useRecruitingChrome()
+  const recLang = useRecruitingLang()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const dir = TRANSLATIONS[lang].dir
@@ -157,6 +159,17 @@ export default function NavBar({ lang = 'en', onLangChange, userEmail, lastRefre
             title="Relaunch tutorial tour">
             ▶ Tour
           </button>
+        )}
+
+        {isRecruiting && (
+          <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
+            {(['en', 'es'] as const).map(l => (
+              <button key={l} onClick={() => recLang.setLang(l)}
+                className={`text-xs px-2 py-1 rounded-md font-medium ${recLang.lang === l ? 'bg-[#D4A843] text-[#0D1B35]' : 'text-white/60 hover:text-white'}`}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
         )}
 
         {isRecruiting && chrome.actions && (
