@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 import RecruitingTabs from '@/components/RecruitingTabs'
+import { TR, t2 } from '@/lib/recruiting-data'
 
 type Candidate = {
   id: string; created_at: string; full_name: string; phone: string | null; email: string | null
@@ -205,6 +206,7 @@ export default function NewQueuePage() {
 }
 
 function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: () => void; onAdded: (c: Candidate) => void }) {
+  const [lang, setLang] = useState<'en' | 'es'>('en')
   const [f, setF] = useState({ full_name: '', phone: '', email: '', borough: '', pay_min: '', pay_max: '', english_level: '', availability: '', experience: '' })
   const [positions, setPositions] = useState<string[]>([]); const [trans, setTrans] = useState<string[]>([]); const [lic, setLic] = useState<'' | 'yes' | 'no'>('')
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('')
@@ -212,28 +214,39 @@ function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: 
   const toggle = (arr: string[], s: any, v: string) => s(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v])
   const input = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm'
   const pill = (on: boolean) => `text-xs font-medium px-3 py-1.5 rounded-full border ${on ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'bg-white text-gray-500 border-gray-200'}`
+  const L = (x: any) => t2(x, lang)
+  const star = <span className="text-red-500">*</span>
   async function submit() {
-    setErr(''); if (!f.full_name || !f.phone || positions.length === 0) { setErr('Name, phone, and at least one position are required.'); return }
-    setBusy(true); const payMin = f.pay_min ? Number(f.pay_min) : null, payMax = f.pay_max ? Number(f.pay_max) : null
-    const { data, error } = await supabase.from('candidates').insert({ intake_channel: 'manual', status: 'applied', stage: 'applied', in_pool: false, full_name: f.full_name, phone: f.phone, email: f.email || null, preferred_lang: 'en', positions, state: f.borough ? 'NY' : null, borough: f.borough || null, pay_min: payMin, pay_max: payMax, expected_pay: payMin != null && payMax != null ? `$${payMin}–${payMax}/hr` : null, transportation: trans.length ? trans.join(', ') : null, availability: f.availability || null, english_level: f.english_level || null, experience: f.experience || null, security_licensed: positions.includes('Security') ? (lic === 'yes' ? true : lic === 'no' ? false : null) : null }).select().single()
+    setErr('')
+    const missing = !f.full_name || !f.phone || !f.email || positions.length === 0 || !f.borough || !f.english_level || !f.pay_min || !f.pay_max || trans.length === 0 || !f.availability || (positions.includes('Security') && !lic)
+    if (missing) { setErr(L(TR.fillRequired)); return }
+    if (!/^\S+@\S+\.\S+$/.test(f.email)) { setErr(lang === 'es' ? 'Correo electrónico inválido.' : 'Please enter a valid email.'); return }
+    setBusy(true); const payMin = Number(f.pay_min), payMax = Number(f.pay_max)
+    const { data, error } = await supabase.from('candidates').insert({ intake_channel: 'manual', status: 'applied', stage: 'applied', in_pool: false, full_name: f.full_name, phone: f.phone, email: f.email, preferred_lang: lang, positions, state: 'NY', borough: f.borough, pay_min: payMin, pay_max: payMax, expected_pay: `$${payMin}–${payMax}/hr`, transportation: trans.join(', '), availability: f.availability, english_level: f.english_level, experience: f.experience || null, security_licensed: positions.includes('Security') ? (lic === 'yes' ? true : lic === 'no' ? false : null) : null }).select().single()
     setBusy(false); if (error) { setErr(error.message); return }; onAdded(data as Candidate)
   }
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-auto p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold text-[#0D1B35]">Add candidate</h2><button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button></div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-[#0D1B35]">{L(TR.addCandidate)}</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">{(['en', 'es'] as const).map(l => <button key={l} onClick={() => setLang(l)} className={`text-xs font-semibold px-2 py-1 rounded-md ${lang === l ? 'bg-[#0D1B35] text-white' : 'text-gray-500'}`}>{l.toUpperCase()}</button>)}</div>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
+          </div>
+        </div>
         <div className="space-y-3">
-          <input className={input} placeholder="Full name *" value={f.full_name} onChange={e => set('full_name', e.target.value)} />
-          <div className="grid grid-cols-2 gap-3"><input className={input} placeholder="Phone *" value={f.phone} onChange={e => set('phone', e.target.value)} /><input className={input} placeholder="Email" value={f.email} onChange={e => set('email', e.target.value)} /></div>
-          <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Positions *</div><div className="flex flex-wrap gap-1.5 max-h-32 overflow-auto p-1">{MANUAL_POS.map(p => <button key={p} type="button" onClick={() => toggle(positions, setPositions, p)} className={pill(positions.includes(p))}>{p}</button>)}</div></div>
-          {positions.includes('Security') && <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Security license</div><div className="flex gap-2"><button type="button" onClick={() => setLic('yes')} className={pill(lic === 'yes')}>Licensed</button><button type="button" onClick={() => setLic('no')} className={pill(lic === 'no')}>Unlicensed</button></div></div>}
-          <div className="grid grid-cols-2 gap-3"><select className={input} value={f.borough} onChange={e => set('borough', e.target.value)}><option value="">Borough…</option>{BOROUGHS.map(b => <option key={b} value={b}>{b}</option>)}</select><select className={input} value={f.english_level} onChange={e => set('english_level', e.target.value)}><option value="">English level…</option><option>Basic</option><option>Intermediate</option><option>Fluent</option></select></div>
-          <div className="grid grid-cols-2 gap-3"><input type="number" className={input} placeholder="Pay min $/hr" value={f.pay_min} onChange={e => set('pay_min', e.target.value)} /><input type="number" className={input} placeholder="Pay max $/hr" value={f.pay_max} onChange={e => set('pay_max', e.target.value)} /></div>
-          <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Transportation</div><div className="flex flex-wrap gap-1.5">{TRANSPORT.map(t => <button key={t} type="button" onClick={() => toggle(trans, setTrans, t)} className={pill(trans.includes(t))}>{t}</button>)}</div></div>
-          <select className={input} value={f.availability} onChange={e => set('availability', e.target.value)}><option value="">Availability…</option><option>Weekdays</option><option>Weekends & Holidays</option><option>All</option></select>
-          <textarea rows={2} className={input} placeholder="Notes / experience" value={f.experience} onChange={e => set('experience', e.target.value)} />
+          <input className={input} placeholder={`${L(TR.fullName)} *`} value={f.full_name} onChange={e => set('full_name', e.target.value)} />
+          <div className="grid grid-cols-2 gap-3"><input className={input} placeholder={`${L(TR.phone)} *`} value={f.phone} onChange={e => set('phone', e.target.value)} /><input className={input} placeholder={`${L(TR.email)} *`} value={f.email} onChange={e => set('email', e.target.value)} /></div>
+          <div><div className="text-xs font-semibold text-gray-500 mb-1.5">{L(TR.positions)} {star}</div><div className="flex flex-wrap gap-1.5 max-h-32 overflow-auto p-1">{MANUAL_POS.map(p => <button key={p} type="button" onClick={() => toggle(positions, setPositions, p)} className={pill(positions.includes(p))}>{p}</button>)}</div></div>
+          {positions.includes('Security') && <div><div className="text-xs font-semibold text-gray-500 mb-1.5">Security license {star}</div><div className="flex gap-2"><button type="button" onClick={() => setLic('yes')} className={pill(lic === 'yes')}>Licensed</button><button type="button" onClick={() => setLic('no')} className={pill(lic === 'no')}>Unlicensed</button></div></div>}
+          <div className="grid grid-cols-2 gap-3"><select className={input} value={f.borough} onChange={e => set('borough', e.target.value)}><option value="">{L(TR.selectBorough)} *</option>{BOROUGHS.map(b => <option key={b} value={b}>{b}</option>)}</select><select className={input} value={f.english_level} onChange={e => set('english_level', e.target.value)}><option value="">{L(TR.selectEnglish)} *</option><option>Basic</option><option>Intermediate</option><option>Fluent</option></select></div>
+          <div className="grid grid-cols-2 gap-3"><input type="number" className={input} placeholder={`${L(TR.payMin)} *`} value={f.pay_min} onChange={e => set('pay_min', e.target.value)} /><input type="number" className={input} placeholder={`${L(TR.payMax)} *`} value={f.pay_max} onChange={e => set('pay_max', e.target.value)} /></div>
+          <div><div className="text-xs font-semibold text-gray-500 mb-1.5">{L(TR.transportation)} {star}</div><div className="flex flex-wrap gap-1.5">{TRANSPORT.map(t => <button key={t} type="button" onClick={() => toggle(trans, setTrans, t)} className={pill(trans.includes(t))}>{t}</button>)}</div></div>
+          <select className={input} value={f.availability} onChange={e => set('availability', e.target.value)}><option value="">{L(TR.selectAvailability)} *</option><option>Weekdays</option><option>Weekends & Holidays</option><option>All</option></select>
+          <textarea rows={2} className={input} placeholder={L(TR.notes)} value={f.experience} onChange={e => set('experience', e.target.value)} />
           {err && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{err}</p>}
-          <button disabled={busy} onClick={submit} className="w-full bg-[#D4A843] text-[#0D1B35] font-semibold py-2.5 rounded-lg disabled:opacity-50">{busy ? 'Adding…' : 'Add to New Queue'}</button>
+          <button disabled={busy} onClick={submit} className="w-full bg-[#D4A843] text-[#0D1B35] font-semibold py-2.5 rounded-lg disabled:opacity-50">{busy ? '…' : L(TR.addToQueue)}</button>
         </div>
       </div>
     </div>
