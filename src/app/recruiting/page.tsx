@@ -41,6 +41,9 @@ export default function NewQueuePage() {
   const [toast, setToast] = useState('')
   const [newCount, setNewCount] = useState(0)
   const [showAdd, setShowAdd] = useState(false)
+  const [overrideOpen, setOverrideOpen] = useState(false)
+  const [requests, setRequests] = useState<{ id: string; label: string }[]>([])
+  const [reqId, setReqId] = useState('')
   const { setActions } = useRecruitingChrome()
   const { t, lang } = useRecruitingLang()
   const rowsRef = useRef<Candidate[]>([]); rowsRef.current = rows
@@ -86,6 +89,21 @@ export default function NewQueuePage() {
   const clearAll = () => { setF({ pos: 'all', lives: 'all', trans: 'all', lang: 'all', channel: 'all', date: 'all' }); setFrom(''); setTo(''); setQ('') }
 
   async function toInterview() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'interview', stage: 'initial_interview', profile_tier: tier }).eq('id', sel.id); setBusy(false); if (error) { flash(t('error') + ': ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash(t('moved_interview')) }
+  async function openOverride() {
+    setReqId(''); setOverrideOpen(true)
+    const { data: reqs } = await supabase.from('man_power_requests').select('id, location, count_needed, notes, position_id').eq('status', 'open').order('created_at', { ascending: false })
+    const { data: posList } = await supabase.from('positions').select('id, name')
+    const posMap = Object.fromEntries((posList || []).map((p: any) => [p.id, p.name]))
+    setRequests((reqs || []).map((r: any) => ({ id: r.id, label: [posMap[r.position_id] || 'Role', r.location, r.count_needed ? `×${r.count_needed}` : '', r.notes].filter(Boolean).join(' · ') })))
+  }
+  async function doOverride() {
+    if (!sel || !reqId) return
+    setBusy(true)
+    const { error } = await supabase.from('candidates').update({ status: 'in_pool', in_pool: true, stage: 'available', man_power_request_id: reqId }).eq('id', sel.id)
+    setBusy(false)
+    if (error) { flash(t('error') + ': ' + error.message); return }
+    setRows(rs => rs.filter(r => r.id !== sel.id)); setOverrideOpen(false); close(); flash(t('overridden'))
+  }
   async function reject() { if (!sel) return; setBusy(true); const { error } = await supabase.from('candidates').update({ status: 'rejected', stage: 'rejected', rejected_reason: reason || null }).eq('id', sel.id); setBusy(false); if (error) { flash(t('error') + ': ' + error.message); return }; setRows(rs => rs.filter(r => r.id !== sel.id)); close(); flash(t('moved_rejected')) }
 
   const positions = useMemo(() => [...new Set(rows.flatMap(r => r.positions || []))].sort(), [rows])
@@ -191,10 +209,11 @@ export default function NewQueuePage() {
                   <div className="text-xs text-gray-500 mb-1.5">{t('profile_tier')}</div>
                   <div className="flex gap-2 mb-3">{['high', 'medium', 'low'].map(tk => <button key={tk} onClick={() => setTier(tk)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${tier === tk ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{tk}</button>)}</div>
                   <div className="flex gap-2">
-                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[#0D1B35] text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">📅 {t('send_interview')}</button>
+                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[#0D1B35] text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">🎥 {t('send_to_virtual')}</button>
                     <button disabled={busy} onClick={reject} className="flex-1 bg-white border border-red-200 text-red-600 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">✕ {t('reject')}</button>
                   </div>
                   <input value={reason} onChange={e => setReason(e.target.value)} placeholder={t('reject_reason_ph')} className="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-xs" />
+                  <button disabled={busy} onClick={openOverride} className="w-full mt-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold py-2 rounded-lg disabled:opacity-50">⏭ {t('override')}</button>
                 </Sec>
               ) : <Sec title={t('view_only')}><p className="text-xs text-gray-500">{t('view_only_msg')}</p></Sec>}
               <Sec title={t('s_applied_for')}>
@@ -213,6 +232,25 @@ export default function NewQueuePage() {
       )}
 
       {showAdd && <AddCandidate supabase={supabase} onClose={() => setShowAdd(false)} onAdded={(c) => { setRows(rs => [c, ...rs]); setShowAdd(false); flash(t('add_candidate')) }} />}
+
+      {overrideOpen && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={() => setOverrideOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2"><h2 className="text-lg font-semibold text-[#0D1B35]">{t('override_title')}</h2><button onClick={() => setOverrideOpen(false)} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button></div>
+            <p className="text-xs text-gray-500 mb-4">{t('override_desc')}</p>
+            {requests.length === 0 ? (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-3">{t('no_open_requests')}</div>
+            ) : (<>
+              <label className="text-xs font-semibold text-gray-500">{t('pick_request')}</label>
+              <select value={reqId} onChange={e => setReqId(e.target.value)} className="w-full mt-1 mb-4 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">—</option>
+                {requests.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+              <button disabled={busy || !reqId} onClick={doOverride} className="w-full bg-[#D4A843] text-[#0D1B35] font-semibold py-2.5 rounded-lg disabled:opacity-40">⏭ {t('confirm_override')}</button>
+            </>)}
+          </div>
+        </div>
+      )}
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
     </div>
   )
