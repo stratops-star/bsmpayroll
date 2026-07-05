@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
+import RecruitingTabs from '@/components/RecruitingTabs'
 
 type Candidate = { id: string; created_at: string; full_name: string; phone: string | null; email: string | null; positions: string[] | null; borough: string | null; city: string | null; rejected_reason: string | null; profile_tier: string | null }
 
@@ -36,15 +37,9 @@ export default function RejectedPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <div className="bg-[#0D1B35] text-white px-6 py-4 border-b-[3px] border-[#D4A843]">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <a href="/hub" className="text-white/50 text-sm">← Hub</a>
-          <div><div className="text-lg font-semibold">Rejected</div><div className="text-xs text-white/50">Not advanced · kept for reference</div></div>
-        </div>
-        <div className="max-w-5xl mx-auto flex gap-1 mt-3 flex-wrap">{[['New Queue', '/recruiting'], ['Interview', '/recruiting/interview'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']].map(([l, h]) => <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'Rejected' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>)}</div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-6">
+      <div className="max-w-5xl mx-auto px-6 py-5">
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">Rejected</h1><p className="text-xs text-gray-500">Not advanced · kept for reference</p></div>
+        <RecruitingTabs />
         {loading ? <p className="text-gray-400 text-sm">Loading…</p>
           : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No rejected candidates.</div>
           : (<>
