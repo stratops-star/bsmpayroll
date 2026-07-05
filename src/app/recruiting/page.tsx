@@ -6,6 +6,7 @@ import ShareCareers from '@/components/ShareCareers'
 import RecruitingTabs from '@/components/RecruitingTabs'
 import { useRecruitingChrome } from '@/components/RecruitingChrome'
 import { useRecruitingLang } from '@/components/recruiting-i18n'
+import { SourceBadge } from '@/components/recruiting-i18n'
 import { TR, t2 } from '@/lib/recruiting-data'
 
 type Candidate = {
@@ -165,7 +166,7 @@ export default function NewQueuePage() {
                   <button key={c.id} onClick={() => open(c)} className="text-left bg-white border border-gray-200 border-l-[3px] border-l-[#D4A843] rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all">
                     <div className="flex items-center gap-3 mb-3">
                       <span className="w-10 h-10 rounded-full grid place-items-center text-white text-xs font-semibold" style={{ background: hue(c.email || c.full_name) }}>{ini(c.full_name)}</span>
-                      <div><div className="font-semibold text-[#0D1B35]">{c.full_name}</div><div className="text-xs text-gray-500">{[c.borough, c.city, c.state].filter(Boolean).join(', ') || '—'}</div></div>
+                      <div><div className="font-semibold text-[#0D1B35] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} /></div><div className="text-xs text-gray-500">{[c.borough, c.city, c.state].filter(Boolean).join(', ') || '—'}</div></div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-3">{(c.positions || []).slice(0, 3).map(p => <span key={p} className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p}</span>)}</div>
                     <div className="flex items-center justify-between text-[11px] text-gray-400 border-t border-gray-100 pt-2.5"><span>{c.preferred_lang === 'es' ? '🇪🇸' : '🇺🇸'} · {payText(c)} · {fmtDate(c.created_at)}</span><span>{ago(c.created_at)}</span></div>
@@ -182,7 +183,7 @@ export default function NewQueuePage() {
             <div className="p-5 border-b border-gray-100 relative">
               <button onClick={close} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
               <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold" style={{ background: hue(sel.email || sel.full_name) }}>{ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="text-xs text-gray-500">{ago(sel.created_at)} · {sel.preferred_lang === 'es' ? 'Español' : 'English'}</div></div></div>
+                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="text-xs text-gray-500 flex items-center gap-2">{ago(sel.created_at)} · {sel.preferred_lang === 'es' ? 'Español' : 'English'}<SourceBadge channel={sel.intake_channel} /></div></div></div>
             </div>
             <div className="overflow-auto flex-1">
               {canAct ? (
