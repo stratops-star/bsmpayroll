@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 import RecruitingTabs from '@/components/RecruitingTabs'
+import { SearchSelect, YearsMonths } from '@/components/SearchSelect'
+import { NATIONALITIES, ETHNICITIES } from '@/lib/recruiting-data'
 
 type Candidate = {
   id: string; created_at: string; full_name: string; phone: string | null; email: string | null
@@ -173,7 +175,7 @@ export default function PoolPage() {
               <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200"><th className="px-4 py-3">Candidate</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Age / Sex</th><th className="px-4 py-3">Tier</th><th className="px-4 py-3">Stage</th><th className="px-4 py-3">Added</th><th className="px-4 py-3">In funnel</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
                   <tr key={c.id} onClick={() => openCand(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35] flex items-center gap-1.5">{c.full_name}{missingFields(c).length > 0 && <span className="text-amber-500" title={'Missing: ' + missingFields(c).join(', ')}>⚠</span>}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div></div></div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35]">{c.full_name}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ Missing: {missingFields(c).join(', ')}</div>}</div></div></td>
                     <td className="px-4 py-3 text-gray-600">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-gray-500">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -213,9 +215,9 @@ export default function PoolPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <label className="text-xs text-gray-600">Gender<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
                       <label className="text-xs text-gray-600">Age<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600">Nationality<input defaultValue={sel.nationality || ''} onBlur={e => e.target.value !== (sel.nationality || '') && save({ nationality: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600">Ethnicity<input defaultValue={sel.ethnicity || ''} onBlur={e => e.target.value !== (sel.ethnicity || '') && save({ ethnicity: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <label className="text-xs text-gray-600 col-span-2">Time in USA<input defaultValue={sel.time_in_usa || ''} onBlur={e => e.target.value !== (sel.time_in_usa || '') && save({ time_in_usa: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <div className="text-xs text-gray-600">Nationality<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder="Nationality…" /></div></div>
+                      <div className="text-xs text-gray-600">Ethnicity<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder="Ethnicity…" /></div></div>
+                      <div className="text-xs text-gray-600 col-span-2">Time in USA<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} /></div></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {([['Tax ID', 'has_tax_id'], ['SS', 'has_ss'], ['Bank Acct', 'has_bank_account']] as [string, keyof Candidate][]).map(([label, key]) => (
