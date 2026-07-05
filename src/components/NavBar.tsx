@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { Lang, t, TRANSLATIONS } from '@/lib/i18n'
+import { useRecruitingChrome } from '@/components/RecruitingChrome'
 
 interface NavBarProps {
   lang?: Lang
@@ -26,6 +27,7 @@ const MODULE_MAP: Record<string, Mod> = {
 export default function NavBar({ lang = 'en', onLangChange, userEmail, lastRefreshed, onRefresh, loading, exportCount, onRelaunchTour, syncing }: NavBarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const chrome = useRecruitingChrome()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const dir = TRANSLATIONS[lang].dir
@@ -155,6 +157,10 @@ export default function NavBar({ lang = 'en', onLangChange, userEmail, lastRefre
             title="Relaunch tutorial tour">
             ▶ Tour
           </button>
+        )}
+
+        {isRecruiting && chrome.actions && (
+          <div className="flex items-center gap-2">{chrome.actions}</div>
         )}
 
         <div className="w-px h-4 bg-white/15" />
