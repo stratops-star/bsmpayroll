@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
+import RecruitingTabs from '@/components/RecruitingTabs'
 
 type Candidate = {
   id: string; created_at: string; interview_at: string | null; interviewer_id: string | null; full_name: string; phone: string | null; email: string | null
@@ -34,10 +35,6 @@ function bucketOf(iso: string | null): string {
 }
 const GROUPS: [string, string][] = [['past', 'Past'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This week'], ['later', 'Later'], ['unscheduled', 'Needs scheduling']]
 
-function Tabs() {
-  const items = [['New Queue', '/recruiting'], ['Interview', '/recruiting/interview'], ['Candidate Pool', '/recruiting/pool'], ['Rejected', '/recruiting/rejected']]
-  return <div className="flex gap-1 mt-3 flex-wrap">{items.map(([l, h]) => <a key={h} href={h} className={`text-sm px-3 py-1.5 rounded-lg ${l === 'Interview' ? 'bg-white/15 text-white font-medium' : 'text-white/55 hover:text-white'}`}>{l}</a>)}</div>
-}
 
 export default function InterviewPage() {
   const [supabase] = useState(() => createClient())
@@ -98,15 +95,9 @@ export default function InterviewPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <div className="bg-[#0D1B35] text-white px-6 py-4 border-b-[3px] border-[#D4A843]">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <a href="/hub" className="text-white/50 text-sm">← Hub</a>
-          <div><div className="text-lg font-semibold">Interview</div><div className="text-xs text-white/50">Scheduled by day · assign an interviewer</div></div>
-        </div>
-        <div className="max-w-5xl mx-auto"><Tabs /></div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-6">
+      <div className="max-w-5xl mx-auto px-6 py-5">
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">Interview</h1><p className="text-xs text-gray-500">Scheduled by day · assign an interviewer</p></div>
+        <RecruitingTabs />
         {loading ? <p className="text-gray-400 text-sm">Loading…</p>
           : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">No candidates in interview stage. Send someone here from the New Queue.</div>
           : GROUPS.filter(([k]) => grouped[k]?.length).map(([k, label]) => (
