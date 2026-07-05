@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ShareCareers from '@/components/ShareCareers'
 import RecruitingTabs from '@/components/RecruitingTabs'
+import { useRecruitingChrome } from '@/components/RecruitingChrome'
 import { TR, t2 } from '@/lib/recruiting-data'
 
 type Candidate = {
@@ -38,6 +39,7 @@ export default function NewQueuePage() {
   const [toast, setToast] = useState('')
   const [newCount, setNewCount] = useState(0)
   const [showAdd, setShowAdd] = useState(false)
+  const { setActions } = useRecruitingChrome()
   const rowsRef = useRef<Candidate[]>([]); rowsRef.current = rows
 
   // filters
@@ -61,6 +63,17 @@ export default function NewQueuePage() {
     }).subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [])
+
+  useEffect(() => {
+    setActions(
+      <>
+        {isAdmin && <a href="/recruiting/import" className="text-sm bg-white/10 hover:bg-white/20 text-white border border-white/15 font-medium rounded-lg px-3 py-1.5 whitespace-nowrap">⭳ Import</a>}
+        {canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5 whitespace-nowrap">+ Add candidate</button>}
+        <ShareCareers />
+      </>
+    )
+    return () => setActions(null)
+  }, [isAdmin, canAct])
 
   function open(c: Candidate) { setSel(c); setTier(c.profile_tier); setReason('') }
   function close() { setSel(null) }
@@ -109,10 +122,7 @@ export default function NewQueuePage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="max-w-5xl mx-auto px-6 py-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div><h1 className="text-xl font-semibold text-[#0D1B35]">New Queue</h1><p className="text-xs text-gray-500">Applications waiting for first review</p></div>
-          <div className="flex items-center gap-2">{isAdmin && <a href="/recruiting/import" className="text-sm bg-white border border-gray-200 text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">⭳ Import</a>}{canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[#D4A843] text-[#0D1B35] font-semibold rounded-lg px-3 py-1.5">+ Add candidate</button>}<ShareCareers /></div>
-        </div>
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">New Queue</h1><p className="text-xs text-gray-500">Applications waiting for first review</p></div>
 
         {/* filter bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
