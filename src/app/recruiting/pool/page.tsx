@@ -164,16 +164,34 @@ export default function PoolPage() {
                   <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">Stage</div><div className="flex flex-wrap gap-2">{STAGES.map(s => <button key={s} onClick={() => save({ stage: s })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${sel.stage === s ? 'bg-[#0D1B35] border-[#0D1B35] text-white' : 'border-gray-200 text-gray-500'}`}>{stageLabel[s]}</button>)}</div></div>
                 </div>
               )}
-              {/* internal details — read-only here; captured on the Interview tab */}
+              {/* internal details — editable */}
               <div className="p-5 border-b border-gray-100 bg-amber-50/40">
                 <div className="text-[11px] uppercase tracking-wide text-[#92400E] font-bold mb-2.5">Internal details</div>
-                <div className="text-xs text-gray-600 space-y-1">
-                  <div>Gender: {sel.gender || '—'} · Age: {sel.age ?? '—'}</div>
-                  <div>Nationality: {sel.nationality || '—'} · Ethnicity: {sel.ethnicity || '—'}</div>
-                  <div>Time in USA: {sel.time_in_usa || '—'}</div>
-                  <div>Tax ID: {yn(sel.has_tax_id)} · SS: {yn(sel.has_ss)} · Bank: {yn(sel.has_bank_account)}</div>
-                </div>
-                <div className="text-[11px] text-gray-400 mt-1.5">Edit these on the Interview tab.</div>
+                {canAct ? (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs text-gray-600">Gender<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
+                      <label className="text-xs text-gray-600">Age<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <label className="text-xs text-gray-600">Nationality<input defaultValue={sel.nationality || ''} onBlur={e => e.target.value !== (sel.nationality || '') && save({ nationality: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <label className="text-xs text-gray-600">Ethnicity<input defaultValue={sel.ethnicity || ''} onBlur={e => e.target.value !== (sel.ethnicity || '') && save({ ethnicity: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <label className="text-xs text-gray-600 col-span-2">Time in USA<input defaultValue={sel.time_in_usa || ''} onBlur={e => e.target.value !== (sel.time_in_usa || '') && save({ time_in_usa: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      {([['Tax ID', 'has_tax_id'], ['SS', 'has_ss'], ['Bank Acct', 'has_bank_account']] as [string, keyof Candidate][]).map(([label, key]) => (
+                        <div key={key}><div className="text-xs text-gray-600 mb-1">{label}</div><div className="flex gap-1.5">
+                          {[['Yes', true], ['No', false]].map(([l, v]) => <button key={l as string} onClick={() => save({ [key]: v } as any)} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${sel[key] === v ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{l}</button>)}
+                        </div></div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div>Gender: {sel.gender || '—'} · Age: {sel.age ?? '—'}</div>
+                    <div>Nationality: {sel.nationality || '—'} · Ethnicity: {sel.ethnicity || '—'}</div>
+                    <div>Time in USA: {sel.time_in_usa || '—'}</div>
+                    <div>Tax ID: {yn(sel.has_tax_id)} · SS: {yn(sel.has_ss)} · Bank: {yn(sel.has_bank_account)}</div>
+                  </div>
+                )}
               </div>
               <Sec title="Applied for">
                 <div className="flex flex-wrap gap-1.5">{(sel.positions || []).map(p => <span key={p} className="text-xs bg-[#0D1B35]/5 text-[#0D1B35] font-medium px-2.5 py-1 rounded-full">{p}</span>)}</div>
