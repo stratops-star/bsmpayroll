@@ -16,7 +16,7 @@ type AppUser = {
   active: boolean
 }
 
-const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'viewer']
+const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'pool', 'viewer']
 const DEPTS = ['recruiting', 'payroll']
 const ROLE_DEPTS: Record<string, string[]> = {
   admin: ['recruiting', 'payroll'],
@@ -24,6 +24,7 @@ const ROLE_DEPTS: Record<string, string[]> = {
   recruiter: ['recruiting'],
   viewer: ['recruiting'],
   manager: [],
+  pool: ['recruiting'],
 }
 const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706', '#4F46E5', '#BE123C']
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
