@@ -8,6 +8,7 @@ const TABS: [string, string][] = [
   ['tab_virtual', '/recruiting/virtual'],
   ['tab_inperson', '/recruiting/inperson'],
   ['tab_pool', '/recruiting/pool'],
+  ['tab_requests', '/recruiting/requests'],
   ['tab_rejected', '/recruiting/rejected'],
 ]
 
