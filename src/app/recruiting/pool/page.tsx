@@ -16,7 +16,7 @@ type Candidate = {
   transportation: string | null; availability: string | null; english_level: string | null
   referral_source: string | null; experience: string | null; strengths: string | null; security_licensed: boolean | null
   license_path: string | null; resume_path: string | null; photo_path: string | null; video_path: string | null
-  profile_tier: string | null; stage: string; asana_url: string | null; intake_channel: string | null
+  profile_tier: string | null; stage: string; asana_url: string | null; intake_channel: string | null; man_power_request_id: string | null
   gender: string | null; age: number | null; nationality: string | null; ethnicity: string | null
   time_in_usa: string | null; has_tax_id: boolean | null; has_ss: boolean | null; has_bank_account: boolean | null
 }
@@ -63,6 +63,9 @@ export default function PoolPage() {
   const [canAct, setCanAct] = useState(false)
   const [sel, setSel] = useState<Candidate | null>(null)
   const [media, setMedia] = useState<{ photo?: string; video?: string; resume?: string }>({})
+  const [reqs, setReqs] = useState<{ id: string; seq: number; supervisor_name: string | null; department: string | null; site: string | null; status: string }[]>([])
+  const [assignReq, setAssignReq] = useState('')
+  const reqMap = useMemo(() => Object.fromEntries(reqs.map(r => [r.id, r])), [reqs])
   const [editPos, setEditPos] = useState(false)
   const [toast, setToast] = useState('')
   const [q, setQ] = useState('')
@@ -80,6 +83,8 @@ export default function PoolPage() {
     const map: Record<string, string> = {}
     await Promise.all(list.filter((c: Candidate) => c.photo_path).map(async (c: Candidate) => { const { data: s } = await supabase.storage.from('candidate-photos').createSignedUrl(c.photo_path!, 600); if (s?.signedUrl) map[c.id] = s.signedUrl }))
     setPhotos(map)
+    const { data: rq } = await supabase.from('man_power_requests').select('id,seq,supervisor_name,department,site,status').order('seq', { ascending: false })
+    setReqs(rq ?? [])
   }
   useEffect(() => { load() }, [])
   const { setActions } = useRecruitingChrome()
@@ -102,6 +107,20 @@ export default function PoolPage() {
 
   async function openFile(bucket: string, path: string | null) { if (!path) return; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 120); if (data?.signedUrl) window.open(data.signedUrl, '_blank') }
   async function save(patch: Partial<Candidate>) { if (!sel) return; const { error } = await supabase.from('candidates').update(patch).eq('id', sel.id); if (error) { flash(t('error') + ': ' + error.message); return }; const u = { ...sel, ...patch }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); flash(t('saved')) }
+
+  async function assignToRequest() {
+    if (!sel || !assignReq) return
+    const { error } = await supabase.from('man_power_assignments').insert({ request_id: assignReq, candidate_id: sel.id, status: 'assigned' })
+    if (error) { flash(t('error') + ': ' + error.message); return }
+    await supabase.from('candidates').update({ man_power_request_id: assignReq }).eq('id', sel.id)
+    const u = { ...sel, man_power_request_id: assignReq }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); setAssignReq(''); flash(t('assigned_toast'))
+  }
+  async function unassignRequest() {
+    if (!sel || !sel.man_power_request_id) return
+    await supabase.from('man_power_assignments').update({ status: 'removed' }).eq('candidate_id', sel.id).eq('status', 'assigned')
+    await supabase.from('candidates').update({ man_power_request_id: null }).eq('id', sel.id)
+    const u = { ...sel, man_power_request_id: null }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); flash(t('remove'))
+  }
 
   async function notInterested() {
     if (!sel) return
@@ -178,7 +197,7 @@ export default function PoolPage() {
               <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200"><th className="px-4 py-3">{t('th_candidate')}</th><th className="px-4 py-3">{t('th_position')}</th><th className="px-4 py-3">{t('th_age_sex')}</th><th className="px-4 py-3">{t('th_tier')}</th><th className="px-4 py-3">{t('th_stage')}</th><th className="px-4 py-3">{t('th_added')}</th><th className="px-4 py-3">{t('th_in_funnel')}</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
                   <tr key={c.id} onClick={() => openCand(c)} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} /></div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[#0D1B35] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} />{c.man_power_request_id && reqMap[c.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#D4A843]/20 text-[#8A6D1E] border border-[#D4A843]/40">#{reqMap[c.man_power_request_id].seq}</span>}</div><div className="text-xs text-gray-500">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
                     <td className="px-4 py-3 text-gray-600">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-gray-500">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -198,11 +217,30 @@ export default function PoolPage() {
             <div className="p-5 border-b border-gray-100 relative">
               <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
               <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} /></div></div></div>
+                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} />{sel.man_power_request_id && reqMap[sel.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#D4A843]/20 text-[#8A6D1E] border border-[#D4A843]/40">#{reqMap[sel.man_power_request_id].seq}</span>}</div></div></div>
               <div className="text-xs text-gray-500 mt-2">{t('th_added')} {fmtDate(sel.created_at)} · <b className="text-[#0D1B35]">{daysIn(sel.created_at)} {lang==='es'?'días':'days'}</b> {t('th_in_funnel').toLowerCase()}</div>
               {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ {t('view_in_asana')}</a>}
             </div>
             <div className="overflow-auto flex-1">
+              {canAct && (
+                <div className="p-5 border-b border-gray-100 bg-[#0D1B35]/[0.02]">
+                  <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2">{t('assign_to_request')}</div>
+                  {sel.man_power_request_id && reqMap[sel.man_power_request_id] ? (
+                    <div className="flex items-center justify-between gap-2 bg-[#D4A843]/10 border border-[#D4A843]/40 rounded-lg px-3 py-2">
+                      <div className="text-xs text-[#0D1B35]"><b>#{reqMap[sel.man_power_request_id].seq}</b> · {reqMap[sel.man_power_request_id].supervisor_name || '—'}{reqMap[sel.man_power_request_id].site ? ` · ${reqMap[sel.man_power_request_id].site}` : ''}</div>
+                      <button onClick={unassignRequest} className="text-xs text-red-500 font-medium flex-shrink-0">{t('remove')}</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <select value={assignReq} onChange={e => setAssignReq(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white">
+                        <option value="">{t('pick_request')}</option>
+                        {reqs.filter(r => r.status === 'open').map(r => <option key={r.id} value={r.id}>#{r.seq} · {r.supervisor_name || '—'}{r.site ? ` · ${r.site}` : ''}</option>)}
+                      </select>
+                      <button disabled={!assignReq} onClick={assignToRequest} className="bg-[#0D1B35] text-white text-sm font-semibold px-4 rounded-lg disabled:opacity-40">{t('assign')}</button>
+                    </div>
+                  )}
+                </div>
+              )}
               {canAct && (
                 <div className="p-5 border-b border-gray-100 space-y-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">{t('tier')}</div><div className="flex gap-2">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => save({ profile_tier: t })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${sel.profile_tier === t ? 'bg-[#D4A843] border-[#D4A843] text-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{t}</button>)}</div></div>
