@@ -110,6 +110,8 @@ export default function PoolPage() {
 
   async function assignToRequest() {
     if (!sel || !assignReq) return
+    const { count } = await supabase.from('man_power_assignments').select('id', { count: 'exact', head: true }).eq('request_id', assignReq).in('status', ['assigned', 'selected'])
+    if ((count ?? 0) >= 8) { flash(t('cap_reached')); return }
     const { error } = await supabase.from('man_power_assignments').insert({ request_id: assignReq, candidate_id: sel.id, status: 'assigned' })
     if (error) { flash(t('error') + ': ' + error.message); return }
     await supabase.from('candidates').update({ man_power_request_id: assignReq }).eq('id', sel.id)
