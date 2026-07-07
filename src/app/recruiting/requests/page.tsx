@@ -96,7 +96,12 @@ export default function RequestsPage() {
               <div className="flex items-center gap-2 mb-2.5"><h2 className="text-sm font-bold text-[#0D1B35] uppercase tracking-wide">{DEPT_LABEL[d]}</h2><span className="text-xs text-gray-400">{grouped[d].length}</span></div>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))' }}>
                 {grouped[d].map(r => {
-                  const need = neededFor(r.id); const filled = assignsFor(r.id).length
+                  const need = neededFor(r.id) || 1; const all = assignsFor(r.id)
+                  const options = all.length; const selected = all.filter(a => a.status === 'selected').length
+                  const CAP = 8
+                  const genderL = r.gender_pref === 'female' ? 'Female' : r.gender_pref === 'male' ? 'Male' : 'Any'
+                  const transL = r.transportation ? r.transportation.charAt(0).toUpperCase() + r.transportation.slice(1) : '—'
+                  const mgr = (r.supervisor_name || '').split(' — ')[0] || '—'
                   return (
                     <button key={r.id} onClick={() => setSel(r)} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all">
                       <div className="flex items-center justify-between mb-1.5">
@@ -106,12 +111,11 @@ export default function RequestsPage() {
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${r.status === 'open' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{r.status === 'open' ? t('status_open') : t('status_filled')}</span>
                         </div>
                       </div>
-                      <div className="font-semibold text-[#0D1B35]">{r.position || '—'}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{r.supervisor_name || '—'}</div>
-                      <div className="text-xs text-gray-400 mt-1">{[r.site, r.location].filter(Boolean).join(' · ') || '—'}</div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#D4A843]" style={{ width: `${need ? Math.min(100, (filled / need) * 100) : 0}%` }} /></div>
-                        <span className="text-[11px] text-gray-500 font-medium">{filled}/{need || 1} {t('needed')}</span>
+                      <div className="font-semibold text-[#0D1B35] text-[15px]">{genderL} · {transL} · {r.position || '—'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{mgr}{r.site ? ` · ${r.site}` : ''}</div>
+                      <div className="mt-3 space-y-1.5">
+                        <div className="flex items-center gap-2"><span className="text-[10px] text-gray-400 w-16 flex-shrink-0">{t('bar_selected')}</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#D4A843]" style={{ width: `${Math.min(100, (selected / need) * 100)}%` }} /></div><span className="text-[11px] text-gray-600 font-semibold w-8 text-right">{selected}/{need}</span></div>
+                        <div className="flex items-center gap-2"><span className="text-[10px] text-gray-400 w-16 flex-shrink-0">{t('bar_assigned')}</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#0D1B35]/40" style={{ width: `${Math.min(100, (options / CAP) * 100)}%` }} /></div><span className="text-[11px] text-gray-500 w-8 text-right">{options}/{CAP}</span></div>
                       </div>
                     </button>
                   )
