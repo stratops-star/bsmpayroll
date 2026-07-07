@@ -77,6 +77,10 @@ export const DICT: Record<string, { en: string; es: string }> = {
   expectations_l: { en: 'Expectations', es: 'Expectativas' },
   view_request: { en: 'View', es: 'Ver' },
   needed: { en: 'needed', es: 'necesarios' },
+  bar_assigned: { en: 'assigned', es: 'asignados' },
+  bar_selected: { en: 'selected', es: 'seleccionados' },
+  cap_reached: { en: 'This request already has the maximum candidates (8).', es: 'Esta solicitud ya tiene el máximo de candidatos (8).' },
+  options: { en: 'options', es: 'opciones' },
 
   // shared actions / chrome
   import: { en: 'Import', es: 'Importar' },
