@@ -1,9 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const BSM_DOMAIN = 'bsmfacilitysolutions.com' // ← confirm / change
+
+// Scoped roles are NEVER allowed in department-gated modules — they get
+// hard-redirected to their own screen regardless of any departments set on them.
+const SCOPED_HOME: Record<string, string> = { pool: '/pool', manager: '/manpower' }
 
 type State = 'loading' | 'no-session' | 'wrong-domain' | 'no-department' | 'ok'
 
@@ -14,6 +19,7 @@ export default function AccessGate({
   requireDepartment?: string
   children: React.ReactNode
 }) {
+  const router = useRouter()
   const [supabase] = useState(() => createClient())
   const [state, setState] = useState<State>('loading')
 
@@ -28,13 +34,17 @@ export default function AccessGate({
       }
 
       const { data: me } = await supabase
-        .from('app_users').select('departments, active').eq('id', user.id).single()
+        .from('app_users').select('role, departments, active').eq('id', user.id).single()
+
+      // Role is the authority for scoped users: bounce them home, ignore departments.
+      const role = me?.role || ''
+      if (me?.active && SCOPED_HOME[role]) { router.replace(SCOPED_HOME[role]); return }
 
       const depts = (me?.active && me.departments) || []
       const allowed = requireDepartment ? depts.includes(requireDepartment) : depts.length > 0
       setState(allowed ? 'ok' : 'no-department')
     })()
-  }, [supabase, requireDepartment])
+  }, [supabase, requireDepartment, router])
 
   if (state === 'ok') return <>{children}</>
   if (state === 'loading') return <Screen>Loading…</Screen>
