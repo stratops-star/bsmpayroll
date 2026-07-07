@@ -24,7 +24,7 @@ const ROLE_DEPTS: Record<string, string[]> = {
   recruiter: ['recruiting'],
   viewer: ['recruiting'],
   manager: [],
-  pool: ['recruiting'],
+  pool: [],
 }
 const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706', '#4F46E5', '#BE123C']
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -58,7 +58,7 @@ export default function AdminPage() {
   }
   async function save(u: AppUser) {
     const { error } = await supabase.from('app_users')
-      .update({ role: u.role, departments: u.departments, active: u.active, full_name: u.full_name || null, phone: u.phone || null }).eq('id', u.id)
+      .update({ role: u.role, departments: u.departments, active: u.active, full_name: u.full_name || null, phone: u.phone || null, approved: true }).eq('id', u.id)
     flash(error ? 'Error: ' + error.message : `Saved ${u.full_name || u.email.split('@')[0]}`)
   }
   let t: any
