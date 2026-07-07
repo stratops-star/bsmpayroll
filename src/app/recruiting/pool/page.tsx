@@ -63,9 +63,10 @@ export default function PoolPage() {
   const [canAct, setCanAct] = useState(false)
   const [sel, setSel] = useState<Candidate | null>(null)
   const [media, setMedia] = useState<{ photo?: string; video?: string; resume?: string }>({})
-  const [reqs, setReqs] = useState<{ id: string; seq: number; supervisor_name: string | null; department: string | null; site: string | null; status: string }[]>([])
+  const [reqs, setReqs] = useState<{ id: string; seq: number; supervisor_name: string | null; department: string | null; site: string | null; status: string; gender_pref: string | null; transportation: string | null; position: string | null }[]>([])
   const [assignReq, setAssignReq] = useState('')
   const reqMap = useMemo(() => Object.fromEntries(reqs.map(r => [r.id, r])), [reqs])
+  const reqLabel = (r: any) => { if (!r) return ''; const g = r.gender_pref === 'female' ? 'Female' : r.gender_pref === 'male' ? 'Male' : 'Any'; const tr = r.transportation ? r.transportation.charAt(0).toUpperCase() + r.transportation.slice(1) : '—'; const mgr = (r.supervisor_name || '').split(' — ')[0] || '—'; return `#${r.seq} · ${g} · ${tr} · ${r.position || '—'} · ${mgr}` }
   const [editPos, setEditPos] = useState(false)
   const [toast, setToast] = useState('')
   const [q, setQ] = useState('')
@@ -83,7 +84,7 @@ export default function PoolPage() {
     const map: Record<string, string> = {}
     await Promise.all(list.filter((c: Candidate) => c.photo_path).map(async (c: Candidate) => { const { data: s } = await supabase.storage.from('candidate-photos').createSignedUrl(c.photo_path!, 600); if (s?.signedUrl) map[c.id] = s.signedUrl }))
     setPhotos(map)
-    const { data: rq } = await supabase.from('man_power_requests').select('id,seq,supervisor_name,department,site,status').order('seq', { ascending: false })
+    const { data: rq } = await supabase.from('man_power_requests').select('id,seq,supervisor_name,department,site,status,gender_pref,transportation,position').order('seq', { ascending: false })
     setReqs(rq ?? [])
   }
   useEffect(() => { load() }, [])
@@ -229,14 +230,14 @@ export default function PoolPage() {
                   <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2">{t('assign_to_request')}</div>
                   {sel.man_power_request_id && reqMap[sel.man_power_request_id] ? (
                     <div className="flex items-center justify-between gap-2 bg-[#D4A843]/10 border border-[#D4A843]/40 rounded-lg px-3 py-2">
-                      <div className="text-xs text-[#0D1B35]"><b>#{reqMap[sel.man_power_request_id].seq}</b> · {reqMap[sel.man_power_request_id].supervisor_name || '—'}{reqMap[sel.man_power_request_id].site ? ` · ${reqMap[sel.man_power_request_id].site}` : ''}</div>
+                      <div className="text-xs text-[#0D1B35] font-medium">{reqLabel(reqMap[sel.man_power_request_id])}</div>
                       <button onClick={unassignRequest} className="text-xs text-red-500 font-medium flex-shrink-0">{t('remove')}</button>
                     </div>
                   ) : (
                     <div className="flex gap-2">
                       <select value={assignReq} onChange={e => setAssignReq(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white">
                         <option value="">{t('pick_request')}</option>
-                        {reqs.filter(r => r.status === 'open').map(r => <option key={r.id} value={r.id}>#{r.seq} · {r.supervisor_name || '—'}{r.site ? ` · ${r.site}` : ''}</option>)}
+                        {reqs.filter(r => r.status === 'open').map(r => <option key={r.id} value={r.id}>{reqLabel(r)}</option>)}
                       </select>
                       <button disabled={!assignReq} onClick={assignToRequest} className="bg-[#0D1B35] text-white text-sm font-semibold px-4 rounded-lg disabled:opacity-40">{t('assign')}</button>
                     </div>
