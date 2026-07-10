@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase-browser'
 import ValetTenants from '@/components/valet/ValetTenants'
 import ValetHistory from '@/components/valet/ValetHistory'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 
 type Attendant = { id: string; full_name: string; email: string; phone: string | null; active: boolean }
 
@@ -37,7 +37,7 @@ export default function ValetManager() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: GOLD, display: 'grid', placeItems: 'center', color: NAVY, fontWeight: 800 }}>B</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet — Manager</div>
-            <div style={{ fontSize: 11, color: '#9FB0CC' }}>{meName}</div>
+            <div style={{ fontSize: 11, color: '#B7AC97' }}>{meName}</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
