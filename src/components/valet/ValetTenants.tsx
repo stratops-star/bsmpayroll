@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase-browser'
+import * as XLSX from 'xlsx'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -37,15 +38,18 @@ function parseCSV(text: string): string[][] {
 }
 
 const HEADER_MAP: Record<string, string> = {
-  unit: 'unit', apt: 'unit', apartment: 'unit', unit_number: 'unit',
+  unit: 'unit', apt: 'unit', apartment: 'unit', unit_number: 'unit', 'vehicle #': 'unit', 'vehicle': 'unit', 'apt #': 'unit', 'unit #': 'unit',
   full_name: 'full_name', name: 'full_name', tenant: 'full_name', resident: 'full_name',
+  'driver 1 first name': 'first_name', 'first name': 'first_name', 'first': 'first_name',
+  'driver 1 last name': 'last_name', 'last name': 'last_name', 'last': 'last_name',
   phone: 'phone', mobile: 'phone', cell: 'phone',
   email: 'email', 'e-mail': 'email',
-  license_plate: 'plate', plate: 'plate', tag: 'plate',
+  license_plate: 'plate', plate: 'plate', tag: 'plate', 'license plate #': 'plate', 'license plate': 'plate',
   make: 'make', model: 'model', color: 'color', colour: 'color',
+  'window sticker #': 'window_sticker', 'window sticker': 'window_sticker', 'sticker': 'window_sticker',
 }
 
-type ParsedRow = { unit: string; full_name: string; phone: string; email: string; plate: string; make: string; model: string; color: string }
+type ParsedRow = { unit: string; full_name: string; phone: string; email: string; plate: string; make: string; model: string; color: string; window_sticker: string }
 
 export default function ValetTenants({ open }: { open?: { mode: 'list' | 'add' | 'addcar'; n: number } }) {
   const [supabase] = useState(() => createClient())
@@ -310,49 +314,98 @@ function ImportRoster({ onCancel, onDone, supabase, locationId, meId, resolveUni
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
 
+  function buildRows(grid: any[][]): { rows: ParsedRow[]; error?: string } {
+    if (!grid || grid.length < 2) return { rows: [], error: 'File looks empty.' }
+    const headers = grid[0].map((h: any) => (HEADER_MAP[String(h ?? '').trim().toLowerCase()] || ''))
+    if (!headers.includes('full_name') && !headers.includes('first_name')) {
+      return { rows: [], error: 'Could not find a name column. Check the column headers.' }
+    }
+    const out: ParsedRow[] = []
+    for (let i = 1; i < grid.length; i++) {
+      const r = grid[i] || []
+      const rec: any = { unit: '', full_name: '', phone: '', email: '', plate: '', make: '', model: '', color: '', window_sticker: '', first: '', last: '' }
+      headers.forEach((key: string, idx: number) => {
+        if (!key) return
+        const val = (r[idx] == null ? '' : String(r[idx])).trim()
+        if (key === 'first_name') rec.first = val
+        else if (key === 'last_name') rec.last = val
+        else rec[key] = val
+      })
+      if (!rec.full_name) rec.full_name = (rec.first + ' ' + rec.last).replace(/\s+/g, ' ').trim()
+      rec.unit = rec.unit.replace(/[\s(\-]+\d+\)?\s*$/, '').replace(/\s+/g, ' ').trim() // "8R (2)" / "10E(2)" / "5G-2" -> "8R" / "10E" / "5G"
+      if (rec.full_name) out.push(rec)
+    }
+    if (!out.length) return { rows: [], error: 'No rows with a name found.' }
+    return { rows: out }
+  }
+
   function onFile(file: File) {
     setErr('')
+    const isXlsx = /\.(xlsx|xls)$/i.test(file.name)
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        const grid = parseCSV(String(reader.result || ''))
-        if (grid.length < 2) { setErr('File looks empty.'); return }
-        const headers = grid[0].map(h => (HEADER_MAP[h.trim().toLowerCase()] || ''))
-        if (!headers.includes('full_name')) { setErr('Could not find a name column. Use the template headers.'); return }
-        const out: ParsedRow[] = []
-        for (let i = 1; i < grid.length; i++) {
-          const r = grid[i]
-          const rec: any = { unit: '', full_name: '', phone: '', email: '', plate: '', make: '', model: '', color: '' }
-          headers.forEach((key, idx) => { if (key) rec[key] = (r[idx] || '').trim() })
-          if (rec.full_name) out.push(rec)
+        let grid: any[][]
+        if (isXlsx) {
+          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          grid = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][]
+        } else {
+          grid = parseCSV(String(reader.result || ''))
         }
-        if (!out.length) { setErr('No rows with a name found.'); return }
-        setParsed(out)
+        const { rows, error } = buildRows(grid)
+        if (error) { setErr(error); return }
+        setParsed(rows)
       } catch { setErr('Could not read the file.') }
     }
-    reader.readAsText(file)
+    if (isXlsx) reader.readAsArrayBuffer(file)
+    else reader.readAsText(file)
   }
 
   async function runImport() {
     if (!parsed) return
     setBusy(true)
-    let tenants = 0, vehicles = 0
-    for (let i = 0; i < parsed.length; i++) {
-      setProgress(`Importing ${i + 1} / ${parsed.length}…`)
-      const row = parsed[i]
-      const unitId = row.unit ? await resolveUnit(row.unit) : null
-      const { data: c, error } = await supabase.from('valet_customers').insert({
-        location_id: locationId, unit_id: unitId, full_name: row.full_name,
-        phone: row.phone || null, email: row.email || null, created_by: meId,
-      }).select('id').single()
-      if (error || !c) continue
-      tenants++
-      if (row.plate) {
-        const { error: ve } = await supabase.from('valet_vehicles').insert({
-          customer_id: c.id, license_plate: row.plate.toUpperCase(),
-          make: row.make || null, model: row.model || null, color: row.color || null, created_by: meId,
+    // group by resident + apartment (a unit can hold many cars / residents)
+    const groups = new Map<string, ParsedRow[]>()
+    for (const r of parsed) {
+      const key = (r.unit + '|' + r.full_name).toLowerCase()
+      groups.set(key, [...(groups.get(key) || []), r])
+    }
+    let tenants = 0, vehicles = 0, gi = 0
+    for (const [, rowsG] of groups) {
+      gi++
+      setProgress(`Importing ${gi} / ${groups.size}…`)
+      const first = rowsG[0]
+      const unitId = first.unit ? await resolveUnit(first.unit) : null
+
+      // find-or-create tenant by (name + unit) so re-imports don't duplicate
+      let custId: string | null = null
+      if (unitId) {
+        const { data: ex } = await supabase.from('valet_customers')
+          .select('id').eq('full_name', first.full_name).eq('unit_id', unitId).maybeSingle()
+        if (ex?.id) custId = ex.id
+      }
+      if (!custId) {
+        const { data: c, error } = await supabase.from('valet_customers').insert({
+          location_id: locationId, unit_id: unitId, full_name: first.full_name,
+          phone: first.phone || null, email: first.email || null, customer_type: 'tenant', created_by: meId,
+        }).select('id').single()
+        if (error || !c) continue
+        custId = c.id; tenants++
+      }
+
+      for (const r of rowsG) {
+        if (!r.plate) continue
+        const plate = r.plate.toUpperCase()
+        const { data: ev } = await supabase.from('valet_vehicles')
+          .select('id').eq('customer_id', custId).eq('license_plate', plate).maybeSingle()
+        if (ev?.id) continue
+        const { error: verr } = await supabase.from('valet_vehicles').insert({
+          customer_id: custId, license_plate: plate,
+          make: r.make || null, model: r.model || null, color: r.color || null,
+          window_sticker: r.window_sticker || null, created_by: meId,
         })
-        if (!ve) vehicles++
+        if (!verr) vehicles++
       }
     }
     setBusy(false)
@@ -374,13 +427,14 @@ function ImportRoster({ onCancel, onDone, supabase, locationId, meId, resolveUni
         {!parsed ? (
           <>
             <p style={{ fontSize: 14, color: '#475569', marginTop: 0 }}>
-              Upload a <b>.csv</b> with columns: <code style={code}>unit, full_name, phone, email, license_plate, make, model, color</code>.
-              Only <b>full_name</b> is required. In Excel or Google Sheets choose <b>File → Save as / Download → CSV</b>.
+              Upload your resident list as <b>.xlsx</b> or <b>.csv</b>. The importer reads standard building exports
+              (Vehicle #, Driver name, License Plate #, Make, Color, Window Sticker #) or the simple template below.
+              A resident with several cars is added once with all their plates.
             </p>
             <button onClick={downloadTemplate} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginBottom: 10 }}>⬇ Download template</button>
             <label style={{ ...primaryBtn, display: 'block', textAlign: 'center', cursor: 'pointer' }}>
-              Choose CSV file
-              <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => { const fl = e.target.files?.[0]; if (fl) onFile(fl) }} />
+              Choose file (Excel or CSV)
+              <input type="file" accept=".xlsx,.xls,.csv,text/csv" style={{ display: 'none' }} onChange={e => { const fl = e.target.files?.[0]; if (fl) onFile(fl) }} />
             </label>
             {err && <p style={{ color: '#B91C1C', fontSize: 13, marginTop: 10 }}>{err}</p>}
           </>
