@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 const BSM_REPORT_TO = 'strat.ops@bsmfacilitysolutions.com'
 const APP = 'https://bsmfacilitysolutions.app'
 
-const NAVY = rgb(0.05, 0.10, 0.21)
-const GOLD = rgb(0.83, 0.66, 0.26)
+const NAVY = rgb(0.118, 0.106, 0.090)
+const GOLD = rgb(0.863, 0.722, 0.471)
 
 function e164(phone: string) {
   const d = (phone || '').replace(/\D/g, '')
