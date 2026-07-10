@@ -4,19 +4,19 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 
 type Ev = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
   vehicle_id: string | null; customer_id: string | null; employee_id: string | null
-  valet_customers: { full_name: string; valet_units: { unit_number: string } | null } | null
+  valet_customers: { full_name: string; customer_type?: string; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
 }
 type Photo = { slot: string; sequence: number; storage_path: string }
 
-const NAVY_RGB = rgb(0.05, 0.10, 0.21)
-const GOLD_RGB = rgb(0.83, 0.66, 0.26)
+const NAVY_RGB = rgb(0.118, 0.106, 0.090)
+const GOLD_RGB = rgb(0.863, 0.722, 0.471)
 
 export default function ValetHistory() {
   const [supabase] = useState(() => createClient())
@@ -39,7 +39,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, customer_id, employee_id, valet_customers(full_name, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, vehicle_id, customer_id, employee_id, valet_customers(full_name, customer_type, valet_units(unit_number)), valet_vehicles(license_plate)')
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
     const evs = (data as Ev[]) || []
@@ -227,6 +227,7 @@ export default function ValetHistory() {
                     {e.action}
                   </span>
                   <b style={{ color: NAVY }}>{e.valet_vehicles?.license_plate || '—'}</b>
+                  {e.valet_customers?.customer_type === 'guest' && <span style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '1px 6px', borderRadius: 6 }}>GUEST</span>}
                   <span style={{ fontSize: 13, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.valet_customers?.full_name || '—'}</span>
                 </div>
                 <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{fmt(e.event_at)} · {emp[e.employee_id || ''] || '—'}</div>
