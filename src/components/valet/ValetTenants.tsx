@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 
 type Unit = { unit_number: string }
 type Veh = { id: string; license_plate: string }
@@ -47,7 +47,7 @@ const HEADER_MAP: Record<string, string> = {
 
 type ParsedRow = { unit: string; full_name: string; phone: string; email: string; plate: string; make: string; model: string; color: string }
 
-export default function ValetTenants() {
+export default function ValetTenants({ open }: { open?: { mode: 'list' | 'add' | 'addcar'; n: number } }) {
   const [supabase] = useState(() => createClient())
   const [locationId, setLocationId] = useState<string | null>(null)
   const [meId, setMeId] = useState<string>('')
@@ -55,10 +55,13 @@ export default function ValetTenants() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [toast, setToast] = useState('')
-  const [mode, setMode] = useState<'list' | 'add' | 'import'>('list')
+  const [mode, setMode] = useState<'list' | 'add' | 'addcar' | 'import'>('list')
   const [edit, setEdit] = useState<Tenant | null>(null)
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3500) }
+
+  // external "quick add" trigger from the manager top bar
+  useEffect(() => { if (open && open.n > 0) { setMode(open.mode); setEdit(null) } }, [open?.n]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,6 +72,7 @@ export default function ValetTenants() {
     const { data } = await supabase
       .from('valet_customers')
       .select('id, full_name, phone, email, active, unit_id, valet_units(unit_number), valet_vehicles(id, license_plate)')
+      .neq('customer_type', 'guest')
       .order('full_name')
     setRows((data as Tenant[]) || [])
     setLoading(false)
@@ -134,6 +138,9 @@ export default function ValetTenants() {
 
       {mode === 'add' && <AddTenant onCancel={() => setMode('list')} onSaved={() => { setMode('list'); load() }}
         supabase={supabase} locationId={locationId} meId={meId} resolveUnit={resolveUnit} flash={flash} />}
+
+      {mode === 'addcar' && <AddCar onCancel={() => setMode('list')} onSaved={() => { setMode('list'); load() }}
+        supabase={supabase} meId={meId} rows={rows} flash={flash} />}
 
       {mode === 'import' && <ImportRoster onCancel={() => setMode('list')} onDone={() => { setMode('list'); load() }}
         supabase={supabase} locationId={locationId} meId={meId} resolveUnit={resolveUnit} flash={flash} />}
@@ -232,6 +239,64 @@ function EditTenant({ tenant, onClose, onSaved, supabase, meId, resolveUnit, fla
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <button onClick={save} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Saving…' : 'Save'}</button>
           <button onClick={toggleActive} style={{ ...primaryBtn, background: '#fff', color: tenant.active ? '#B91C1C' : '#166534', border: '1.5px solid #CBD5E1' }}>{tenant.active ? 'Deactivate' : 'Activate'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------- Add car (pick tenant, add plate) ----------------
+function AddCar({ onCancel, onSaved, supabase, meId, rows, flash }: any) {
+  const [sel, setSel] = useState<Tenant | null>(null)
+  const [q, setQ] = useState('')
+  const [f, setF] = useState({ plate: '', make: '', model: '', color: '' })
+  const [busy, setBusy] = useState(false)
+  const set = (k: string, v: string) => setF((s: any) => ({ ...s, [k]: v }))
+
+  const ql = q.trim().toLowerCase()
+  const list = (rows as Tenant[]).filter(r => !ql || r.full_name.toLowerCase().includes(ql) || (r.valet_units?.unit_number || '').toLowerCase().includes(ql))
+
+  async function save() {
+    if (!sel || !f.plate.trim()) { flash('Pick a tenant and enter a plate.'); return }
+    setBusy(true)
+    const { error } = await supabase.from('valet_vehicles').insert({
+      customer_id: sel.id, license_plate: f.plate.trim().toUpperCase(),
+      make: f.make.trim() || null, model: f.model.trim() || null, color: f.color.trim() || null, created_by: meId,
+    })
+    setBusy(false)
+    if (error) { flash(error.message); return }
+    flash('Car added ✓'); onSaved()
+  }
+
+  if (!sel) {
+    return (
+      <div>
+        <TopBar title="Add car — pick tenant" onBack={onCancel} />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search tenant name or unit…" style={{ ...inp, marginBottom: 10 }} />
+        <div style={card}>
+          {list.slice(0, 50).map(r => (
+            <button key={r.id} onClick={() => setSel(r)} style={rowBtn}>
+              <div><b style={{ color: NAVY }}>{r.full_name}</b>{r.valet_units?.unit_number ? ` · ${r.valet_units.unit_number}` : ''}</div>
+              <span style={{ color: GOLD }}>›</span>
+            </button>
+          ))}
+          {list.length === 0 && <Empty>No tenants match.</Empty>}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <TopBar title="Add car" onBack={() => setSel(null)} />
+      <div style={{ ...card, padding: 16 }}>
+        <div style={{ fontSize: 14, color: '#64748B', marginBottom: 2 }}>Tenant</div>
+        <div style={{ fontWeight: 700, color: NAVY, fontSize: 16, marginBottom: 12 }}>{sel.full_name}{sel.valet_units?.unit_number ? ` · ${sel.valet_units.unit_number}` : ''}</div>
+        <F label="License plate" v={f.plate} on={(v: string) => set('plate', v.toUpperCase())} />
+        <F label="Make / model / color (optional)" v={[f.make, f.model, f.color].filter(Boolean).join(' ')} on={(v: string) => { const [mk = '', md = '', cl = ''] = v.split(' '); setF((s: any) => ({ ...s, make: mk, model: md, color: cl })) }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button onClick={save} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Saving…' : 'Add car'}</button>
+          <button onClick={onCancel} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1' }}>Cancel</button>
         </div>
       </div>
     </div>
