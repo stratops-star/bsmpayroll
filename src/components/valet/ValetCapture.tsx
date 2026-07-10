@@ -72,6 +72,7 @@ export default function ValetCapture() {
   const t = (k: string) => (T[k] ? T[k][lang] : k)
 
   const [me, setMe] = useState<{ id: string; name: string } | null>(null)
+  const [isManager, setIsManager] = useState(false)
   const [locationId, setLocationId] = useState<string | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [events, setEvents] = useState<EventRow[]>([])
@@ -113,8 +114,9 @@ export default function ValetCapture() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: u } = await supabase.from('app_users').select('full_name, email').eq('id', user.id).single()
+      const { data: u } = await supabase.from('app_users').select('full_name, email, role').eq('id', user.id).single()
       setMe({ id: user.id, name: u?.full_name || u?.email || user.email || '' })
+      setIsManager(u?.role === 'valet_manager' || u?.role === 'admin')
       const { data: loc } = await supabase.from('valet_locations').select('id').eq('active', true).order('created_at').limit(1).maybeSingle()
       setLocationId(loc?.id || null)
       await refresh()
@@ -194,6 +196,7 @@ export default function ValetCapture() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {isManager && <a href="/valet/manager" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Manager</a>}
           <button onClick={() => setLang(lang === 'en' ? 'es' : 'en')} style={miniBtn}>{lang === 'en' ? 'ES' : 'EN'}</button>
           <button onClick={async () => { await supabase.auth.signOut(); location.href = '/valet/login' }} style={miniBtn}>{t('signOut')}</button>
         </div>
