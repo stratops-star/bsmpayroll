@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ValetTenants from '@/components/valet/ValetTenants'
+import ValetHistory from '@/components/valet/ValetHistory'
 
 const NAVY = '#0D1B35'
 const GOLD = '#D4A843'
@@ -12,7 +13,7 @@ type Attendant = { id: string; full_name: string; email: string; phone: string |
 export default function ValetManager() {
   const [supabase] = useState(() => createClient())
   const [meName, setMeName] = useState('')
-  const [tab, setTab] = useState<'attendants' | 'tenants'>('attendants')
+  const [tab, setTab] = useState<'attendants' | 'tenants' | 'history'>('attendants')
   const [attNonce, setAttNonce] = useState(0)
   const [tenOpen, setTenOpen] = useState<{ mode: 'list' | 'add' | 'addcar'; n: number }>({ mode: 'list', n: 0 })
 
@@ -55,10 +56,13 @@ export default function ValetManager() {
       <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 4, padding: '0 12px' }}>
         <Tab active={tab === 'attendants'} onClick={() => setTab('attendants')}>Attendants</Tab>
         <Tab active={tab === 'tenants'} onClick={() => setTab('tenants')}>Tenants</Tab>
+        <Tab active={tab === 'history'} onClick={() => setTab('history')}>History</Tab>
       </div>
 
       <main style={{ maxWidth: 620, margin: '0 auto', padding: 16 }}>
-        {tab === 'attendants' ? <Attendants supabase={supabase} openAdd={attNonce} /> : <ValetTenants open={tenOpen} />}
+        {tab === 'attendants' ? <Attendants supabase={supabase} openAdd={attNonce} />
+          : tab === 'tenants' ? <ValetTenants open={tenOpen} />
+          : <ValetHistory />}
       </main>
     </div>
   )
