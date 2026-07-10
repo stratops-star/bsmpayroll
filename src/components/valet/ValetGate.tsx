@@ -60,7 +60,7 @@ function Screen({ title, children }: { title?: string; children: React.ReactNode
   return (
     <div style={{ minHeight: '80vh', display: 'grid', placeItems: 'center', fontFamily: 'system-ui', padding: 24, textAlign: 'center' }}>
       <div style={{ maxWidth: 420 }}>
-        {title && <h2 style={{ color: '#0D1B35', marginBottom: 8 }}>{title}</h2>}
+        {title && <h2 style={{ color: '#1E1B17', marginBottom: 8 }}>{title}</h2>}
         <p style={{ color: '#6B7280', lineHeight: 1.5 }}>{children}</p>
       </div>
     </div>
