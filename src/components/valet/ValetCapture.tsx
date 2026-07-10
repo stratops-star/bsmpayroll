@@ -8,8 +8,8 @@ import {
 } from '@/lib/valet-capture-lib'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 
 // ---- tiny bilingual dictionary (self-contained; valet island) ----
 type Lang = 'en' | 'es'
@@ -203,7 +203,7 @@ export default function ValetCapture() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: GOLD, display: 'grid', placeItems: 'center', color: NAVY, fontWeight: 800 }}>B</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet</div>
-            <div style={{ fontSize: 11, color: '#9FB0CC' }}>{me?.name}</div>
+            <div style={{ fontSize: 11, color: '#B7AC97' }}>{me?.name}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -551,15 +551,15 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
       const W = 595, H = 842, M = 40; let page = doc.addPage([W, H]); let y = H - M
-      page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: rgb(0.05, 0.10, 0.21) })
+      page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: rgb(0.118, 0.106, 0.090) })
       page.drawText('BSM Valet — Vehicle Report', { x: M, y: H - 44, size: 18, font: bold, color: rgb(1, 1, 1) })
       y = H - 96
-      page.drawText(`Plate: ${plate}`, { x: M, y, size: 11, font: bold, color: rgb(0.05, 0.10, 0.21) }); y -= 16
+      page.drawText(`Plate: ${plate}`, { x: M, y, size: 11, font: bold, color: rgb(0.118, 0.106, 0.090) }); y -= 16
       page.drawText(`Name: ${name}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 20
       const sec = async (title: string, ev: EventRow | null, urls: string[]) => {
         if (y < 160) { page = doc.addPage([W, H]); y = H - M }
-        page.drawText(title, { x: M, y, size: 12, font: bold, color: rgb(0.05, 0.10, 0.21) }); y -= 8
-        page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 1, color: rgb(0.83, 0.66, 0.26) }); y -= 14
+        page.drawText(title, { x: M, y, size: 12, font: bold, color: rgb(0.118, 0.106, 0.090) }); y -= 8
+        page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 1, color: rgb(0.863, 0.722, 0.471) }); y -= 14
         if (!ev) { page.drawText('No record.', { x: M, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) }); y -= 20; return }
         page.drawText(new Date(ev.event_at).toLocaleString(), { x: M, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) }); y -= 14
         if (ev.note) { page.drawText(`Note: ${ev.note.slice(0, 90)}`, { x: M, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) }); y -= 14 }
