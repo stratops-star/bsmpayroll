@@ -6,6 +6,7 @@ import {
   SLOTS, stampFrame, enqueue, listQueue, drainQueue, serverWrite, uuid,
   type QueuedEvent,
 } from '@/lib/valet-capture-lib'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 const NAVY = '#0D1B35'
 const GOLD = '#D4A843'
@@ -26,6 +27,11 @@ const T: Record<string, { en: string; es: string }> = {
   email: { en: 'Email', es: 'Correo' },
   unit: { en: 'Apartment / unit', es: 'Apartamento' },
   plate: { en: 'License plate', es: 'Placa' },
+  tenant: { en: 'Tenant', es: 'Residente' },
+  guest: { en: 'Guest', es: 'Invitado' },
+  guestName: { en: 'Guest name', es: 'Nombre del invitado' },
+  visiting: { en: 'Visiting (host resident)', es: 'Visita a (residente)' },
+  searchHost: { en: 'Search host tenant…', es: 'Buscar residente…' },
   makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
   continue: { en: 'Continue', es: 'Continuar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -48,6 +54,10 @@ const T: Record<string, { en: string; es: string }> = {
   signOut: { en: 'Sign out', es: 'Salir' },
   pickCar: { en: 'Which car?', es: '¿Cuál auto?' },
   parkedSince: { en: 'parked', es: 'estacionado' },
+  reportTitle: { en: 'Vehicle report', es: 'Reporte del vehículo' },
+  downloadPdf: { en: 'Download PDF', es: 'Descargar PDF' },
+  close: { en: 'Close', es: 'Cerrar' },
+  noRec: { en: 'No record.', es: 'Sin registro.' },
 }
 
 type Vehicle = { id: string; license_plate: string }
@@ -85,6 +95,7 @@ export default function ValetCapture() {
   const [shots, setShots] = useState<Shot[]>([])
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [report, setReport] = useState<EventRow | null>(null)
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
 
@@ -215,6 +226,7 @@ export default function ValetCapture() {
         {step === 'home' && (
           <Home t={t} parked={parked} events={events} lang={lang}
             onPark={() => startFlow('park')} onRetrieve={() => startFlow('retrieve')}
+            onReport={(e: EventRow) => setReport(e)}
             onPickParked={p => { startFlow('retrieve'); chooseParked(p) }} />
         )}
         {step === 'pick' && (
@@ -232,12 +244,14 @@ export default function ValetCapture() {
             saving={saving} onSave={onSave} onBack={() => setStep('capture')} />
         )}
       </main>
+
+      {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} onClose={() => setReport(null)} />}
     </div>
   )
 }
 
 // ---------------- Home ----------------
-function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked }: any) {
+function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onReport }: any) {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
@@ -258,15 +272,15 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked }: any
       <Section title={t('recent')}>
         {events.length === 0 ? <Empty>{t('noRecent')}</Empty> :
           events.slice(0, 20).map((e: EventRow) => (
-            <div key={e.id} style={rowStatic}>
+            <button key={e.id} onClick={() => onReport(e)} style={{ ...rowStatic, width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', cursor: 'pointer', textAlign: 'left' }}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, color: e.action === 'park' ? NAVY : '#B7791F', background: e.action === 'park' ? '#E4E9F2' : '#FEF3C7', padding: '2px 7px', borderRadius: 6, marginRight: 8 }}>
                   {e.action === 'park' ? t('park') : t('retrieve')}
                 </span>
                 <b style={{ color: NAVY }}>{e.valet_vehicles?.license_plate || '—'}</b> · {e.valet_customers?.full_name || '—'}
               </div>
-              <div style={{ fontSize: 12, color: '#94A3B8' }}>{timeAgo(e.event_at, lang)}</div>
-            </div>
+              <div style={{ fontSize: 12, color: '#94A3B8' }}>{timeAgo(e.event_at, lang)} ›</div>
+            </button>
           ))}
       </Section>
     </div>
@@ -277,6 +291,9 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked }: any
 function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel }: any) {
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
+  const [kind, setKind] = useState<'tenant' | 'guest'>('tenant')
+  const [hostQ, setHostQ] = useState('')
+  const [host, setHost] = useState<Customer | null>(null)
   const [f, setF] = useState({ full_name: '', phone: '', email: '', unit_number: '', license_plate: '', make: '', model: '', color: '' })
   const set = (k: string, v: string) => setF(s => ({ ...s, [k]: v }))
 
@@ -291,25 +308,65 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
   }
 
   if (adding) {
+    const hostMatches = (customers as Customer[]).filter(c =>
+      !hostQ.trim() || c.full_name.toLowerCase().includes(hostQ.trim().toLowerCase()))
     return (
       <div>
-        <TopBar title={t('addNew')} onBack={() => setAdding(false)} back={t('back')} />
+        <TopBar title={t('addNew')} onBack={() => { setAdding(false); setKind('tenant'); setHost(null) }} back={t('back')} />
         <div style={card}>
-          <Field label={t('name')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button onClick={() => setKind('tenant')} style={segBtn(kind === 'tenant')}>{t('tenant')}</button>
+            <button onClick={() => setKind('guest')} style={segBtn(kind === 'guest')}>{t('guest')}</button>
+          </div>
+
+          <Field label={kind === 'guest' ? t('guestName') : t('name')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
           <Field label={t('plate')} value={f.license_plate} onChange={(v: string) => set('license_plate', v.toUpperCase())} />
+
+          {kind === 'guest' ? (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>{t('visiting')}</label>
+              {host ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 10, padding: '10px 12px' }}>
+                  <span style={{ color: NAVY, fontWeight: 600 }}>{host.full_name}</span>
+                  <button onClick={() => setHost(null)} style={{ background: 'transparent', border: 'none', color: GOLD, fontWeight: 600, cursor: 'pointer' }}>✕</button>
+                </div>
+              ) : (
+                <>
+                  <input value={hostQ} onChange={e => setHostQ(e.target.value)} placeholder={t('searchHost')} style={inp} />
+                  <div style={{ ...card, marginTop: 6, maxHeight: 180, overflow: 'auto' }}>
+                    {hostMatches.slice(0, 30).map(c => (
+                      <button key={c.id} onClick={() => setHost(c)} style={rowBtn}>
+                        <span style={{ color: NAVY }}>{c.full_name}</span><span style={{ color: GOLD }}>›</span>
+                      </button>
+                    ))}
+                    {hostMatches.length === 0 && <Empty>—</Empty>}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <Field label={t('unit')} value={f.unit_number} onChange={(v: string) => set('unit_number', v)} />
+          )}
+
           <Field label={t('phone')} value={f.phone} onChange={(v: string) => set('phone', v)} type="tel" />
           <Field label={t('email')} value={f.email} onChange={(v: string) => set('email', v)} type="email" />
-          <Field label={t('unit')} value={f.unit_number} onChange={(v: string) => set('unit_number', v)} />
           <Field label={t('makeModel')} value={[f.make, f.model, f.color].filter(Boolean).join(' ')} onChange={(v: string) => { const [mk = '', md = '', cl = ''] = v.split(' '); setF(s => ({ ...s, make: mk, model: md, color: cl })) }} />
+
           <button
             onClick={() => {
               if (!f.full_name.trim() || !f.license_plate.trim()) return
+              if (kind === 'guest' && !host) return
               onNew(
-                { full_name: f.full_name.trim(), phone: f.phone.trim(), email: f.email.trim(), unit_number: f.unit_number.trim() },
+                {
+                  full_name: f.full_name.trim(), phone: f.phone.trim(), email: f.email.trim(),
+                  unit_number: kind === 'guest' ? '' : f.unit_number.trim(),
+                  customer_type: kind,
+                  host_customer_id: kind === 'guest' && host ? host.id : null,
+                },
                 { license_plate: f.license_plate.trim(), make: f.make.trim(), model: f.model.trim(), color: f.color.trim() },
               )
             }}
-            style={primaryBtn}>{t('continue')}</button>
+            style={{ ...primaryBtn, opacity: (kind === 'guest' && !host) ? 0.6 : 1 }}>{t('continue')}</button>
         </div>
       </div>
     )
@@ -448,6 +505,114 @@ function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBac
   )
 }
 
+// ---------------- Report sheet (tap a car → see its stamped photos) ----------------
+function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
+  const [park, setPark] = useState<EventRow | null>(null)
+  const [ret, setRet] = useState<EventRow | null>(null)
+  const [parkPics, setParkPics] = useState<string[]>([])
+  const [retPics, setRetPics] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+
+  async function loadPics(id: string): Promise<string[]> {
+    const { data } = await supabase.from('valet_photos').select('storage_path, sequence').eq('event_id', id).order('sequence')
+    const urls: string[] = []
+    for (const p of (data || [])) {
+      const { data: s } = await supabase.storage.from('valet-photos').createSignedUrl(p.storage_path, 600)
+      if (s?.signedUrl) urls.push(s.signedUrl)
+    }
+    return urls
+  }
+
+  useEffect(() => {
+    (async () => {
+      let p: EventRow | null = null, r: EventRow | null = null
+      const same = (events as EventRow[]).filter(x => x.vehicle_id && x.vehicle_id === e.vehicle_id)
+      if (e.action === 'retrieve') {
+        r = e
+        p = same.filter(x => x.action === 'park' && new Date(x.event_at) <= new Date(e.event_at)).sort((a, b) => +new Date(b.event_at) - +new Date(a.event_at))[0] || null
+      } else {
+        p = e
+        r = same.filter(x => x.action === 'retrieve' && new Date(x.event_at) >= new Date(e.event_at)).sort((a, b) => +new Date(a.event_at) - +new Date(b.event_at))[0] || null
+      }
+      setPark(p); setRet(r)
+      setParkPics(p ? await loadPics(p.id) : [])
+      setRetPics(r ? await loadPics(r.id) : [])
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const plate = e.valet_vehicles?.license_plate || '—'
+  const name = e.valet_customers?.full_name || '—'
+  const fmt = (iso: string) => new Date(iso).toLocaleString(lang === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+  async function download() {
+    setBusy(true)
+    try {
+      const doc = await PDFDocument.create()
+      const font = await doc.embedFont(StandardFonts.Helvetica)
+      const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+      const W = 595, H = 842, M = 40; let page = doc.addPage([W, H]); let y = H - M
+      page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: rgb(0.05, 0.10, 0.21) })
+      page.drawText('BSM Valet — Vehicle Report', { x: M, y: H - 44, size: 18, font: bold, color: rgb(1, 1, 1) })
+      y = H - 96
+      page.drawText(`Plate: ${plate}`, { x: M, y, size: 11, font: bold, color: rgb(0.05, 0.10, 0.21) }); y -= 16
+      page.drawText(`Name: ${name}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 20
+      const sec = async (title: string, ev: EventRow | null, urls: string[]) => {
+        if (y < 160) { page = doc.addPage([W, H]); y = H - M }
+        page.drawText(title, { x: M, y, size: 12, font: bold, color: rgb(0.05, 0.10, 0.21) }); y -= 8
+        page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 1, color: rgb(0.83, 0.66, 0.26) }); y -= 14
+        if (!ev) { page.drawText('No record.', { x: M, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) }); y -= 20; return }
+        page.drawText(new Date(ev.event_at).toLocaleString(), { x: M, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) }); y -= 14
+        if (ev.note) { page.drawText(`Note: ${ev.note.slice(0, 90)}`, { x: M, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) }); y -= 14 }
+        const cw = (W - M * 2 - 10) / 2, ch = cw * 0.75; let col = 0
+        for (const u of urls) {
+          try {
+            const bytes = new Uint8Array(await (await fetch(u)).arrayBuffer())
+            const img = await doc.embedJpg(bytes)
+            if (col === 0 && y - ch < M) { page = doc.addPage([W, H]); y = H - M }
+            const x = M + col * (cw + 10)
+            page.drawImage(img, { x, y: y - ch, width: cw, height: ch })
+            if (col === 1) { y -= ch + 10; col = 0 } else col = 1
+          } catch { /* skip */ }
+        }
+        if (col === 1) y -= ch + 10
+        y -= 10
+      }
+      await sec('PARK — intake', park, parkPics)
+      await sec('RETRIEVE — return', ret, retPics)
+      const bytes = await doc.save()
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+      const a = document.createElement('a'); a.href = url; a.download = `BSM-valet-${plate}.pdf`; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } catch { /* ignore */ }
+    setBusy(false)
+  }
+
+  const Block = ({ title, ev, pics }: any) => (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>{title}</div>
+      {ev ? <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>{fmt(ev.event_at)}{ev.note ? ' · ' + ev.note : ''}</div>
+        : <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 6 }}>{t('noRec')}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
+        {pics.map((u: string, i: number) => <img key={i} src={u} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
+      </div>
+    </div>
+  )
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,27,53,.45)', display: 'grid', placeItems: 'end center', zIndex: 55 }}>
+      <div onClick={ev => ev.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 560, borderRadius: '16px 16px 0 0', padding: 18, maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <b style={{ color: NAVY, fontSize: 17 }}>{plate} · {name}</b>
+          <button onClick={onClose} style={{ background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{t('close')}</button>
+        </div>
+        <Block title={t('park')} ev={park} pics={parkPics} />
+        <Block title={t('retrieve')} ev={ret} pics={retPics} />
+        <button onClick={download} disabled={busy} style={{ ...primaryBtn, marginTop: 16, opacity: busy ? 0.6 : 1 }}>⬇ {t('downloadPdf')}</button>
+      </div>
+    </div>
+  )
+}
+
 // ---------------- small UI bits ----------------
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -494,4 +659,7 @@ const rowBtn: React.CSSProperties = { width: '100%', display: 'flex', justifyCon
 const rowStatic: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F8', padding: '11px 8px', fontSize: 14, color: '#334155' }
 function bigBtn(bg: string, color = '#fff'): React.CSSProperties {
   return { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: bg, color, border: 'none', borderRadius: 16, padding: '26px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', minHeight: 110 }
+}
+function segBtn(active: boolean): React.CSSProperties {
+  return { flex: 1, padding: '10px', borderRadius: 10, border: active ? `1.5px solid ${NAVY}` : '1.5px solid #CBD5E1', background: active ? NAVY : '#fff', color: active ? '#fff' : '#64748B', fontWeight: 700, fontSize: 14, cursor: 'pointer' }
 }
