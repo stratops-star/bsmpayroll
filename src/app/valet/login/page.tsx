@@ -41,9 +41,7 @@ export default function ValetLogin() {
       return
     }
 
-    // Batch 2a: everyone lands on the capture app. The manager area (/valet/manager)
-    // arrives in Batch 3 — flip this to role-based routing then.
-    router.replace('/valet')
+    router.replace(role === 'valet_manager' || role === 'admin' ? '/valet/manager' : '/valet')
   }
 
   return (
