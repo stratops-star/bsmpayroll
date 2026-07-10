@@ -13,6 +13,8 @@ export default function ValetManager() {
   const [supabase] = useState(() => createClient())
   const [meName, setMeName] = useState('')
   const [tab, setTab] = useState<'attendants' | 'tenants'>('attendants')
+  const [attNonce, setAttNonce] = useState(0)
+  const [tenOpen, setTenOpen] = useState<{ mode: 'list' | 'add' | 'addcar'; n: number }>({ mode: 'list', n: 0 })
 
   useEffect(() => {
     (async () => {
@@ -22,6 +24,10 @@ export default function ValetManager() {
       setMeName(u?.full_name || u?.email || '')
     })()
   }, [supabase])
+
+  function quickEmployee() { setTab('attendants'); setAttNonce(n => n + 1) }
+  function quickTenant() { setTab('tenants'); setTenOpen(o => ({ mode: 'add', n: o.n + 1 })) }
+  function quickCar() { setTab('tenants'); setTenOpen(o => ({ mode: 'addcar', n: o.n + 1 })) }
 
   return (
     <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
@@ -39,15 +45,34 @@ export default function ValetManager() {
         </div>
       </header>
 
+      {/* Quick add bar */}
+      <div style={{ background: NAVY, padding: '0 12px 14px', display: 'flex', gap: 8, justifyContent: 'center' }}>
+        <QuickBtn onClick={quickEmployee} icon="👤" label="Add employee" />
+        <QuickBtn onClick={quickTenant} icon="🏠" label="Add tenant" />
+        <QuickBtn onClick={quickCar} icon="🚗" label="Add car" />
+      </div>
+
       <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 4, padding: '0 12px' }}>
         <Tab active={tab === 'attendants'} onClick={() => setTab('attendants')}>Attendants</Tab>
         <Tab active={tab === 'tenants'} onClick={() => setTab('tenants')}>Tenants</Tab>
       </div>
 
       <main style={{ maxWidth: 620, margin: '0 auto', padding: 16 }}>
-        {tab === 'attendants' ? <Attendants supabase={supabase} /> : <ValetTenants />}
+        {tab === 'attendants' ? <Attendants supabase={supabase} openAdd={attNonce} /> : <ValetTenants open={tenOpen} />}
       </main>
     </div>
+  )
+}
+
+function QuickBtn({ onClick, icon, label }: { onClick: () => void; icon: string; label: string }) {
+  return (
+    <button onClick={onClick} style={{
+      flex: 1, maxWidth: 180, background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.18)',
+      borderRadius: 12, padding: '10px 8px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+    }}>
+      <span style={{ fontSize: 18 }}>{icon}</span>{label}
+    </button>
   )
 }
 
@@ -61,7 +86,7 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
 }
 
 // ---------------- Attendants ----------------
-function Attendants({ supabase }: { supabase: any }) {
+function Attendants({ supabase, openAdd }: { supabase: any; openAdd: number }) {
   const [rows, setRows] = useState<Attendant[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
@@ -79,6 +104,7 @@ function Attendants({ supabase }: { supabase: any }) {
   }, [supabase])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (openAdd > 0) setAdding(true) }, [openAdd])
 
   async function call(body: any) {
     const { data: { session } } = await supabase.auth.getSession()
@@ -97,7 +123,7 @@ function Attendants({ supabase }: { supabase: any }) {
     setBusy(false)
     if (r.error) { flash(r.error); return }
     const ch = [r.email ? 'email' : '', r.sms ? 'text' : ''].filter(Boolean).join(' + ')
-    flash(ch ? `Added — login sent by ${ch} ✓` : 'Added ✓ (set Twilio/Resend to send the login)')
+    flash(ch ? `Added — login sent by ${ch} \u2713` : 'Added \u2713 (set Twilio/Resend to send the login)')
     setF({ full_name: '', email: '', phone: '' }); setAdding(false); load()
   }
   async function toggle(a: Attendant) {
@@ -109,7 +135,7 @@ function Attendants({ supabase }: { supabase: any }) {
     const r = await call({ action: 'resend', id: a.id })
     if (r.error) { flash(r.error); return }
     const ch = [r.email ? 'email' : '', r.sms ? 'text' : ''].filter(Boolean).join(' + ')
-    flash(ch ? `New login sent by ${ch} ✓` : 'Sent (check Twilio/Resend config)')
+    flash(ch ? `New login sent by ${ch} \u2713` : 'Sent (check Twilio/Resend config)')
   }
 
   return (
@@ -127,14 +153,14 @@ function Attendants({ supabase }: { supabase: any }) {
           <Field label="Mobile phone (for the text)" value={f.phone} onChange={(v: string) => setF(s => ({ ...s, phone: v }))} type="tel" />
           <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 12px' }}>A login + temporary password is created and sent to them by email{f.phone ? ' + text' : ''}.</p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={addAttendant} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Creating…' : 'Create & send login'}</button>
+            <button onClick={addAttendant} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Creating\u2026' : 'Create & send login'}</button>
             <button onClick={() => setAdding(false)} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1' }}>Cancel</button>
           </div>
         </div>
       )}
 
       <div style={card}>
-        {loading ? <Empty>Loading…</Empty> : rows.length === 0 ? <Empty>No attendants yet. Add your first one above.</Empty> :
+        {loading ? <Empty>Loading\u2026</Empty> : rows.length === 0 ? <Empty>No attendants yet. Add your first one above.</Empty> :
           rows.map(a => (
             <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F8', padding: '12px 8px', gap: 8 }}>
               <div style={{ minWidth: 0 }}>
@@ -142,7 +168,7 @@ function Attendants({ supabase }: { supabase: any }) {
                   {a.full_name}
                   {!a.active && <span style={{ fontSize: 11, color: '#B91C1C', background: '#FEF2F2', padding: '1px 6px', borderRadius: 6 }}>inactive</span>}
                 </div>
-                <div style={{ fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.email}{a.phone ? ' · ' + a.phone : ''}</div>
+                <div style={{ fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.email}{a.phone ? ' \u00b7 ' + a.phone : ''}</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 <button onClick={() => resend(a)} style={tinyBtn}>Resend</button>
