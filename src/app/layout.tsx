@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'BSM Payroll',
-  description: 'BSM Facility Solutions — Payroll Approval Dashboard',
+  title: 'BSM Facility Solutions',
+  description: 'BSM Facility Solutions — Operations Platform for payroll, recruiting, and valet.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
