@@ -91,6 +91,7 @@ export default function Hub() {
         {/* cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 18 }}>
           {allCards.map(m => <Card key={m.key} icon={m.icon} name={m.name} desc={m.desc} href={m.href} />)}
+          {isAdmin && <Card icon="🚗" name="Valet Parking" desc="Attendants, cars & reports" href="/valet/manager" />}
           {isAdmin && <Card icon="🛡️" name="User Access" desc="Manage roles & departments" href="/recruiting/admin" accent />}
         </div>
       </div>
