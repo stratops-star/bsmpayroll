@@ -198,6 +198,25 @@ export default function ValetHistory() {
     setTimeout(() => URL.revokeObjectURL(url), 4000)
   }
 
+  async function sendReport(e: Ev) {
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/valet-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ event_id: e.id }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (j.error) flash(j.error)
+      else {
+        const ch = [j.emailed ? 'email' : '', j.texted ? 'text' : ''].filter(Boolean).join(' + ')
+        flash(ch ? `Report sent by ${ch} ✓` : 'Report built ✓ (set Resend/Twilio to deliver)')
+      }
+    } catch { flash('Send failed') }
+    setBusy(false)
+  }
+
   return (
     <div>
       {toast && <div style={toastStyle}>{toast}</div>}
@@ -238,12 +257,12 @@ export default function ValetHistory() {
       <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>{filtered.length} of {events.length} records</p>
 
       {sel && <Detail e={sel} emp={emp} stayFor={stayFor} photosFor={photosFor} fmt={fmt}
-        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)} busy={busy} />}
+        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)} onSend={() => sendReport(sel)} busy={busy} />}
     </div>
   )
 }
 
-function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, busy }: any) {
+function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onSend, busy }: any) {
   const { park, retrieve } = stayFor(e)
   const [parkPics, setParkPics] = useState<any[]>([])
   const [retPics, setRetPics] = useState<any[]>([])
@@ -281,6 +300,7 @@ function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, busy }: any) 
         <Photos title="PARK — intake" ev={park} pics={parkPics} />
         <Photos title="RETRIEVE — return" ev={retrieve} pics={retPics} />
         <button onClick={onPDF} disabled={busy} style={{ ...primaryBtn, marginTop: 16 }}>⬇ Download report PDF</button>
+        <button onClick={onSend} disabled={busy} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 8 }}>✉ Send to BSM &amp; customer</button>
       </div>
     </div>
   )
