@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 const VALET_ROLES = ['valet', 'valet_manager', 'admin']
 
 export default function ValetLogin() {
