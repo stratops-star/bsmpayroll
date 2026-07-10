@@ -1,494 +1,259 @@
-'use client'
+// ============================================================
+// Valet capture library
+//  - SLOTS: the guided photo angles (4 corners + plate)
+//  - stampFrame: burns BSM logo + timestamp into a camera frame
+//  - IndexedDB offline queue (enqueue / list / remove)
+//  - serverWrite: the single write path used both live and on sync
+// ============================================================
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase-browser'
-import {
-  SLOTS, stampFrame, enqueue, listQueue, drainQueue, serverWrite, uuid,
-  type QueuedEvent,
-} from '@/lib/valet-capture-lib'
+export type SlotKey = 'front_left' | 'front_right' | 'rear_right' | 'rear_left' | 'plate'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+export const SLOTS: {
+  key: SlotKey; label: string; label_es: string; hint: string; hint_es: string
+}[] = [
+  { key: 'front_left',  label: 'Front-Left corner',  label_es: 'Esquina delantera izq.', hint: 'Stand at the front-left corner — capture the whole side.', hint_es: 'Párese en la esquina delantera izquierda.' },
+  { key: 'front_right', label: 'Front-Right corner', label_es: 'Esquina delantera der.', hint: 'Move to the front-right corner.', hint_es: 'Muévase a la esquina delantera derecha.' },
+  { key: 'rear_right',  label: 'Rear-Right corner',  label_es: 'Esquina trasera der.',  hint: 'Move to the rear-right corner.', hint_es: 'Muévase a la esquina trasera derecha.' },
+  { key: 'rear_left',   label: 'Rear-Left corner',   label_es: 'Esquina trasera izq.',  hint: 'Move to the rear-left corner.', hint_es: 'Muévase a la esquina trasera izquierda.' },
+  { key: 'plate',       label: 'License plate',      label_es: 'Placa',                 hint: 'Close-up of the license plate.', hint_es: 'Primer plano de la placa.' },
+]
 
-// ---- tiny bilingual dictionary (self-contained; valet island) ----
-type Lang = 'en' | 'es'
-const T: Record<string, { en: string; es: string }> = {
-  park: { en: 'Park a car', es: 'Estacionar' },
-  retrieve: { en: 'Retrieve a car', es: 'Entregar' },
-  parkedNow: { en: 'Currently parked', es: 'Estacionados ahora' },
-  recent: { en: 'Recent activity', es: 'Actividad reciente' },
-  noParked: { en: 'No cars parked right now.', es: 'No hay autos estacionados.' },
-  noRecent: { en: 'No activity yet.', es: 'Sin actividad todavía.' },
-  search: { en: 'Search name or plate…', es: 'Buscar nombre o placa…' },
-  addNew: { en: '+ Add new customer', es: '+ Nuevo cliente' },
-  name: { en: 'Full name', es: 'Nombre completo' },
-  phone: { en: 'Phone', es: 'Teléfono' },
-  email: { en: 'Email', es: 'Correo' },
-  unit: { en: 'Apartment / unit', es: 'Apartamento' },
-  plate: { en: 'License plate', es: 'Placa' },
-  makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
-  continue: { en: 'Continue', es: 'Continuar' },
-  cancel: { en: 'Cancel', es: 'Cancelar' },
-  back: { en: 'Back', es: 'Atrás' },
-  photo: { en: 'Photo', es: 'Foto' },
-  of: { en: 'of', es: 'de' },
-  capture: { en: 'Capture', es: 'Capturar' },
-  retake: { en: 'Retake', es: 'Repetir' },
-  usePhoto: { en: 'Use photo', es: 'Usar foto' },
-  review: { en: 'Review & save', es: 'Revisar y guardar' },
-  note: { en: 'Condition / damage note (optional)', es: 'Nota de condición / daño (opcional)' },
-  save: { en: 'Save', es: 'Guardar' },
-  saving: { en: 'Saving…', es: 'Guardando…' },
-  savedOnline: { en: 'Saved ✓', es: 'Guardado ✓' },
-  savedOffline: { en: 'Saved offline — will sync ✓', es: 'Guardado sin conexión — se sincronizará ✓' },
-  pending: { en: 'waiting to sync', es: 'esperando sincronizar' },
-  syncNow: { en: 'Sync now', es: 'Sincronizar' },
-  camDenied: { en: 'Camera access is required. Enable it in your browser settings.', es: 'Se requiere acceso a la cámara.' },
-  needPlate: { en: 'Name and plate are required.', es: 'Nombre y placa son obligatorios.' },
-  signOut: { en: 'Sign out', es: 'Salir' },
-  pickCar: { en: 'Which car?', es: '¿Cuál auto?' },
-  parkedSince: { en: 'parked', es: 'estacionado' },
+// ---------- Logo + timestamp stamp ----------
+let logoPromise: Promise<HTMLImageElement | null> | null = null
+function loadLogo(): Promise<HTMLImageElement | null> {
+  if (logoPromise) return logoPromise
+  logoPromise = new Promise(res => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => res(img)
+    img.onerror = () => res(null)
+    img.src = '/bsm-logo.png'
+  })
+  return logoPromise
 }
 
-type Vehicle = { id: string; license_plate: string }
-type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_vehicles: Vehicle[] }
-type EventRow = {
-  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null
-  valet_customers: { full_name: string } | null
-  valet_vehicles: { license_plate: string } | null
-}
-type Chosen = {
-  customerId: string | null; vehicleId: string | null
-  displayName: string; plate: string
-  newCustomer: QueuedEvent['newCustomer']; newVehicle: QueuedEvent['newVehicle']
-}
-type Step = 'home' | 'pick' | 'capture' | 'review'
-type Shot = { slot: string; sequence: number; blob: Blob; capturedAt: string; url: string }
+export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob; capturedAt: string }> {
+  const w = video.videoWidth || 1280
+  const h = video.videoHeight || 720
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(video, 0, 0, w, h)
 
-export default function ValetCapture() {
-  const [supabase] = useState(() => createClient())
-  const [lang, setLang] = useState<Lang>('en')
-  const t = (k: string) => (T[k] ? T[k][lang] : k)
+  const now = new Date()
+  const stamp = now.toLocaleString()
+  const bar = Math.max(40, Math.round(h * 0.065))
 
-  const [me, setMe] = useState<{ id: string; name: string } | null>(null)
-  const [locationId, setLocationId] = useState<string | null>(null)
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [events, setEvents] = useState<EventRow[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [toast, setToast] = useState('')
+  ctx.fillStyle = 'rgba(13,27,53,0.62)'
+  ctx.fillRect(0, h - bar, w, bar)
 
-  const [step, setStep] = useState<Step>('home')
-  const [action, setAction] = useState<'park' | 'retrieve'>('park')
-  const [chosen, setChosen] = useState<Chosen | null>(null)
-  const [shots, setShots] = useState<Shot[]>([])
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
+  const fs = Math.round(bar * 0.4)
+  ctx.font = `600 ${fs}px system-ui, sans-serif`
+  ctx.fillStyle = '#ffffff'
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  ctx.fillText(stamp, 16, h - bar / 2)
 
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
-
-  const refresh = useCallback(async () => {
-    const { data: cust } = await supabase
-      .from('valet_customers')
-      .select('id, full_name, phone, email, valet_vehicles(id, license_plate)')
-      .eq('active', true).order('full_name')
-    setCustomers((cust as Customer[]) || [])
-
-    const { data: evs } = await supabase
-      .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, valet_customers(full_name), valet_vehicles(license_plate)')
-      .order('event_at', { ascending: false }).limit(60)
-    setEvents((evs as EventRow[]) || [])
-
-    setPendingCount((await listQueue()).length)
-  }, [supabase])
-
-  const sync = useCallback(async () => {
-    const n = await drainQueue(supabase)
-    if (n > 0) { flash(`${n} synced ✓`); await refresh() }
-    setPendingCount((await listQueue()).length)
-  }, [supabase, refresh])
-
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: u } = await supabase.from('app_users').select('full_name, email').eq('id', user.id).single()
-      setMe({ id: user.id, name: u?.full_name || u?.email || user.email || '' })
-      const { data: loc } = await supabase.from('valet_locations').select('id').eq('active', true).order('created_at').limit(1).maybeSingle()
-      setLocationId(loc?.id || null)
-      await refresh()
-      await sync()
-    })()
-    const onOnline = () => sync()
-    window.addEventListener('online', onOnline)
-    return () => window.removeEventListener('online', onOnline)
-  }, [supabase, refresh, sync])
-
-  // ---- currently parked (latest event per vehicle is a park) ----
-  const parked: { vehicle_id: string; name: string; plate: string; since: string }[] = []
-  const seen = new Set<string>()
-  for (const e of events) {
-    if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
-    seen.add(e.vehicle_id)
-    if (e.action === 'park') {
-      parked.push({
-        vehicle_id: e.vehicle_id,
-        name: e.valet_customers?.full_name || '—',
-        plate: e.valet_vehicles?.license_plate || '—',
-        since: e.event_at,
-      })
-    }
+  const logo = await loadLogo()
+  const pad = Math.round(bar * 0.2)
+  if (logo && logo.width) {
+    const lh = bar - pad * 2
+    const lw = Math.round(lh * (logo.width / logo.height))
+    ctx.drawImage(logo, w - lw - pad, h - bar + pad, lw, lh)
+  } else {
+    ctx.font = `800 ${fs}px system-ui, sans-serif`
+    ctx.fillStyle = '#D4A843'
+    ctx.textAlign = 'right'
+    ctx.fillText('BSM', w - 16, h - bar / 2)
+    ctx.textAlign = 'left'
   }
 
-  function startFlow(a: 'park' | 'retrieve') {
-    setAction(a); setChosen(null); setShots([]); setNote(''); setStep('pick')
-  }
-
-  function chooseExisting(c: Customer, v: Vehicle) {
-    setChosen({ customerId: c.id, vehicleId: v.id, displayName: c.full_name, plate: v.license_plate, newCustomer: null, newVehicle: null })
-    setStep('capture')
-  }
-
-  function chooseParked(p: { vehicle_id: string; name: string; plate: string }) {
-    setChosen({ customerId: null, vehicleId: p.vehicle_id, displayName: p.name, plate: p.plate, newCustomer: null, newVehicle: null })
-    setStep('capture')
-  }
-
-  async function onSave() {
-    if (!me || shots.length < SLOTS.length) return
-    setSaving(true)
-    const ev: QueuedEvent = {
-      clientRef: uuid(),
-      action,
-      employeeId: me.id,
-      locationId,
-      note,
-      customerId: chosen?.customerId || null,
-      vehicleId: chosen?.vehicleId || null,
-      newCustomer: chosen?.newCustomer || null,
-      newVehicle: chosen?.newVehicle || null,
-      photos: shots.map(s => ({ slot: s.slot, sequence: s.sequence, blob: s.blob, capturedAt: s.capturedAt })),
-      createdAt: new Date().toISOString(),
-    }
-    let online = false
-    if (navigator.onLine) {
-      try { await serverWrite(ev, supabase); online = true } catch { online = false }
-    }
-    if (!online) { await enqueue(ev) }
-    shots.forEach(s => URL.revokeObjectURL(s.url))
-    setSaving(false)
-    setStep('home'); setChosen(null); setShots([]); setNote('')
-    flash(online ? t('savedOnline') : t('savedOffline'))
-    await refresh()
-  }
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: GOLD, display: 'grid', placeItems: 'center', color: NAVY, fontWeight: 800 }}>B</div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet</div>
-            <div style={{ fontSize: 11, color: '#9FB0CC' }}>{me?.name}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setLang(lang === 'en' ? 'es' : 'en')} style={miniBtn}>{lang === 'en' ? 'ES' : 'EN'}</button>
-          <button onClick={async () => { await supabase.auth.signOut(); location.href = '/valet/login' }} style={miniBtn}>{t('signOut')}</button>
-        </div>
-      </header>
-
-      {pendingCount > 0 && (
-        <div style={{ background: '#FEF3C7', color: '#92400E', fontSize: 13, padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{pendingCount} {t('pending')}</span>
-          <button onClick={sync} style={{ ...miniBtn, background: '#92400E', color: '#fff', border: 'none' }}>{t('syncNow')}</button>
-        </div>
-      )}
-
-      {toast && <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: NAVY, color: '#fff', padding: '10px 18px', borderRadius: 999, fontSize: 14, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,.3)' }}>{toast}</div>}
-
-      <main style={{ maxWidth: 560, margin: '0 auto', padding: 16 }}>
-        {step === 'home' && (
-          <Home t={t} parked={parked} events={events} lang={lang}
-            onPark={() => startFlow('park')} onRetrieve={() => startFlow('retrieve')}
-            onPickParked={p => { startFlow('retrieve'); chooseParked(p) }} />
-        )}
-        {step === 'pick' && (
-          <Pick t={t} action={action} customers={customers} parked={parked}
-            onExisting={chooseExisting} onParked={chooseParked}
-            onNew={(nc, nv) => { setChosen({ customerId: null, vehicleId: null, displayName: nc.full_name, plate: nv.license_plate, newCustomer: nc, newVehicle: nv }); setStep('capture') }}
-            onCancel={() => setStep('home')} />
-        )}
-        {step === 'capture' && chosen && (
-          <Capture t={t} lang={lang} chosen={chosen} shots={shots} setShots={setShots}
-            onDone={() => setStep('review')} onCancel={() => { shots.forEach(s => URL.revokeObjectURL(s.url)); setShots([]); setStep('home') }} />
-        )}
-        {step === 'review' && chosen && (
-          <Review t={t} action={action} chosen={chosen} shots={shots} note={note} setNote={setNote}
-            saving={saving} onSave={onSave} onBack={() => setStep('capture')} />
-        )}
-      </main>
-    </div>
+  const blob: Blob = await new Promise(res =>
+    canvas.toBlob(b => res(b as Blob), 'image/jpeg', 0.85)
   )
+  return { blob, capturedAt: now.toISOString() }
 }
 
-// ---------------- Home ----------------
-function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked }: any) {
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-        <button onClick={onPark} style={bigBtn(NAVY)}>🅿️<span style={{ marginTop: 6 }}>{t('park')}</span></button>
-        <button onClick={onRetrieve} style={bigBtn(GOLD, NAVY)}>🚗<span style={{ marginTop: 6 }}>{t('retrieve')}</span></button>
-      </div>
+// ---------- Offline queue (IndexedDB) ----------
+const DB_NAME = 'bsm-valet'
+const STORE = 'queue'
 
-      <Section title={`${t('parkedNow')} (${parked.length})`}>
-        {parked.length === 0 ? <Empty>{t('noParked')}</Empty> :
-          parked.map((p: any) => (
-            <button key={p.vehicle_id} onClick={() => onPickParked(p)} style={rowBtn}>
-              <div><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</div>
-              <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('parkedSince')} {timeAgo(p.since, lang)} ›</div>
-            </button>
-          ))}
-      </Section>
-
-      <Section title={t('recent')}>
-        {events.length === 0 ? <Empty>{t('noRecent')}</Empty> :
-          events.slice(0, 20).map((e: EventRow) => (
-            <div key={e.id} style={rowStatic}>
-              <div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: e.action === 'park' ? NAVY : '#B7791F', background: e.action === 'park' ? '#E4E9F2' : '#FEF3C7', padding: '2px 7px', borderRadius: 6, marginRight: 8 }}>
-                  {e.action === 'park' ? t('park') : t('retrieve')}
-                </span>
-                <b style={{ color: NAVY }}>{e.valet_vehicles?.license_plate || '—'}</b> · {e.valet_customers?.full_name || '—'}
-              </div>
-              <div style={{ fontSize: 12, color: '#94A3B8' }}>{timeAgo(e.event_at, lang)}</div>
-            </div>
-          ))}
-      </Section>
-    </div>
-  )
-}
-
-// ---------------- Pick customer / car ----------------
-function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel }: any) {
-  const [q, setQ] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [f, setF] = useState({ full_name: '', phone: '', email: '', unit_number: '', license_plate: '', make: '', model: '', color: '' })
-  const set = (k: string, v: string) => setF(s => ({ ...s, [k]: v }))
-
-  const ql = q.trim().toLowerCase()
-  const matches: { c: Customer; v: Vehicle }[] = []
-  for (const c of customers as Customer[]) {
-    for (const v of (c.valet_vehicles || [])) {
-      if (!ql || c.full_name.toLowerCase().includes(ql) || (v.license_plate || '').toLowerCase().includes(ql)) {
-        matches.push({ c, v })
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1)
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(STORE)) {
+        r.result.createObjectStore(STORE, { keyPath: 'clientRef' })
       }
     }
-  }
-
-  if (adding) {
-    return (
-      <div>
-        <TopBar title={t('addNew')} onBack={() => setAdding(false)} back={t('back')} />
-        <div style={card}>
-          <Field label={t('name')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
-          <Field label={t('plate')} value={f.license_plate} onChange={(v: string) => set('license_plate', v.toUpperCase())} />
-          <Field label={t('phone')} value={f.phone} onChange={(v: string) => set('phone', v)} type="tel" />
-          <Field label={t('email')} value={f.email} onChange={(v: string) => set('email', v)} type="email" />
-          <Field label={t('unit')} value={f.unit_number} onChange={(v: string) => set('unit_number', v)} />
-          <Field label={t('makeModel')} value={[f.make, f.model, f.color].filter(Boolean).join(' ')} onChange={(v: string) => { const [mk = '', md = '', cl = ''] = v.split(' '); setF(s => ({ ...s, make: mk, model: md, color: cl })) }} />
-          <button
-            onClick={() => {
-              if (!f.full_name.trim() || !f.license_plate.trim()) return
-              onNew(
-                { full_name: f.full_name.trim(), phone: f.phone.trim(), email: f.email.trim(), unit_number: f.unit_number.trim() },
-                { license_plate: f.license_plate.trim(), make: f.make.trim(), model: f.model.trim(), color: f.color.trim() },
-              )
-            }}
-            style={primaryBtn}>{t('continue')}</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      <TopBar title={action === 'retrieve' ? t('pickCar') : t('park')} onBack={onCancel} back={t('cancel')} />
-
-      {action === 'retrieve' && parked.length > 0 && (
-        <Section title={`${t('parkedNow')} (${parked.length})`}>
-          {parked.map((p: any) => (
-            <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
-              <div><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</div><span style={{ color: GOLD }}>›</span>
-            </button>
-          ))}
-        </Section>
-      )}
-
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search')} style={{ ...inp, marginBottom: 10 }} />
-      <div style={card}>
-        {matches.slice(0, 40).map(({ c, v }) => (
-          <button key={c.id + v.id} onClick={() => onExisting(c, v)} style={rowBtn}>
-            <div><b style={{ color: NAVY }}>{v.license_plate}</b> · {c.full_name}</div><span style={{ color: GOLD }}>›</span>
-          </button>
-        ))}
-        {matches.length === 0 && <Empty>—</Empty>}
-      </div>
-      <button onClick={() => setAdding(true)} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>{t('addNew')}</button>
-    </div>
-  )
+    r.onsuccess = () => res(r.result)
+    r.onerror = () => rej(r.error)
+  })
 }
 
-// ---------------- Capture ----------------
-function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const idx = shots.length
-  const slot = SLOTS[idx]
+export type QueuedPhoto = { slot: string; sequence: number; blob: Blob; capturedAt: string }
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-        if (cancelled) { stream.getTracks().forEach(tk => tk.stop()); return }
-        streamRef.current = stream
-        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}) }
-      } catch { setErr(t('camDenied')) }
-    })()
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach(tk => tk.stop()); streamRef.current = null }
-  }, [t])
+export type QueuedEvent = {
+  clientRef: string
+  action: 'park' | 'retrieve'
+  employeeId: string
+  locationId: string | null
+  note: string
+  customerId: string | null
+  vehicleId: string | null
+  newCustomer: { full_name: string; phone: string; email: string; unit_number: string } | null
+  newVehicle: { license_plate: string; make: string; model: string; color: string } | null
+  photos: QueuedPhoto[]
+  createdAt: string
+}
 
-  async function shoot() {
-    if (!videoRef.current || busy || !slot) return
-    setBusy(true)
-    const { blob, capturedAt } = await stampFrame(videoRef.current)
-    const url = URL.createObjectURL(blob)
-    setShots((prev: Shot[]) => [...prev, { slot: slot.key, sequence: idx, blob, capturedAt, url }])
-    setBusy(false)
+export async function enqueue(ev: QueuedEvent): Promise<void> {
+  const db = await openDB()
+  await new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    tx.objectStore(STORE).put(ev)
+    tx.oncomplete = () => res()
+    tx.onerror = () => rej(tx.error)
+  })
+  db.close()
+}
+
+export async function listQueue(): Promise<QueuedEvent[]> {
+  const db = await openDB()
+  const out = await new Promise<QueuedEvent[]>((res, rej) => {
+    const tx = db.transaction(STORE, 'readonly')
+    const req = tx.objectStore(STORE).getAll()
+    req.onsuccess = () => res(req.result as QueuedEvent[])
+    req.onerror = () => rej(req.error)
+  })
+  db.close()
+  return out
+}
+
+export async function removeQueued(clientRef: string): Promise<void> {
+  const db = await openDB()
+  await new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    tx.objectStore(STORE).delete(clientRef)
+    tx.oncomplete = () => res()
+    tx.onerror = () => rej(tx.error)
+  })
+  db.close()
+}
+
+// ---------- Shared server write (live + sync) ----------
+// Idempotent on client_ref so a re-synced event never double-writes.
+export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void> {
+  // 1. Resolve customer
+  let customerId = ev.customerId
+  if (!customerId && ev.newCustomer) {
+    let unitId: string | null = null
+    if (ev.newCustomer.unit_number && ev.locationId) {
+      const { data: existingUnit } = await supabase
+        .from('valet_units').select('id')
+        .eq('location_id', ev.locationId).eq('unit_number', ev.newCustomer.unit_number).maybeSingle()
+      if (existingUnit?.id) {
+        unitId = existingUnit.id
+      } else {
+        const { data: nu } = await supabase
+          .from('valet_units')
+          .insert({ location_id: ev.locationId, unit_number: ev.newCustomer.unit_number })
+          .select('id').single()
+        unitId = nu?.id || null
+      }
+    }
+    const { data: nc, error: ce } = await supabase.from('valet_customers').insert({
+      location_id: ev.locationId,
+      unit_id: unitId,
+      full_name: ev.newCustomer.full_name,
+      phone: ev.newCustomer.phone || null,
+      email: ev.newCustomer.email || null,
+      created_by: ev.employeeId,
+    }).select('id').single()
+    if (ce) throw ce
+    customerId = nc.id
   }
 
-  function retake() {
-    setShots((prev: Shot[]) => {
-      const last = prev[prev.length - 1]
-      if (last) URL.revokeObjectURL(last.url)
-      return prev.slice(0, -1)
+  // 2. Resolve vehicle
+  let vehicleId = ev.vehicleId
+  if (!vehicleId && ev.newVehicle && customerId) {
+    const { data: nv, error: ve } = await supabase.from('valet_vehicles').insert({
+      customer_id: customerId,
+      license_plate: ev.newVehicle.license_plate,
+      make: ev.newVehicle.make || null,
+      model: ev.newVehicle.model || null,
+      color: ev.newVehicle.color || null,
+      created_by: ev.employeeId,
+    }).select('id').single()
+    if (ve) throw ve
+    vehicleId = nv.id
+  }
+
+  // 3. Event (idempotent on client_ref)
+  let eventId: string
+  const { data: ins, error: ee } = await supabase.from('valet_events').insert({
+    client_ref: ev.clientRef,
+    action: ev.action,
+    employee_id: ev.employeeId,
+    location_id: ev.locationId,
+    customer_id: customerId,
+    vehicle_id: vehicleId,
+    note: ev.note || null,
+    event_at: ev.createdAt,
+  }).select('id').single()
+
+  if (ee) {
+    const { data: existing } = await supabase
+      .from('valet_events').select('id').eq('client_ref', ev.clientRef).maybeSingle()
+    if (!existing?.id) throw ee
+    eventId = existing.id
+  } else {
+    eventId = ins.id
+  }
+
+  // 4. Photos — skip if this event already has them (re-sync safety)
+  const { data: already } = await supabase
+    .from('valet_photos').select('id').eq('event_id', eventId).limit(1)
+  if (already && already.length > 0) return
+
+  for (const p of ev.photos) {
+    const path = `${ev.locationId || 'loc'}/${eventId}/${p.sequence}_${p.slot}.jpg`
+    const { error: ue } = await supabase.storage
+      .from('valet-photos').upload(path, p.blob, { upsert: true, contentType: 'image/jpeg' })
+    if (ue) throw ue
+    const { error: pe } = await supabase.from('valet_photos').insert({
+      event_id: eventId,
+      slot: p.slot,
+      sequence: p.sequence,
+      storage_path: path,
+      captured_at: p.capturedAt,
     })
+    if (pe) throw pe
   }
-
-  const done = idx >= SLOTS.length
-
-  return (
-    <div>
-      <TopBar title={`${chosen.plate} · ${chosen.displayName}`} onBack={onCancel} back={t('cancel')} />
-
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {SLOTS.map((s, i) => (
-          <div key={s.key} style={{ flex: 1, height: 6, borderRadius: 3, background: i < idx ? GOLD : '#D7DCE6' }} />
-        ))}
-      </div>
-
-      {!done ? (
-        <>
-          <div style={{ textAlign: 'center', marginBottom: 8 }}>
-            <div style={{ fontWeight: 700, color: NAVY, fontSize: 16 }}>
-              {t('photo')} {idx + 1} {t('of')} {SLOTS.length} — {lang === 'es' ? slot.label_es : slot.label}
-            </div>
-            <div style={{ fontSize: 13, color: '#64748B' }}>{lang === 'es' ? slot.hint_es : slot.hint}</div>
-          </div>
-
-          <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', background: '#000', aspectRatio: '3 / 4' }}>
-            {err
-              ? <div style={{ color: '#fff', display: 'grid', placeItems: 'center', height: '100%', padding: 20, textAlign: 'center', fontSize: 14 }}>{err}</div>
-              : <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-          </div>
-
-          <button onClick={shoot} disabled={busy || !!err} style={{ ...primaryBtn, background: GOLD, color: NAVY, marginTop: 12, fontSize: 17 }}>
-            📸 {busy ? '…' : t('capture')}
-          </button>
-          {idx > 0 && <button onClick={retake} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginTop: 8 }}>{t('retake')}</button>}
-        </>
-      ) : (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginBottom: 14 }}>
-            {shots.map((s: Shot) => <img key={s.sequence} src={s.url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
-          </div>
-          <button onClick={retake} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginBottom: 8 }}>{t('retake')}</button>
-          <button onClick={onDone} style={primaryBtn}>{t('review')}</button>
-        </div>
-      )}
-    </div>
-  )
 }
 
-// ---------------- Review ----------------
-function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBack }: any) {
-  return (
-    <div>
-      <TopBar title={t('review')} onBack={onBack} back={t('back')} />
-      <div style={card}>
-        <div style={{ fontSize: 13, color: '#64748B', marginBottom: 2 }}>{action === 'park' ? t('park') : t('retrieve')}</div>
-        <div style={{ fontWeight: 700, color: NAVY, fontSize: 17, marginBottom: 12 }}>{chosen.plate} · {chosen.displayName}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginBottom: 12 }}>
-          {shots.map((s: Shot) => <img key={s.sequence} src={s.url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
-        </div>
-        <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('note')}</label>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} style={{ ...inp, marginTop: 6, resize: 'vertical' }} />
-        <button onClick={onSave} disabled={saving} style={{ ...primaryBtn, marginTop: 14, opacity: saving ? 0.6 : 1 }}>
-          {saving ? t('saving') : t('save')}
-        </button>
-      </div>
-    </div>
-  )
+// Drain everything queued. Returns how many synced.
+export async function drainQueue(supabase: any): Promise<number> {
+  const items = await listQueue()
+  let synced = 0
+  for (const it of items) {
+    try {
+      await serverWrite(it, supabase)
+      await removeQueued(it.clientRef)
+      synced++
+    } catch {
+      // leave it in the queue; try again next time
+    }
+  }
+  return synced
 }
 
-// ---------------- small UI bits ----------------
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: '#94A3B8', margin: '0 4px 8px' }}>{title}</div>
-      <div style={card}>{children}</div>
-    </div>
-  )
-}
-function TopBar({ title, onBack, back }: { title: string; onBack: () => void; back: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-      <button onClick={onBack} style={miniBtnDark}>‹ {back}</button>
-      <div style={{ fontWeight: 700, color: NAVY, fontSize: 16 }}>{title}</div>
-    </div>
-  )
-}
-function Field({ label, value, onChange, type = 'text' }: any) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} style={inp} />
-    </div>
-  )
-}
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ padding: '14px 12px', color: '#94A3B8', fontSize: 14, textAlign: 'center' }}>{children}</div>
-}
-function timeAgo(iso: string, lang: Lang) {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  const m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24)
-  if (d > 0) return lang === 'es' ? `hace ${d}d` : `${d}d ago`
-  if (h > 0) return lang === 'es' ? `hace ${h}h` : `${h}h ago`
-  if (m > 0) return lang === 'es' ? `hace ${m}m` : `${m}m ago`
-  return lang === 'es' ? 'ahora' : 'now'
-}
-
-const card: React.CSSProperties = { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: 8 }
-const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #D1D5DB', borderRadius: 10, padding: '11px 12px', fontSize: 16, outline: 'none' }
-const primaryBtn: React.CSSProperties = { width: '100%', background: NAVY, color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }
-const miniBtn: React.CSSProperties = { background: 'rgba(255,255,255,.1)', color: '#fff', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }
-const miniBtnDark: React.CSSProperties = { background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
-const rowBtn: React.CSSProperties = { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', padding: '12px 8px', fontSize: 14, cursor: 'pointer', textAlign: 'left', color: '#334155' }
-const rowStatic: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F8', padding: '11px 8px', fontSize: 14, color: '#334155' }
-function bigBtn(bg: string, color = '#fff'): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: bg, color, border: 'none', borderRadius: 16, padding: '26px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', minHeight: 110 }
+export function uuid(): string {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
 }
