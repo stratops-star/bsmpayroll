@@ -175,7 +175,21 @@ export default function ValetCapture() {
     }
     let online = false
     if (navigator.onLine) {
-      try { await serverWrite(ev, supabase); online = true } catch { online = false }
+      try {
+        await serverWrite(ev, supabase)
+        online = true
+        if (ev.action === 'retrieve') {
+          const { data: row } = await supabase.from('valet_events').select('id').eq('client_ref', ev.clientRef).maybeSingle()
+          if (row?.id) {
+            const { data: { session } } = await supabase.auth.getSession()
+            fetch('/api/valet-report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+              body: JSON.stringify({ event_id: row.id }),
+            }).catch(() => {})
+          }
+        }
+      } catch { online = false }
     }
     if (!online) { await enqueue(ev) }
     shots.forEach(s => URL.revokeObjectURL(s.url))
