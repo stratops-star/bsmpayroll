@@ -72,7 +72,7 @@ type Customer = { id: string; full_name: string; phone: string | null; email: st
 type EventRow = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
   vehicle_id: string | null; session_id?: string | null; customer_id?: string | null
-  valet_customers: { full_name: string } | null
+  valet_customers: { full_name: string; email?: string | null } | null
   valet_vehicles: { license_plate: string } | null
 }
 type Chosen = {
@@ -122,7 +122,7 @@ export default function ValetCapture() {
 
     const { data: evs } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name, email), valet_vehicles(license_plate)')
       .order('event_at', { ascending: false }).limit(60)
     setEvents((evs as EventRow[]) || [])
 
@@ -203,7 +203,22 @@ export default function ValetCapture() {
     }
     let online = false
     if (navigator.onLine) {
-      try { await serverWrite(ev, supabase); online = true } catch { online = false }
+      try {
+        await serverWrite(ev, supabase)
+        online = true
+        // email the tenant a copy — after park and after retrieve
+        try {
+          const { data: row } = await supabase.from('valet_events').select('id').eq('client_ref', ev.clientRef).maybeSingle()
+          if (row?.id) {
+            const { data: { session } } = await supabase.auth.getSession()
+            fetch('/api/valet-report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+              body: JSON.stringify({ event_id: row.id }),
+            }).catch(() => {})
+          }
+        } catch { /* email is best-effort */ }
+      } catch { online = false }
     }
     if (!online) { await enqueue(ev) }
     shots.forEach(s => URL.revokeObjectURL(s.url))
@@ -586,6 +601,7 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
 
   const plate = e.valet_vehicles?.license_plate || '—'
   const name = e.valet_customers?.full_name || '—'
+  const email = e.valet_customers?.email || '—'
   const fmt = (iso: string) => new Date(iso).toLocaleString(lang === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   async function download() {
@@ -605,7 +621,8 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
       page.drawText('VEHICLE REPORT', { x: M, y: H - 94, size: 10, font: bold, color: rgb(0.55, 0.5, 0.42) })
       y = H - 112
       page.drawText(`Plate: ${plate}`, { x: M, y, size: 11, font: bold, color: rgb(0.118, 0.106, 0.090) }); y -= 16
-      page.drawText(`Name: ${name}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 20
+      page.drawText(`Name: ${name}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 16
+      page.drawText(`Email: ${email}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 20
       const sec = async (title: string, ev: EventRow | null, urls: string[]) => {
         if (y < 160) { page = doc.addPage([W, H]); y = H - M }
         page.drawText(title, { x: M, y, size: 12, font: bold, color: rgb(0.118, 0.106, 0.090) }); y -= 8
