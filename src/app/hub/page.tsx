@@ -13,6 +13,7 @@ type Mod = { key: string; name: string; desc: string; href: string; icon: string
 const MODULES: Record<string, Mod> = {
   payroll: { key: 'payroll', name: 'Payroll', desc: 'Porter entries, rates & exports', href: '/dashboard', icon: '💰' },
   recruiting: { key: 'recruiting', name: 'Recruiting', desc: 'Candidates, requests & pipeline', href: '/recruiting', icon: '🧑\u200d💼' },
+  valet: { key: 'valet', name: 'Valet Parking', desc: 'Attendants, cars & reports', href: '/valet/manager', icon: '🚗' },
 }
 
 type Screen = 'loading' | 'no-session' | 'wrong-domain' | 'waiting' | 'ready'
@@ -91,7 +92,7 @@ export default function Hub() {
         {/* cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 18 }}>
           {allCards.map(m => <Card key={m.key} icon={m.icon} name={m.name} desc={m.desc} href={m.href} />)}
-          {isAdmin && <Card icon="🚗" name="Valet Parking" desc="Attendants, cars & reports" href="/valet/manager" />}
+          {isAdmin && !allCards.some(c => c.key === 'valet') && <Card icon="🚗" name="Valet Parking" desc="Attendants, cars & reports" href="/valet/manager" />}
           {isAdmin && <Card icon="🛡️" name="User Access" desc="Manage roles & departments" href="/recruiting/admin" accent />}
         </div>
       </div>
