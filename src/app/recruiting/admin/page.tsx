@@ -17,7 +17,7 @@ type AppUser = {
 }
 
 const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'pool', 'viewer']
-const DEPTS = ['recruiting', 'payroll']
+const DEPTS = ['recruiting', 'payroll', 'valet']
 const ROLE_DEPTS: Record<string, string[]> = {
   admin: ['recruiting', 'payroll'],
   payroll: ['payroll'],
