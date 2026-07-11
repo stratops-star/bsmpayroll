@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
+import ValetInstall from '@/components/valet/ValetInstall'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -47,11 +48,11 @@ export default function ValetLogin() {
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F5F6FA', padding: 16, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ width: '100%', maxWidth: 360 }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ display: 'inline-grid', placeItems: 'center', width: 64, height: 64, borderRadius: 18, background: NAVY, marginBottom: 14 }}>
-            <span style={{ color: GOLD, fontWeight: 800, fontSize: 26 }}>B</span>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ background: NAVY, borderRadius: 16, padding: '22px 24px', marginBottom: 14 }}>
+            <img src="/bsm-logo.png" alt="BSM Facility Solutions" style={{ width: '100%', maxWidth: 210, height: 'auto', display: 'block', margin: '0 auto' }} />
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: NAVY, margin: 0 }}>BSM Valet</h1>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: NAVY, margin: 0 }}>Valet</h1>
           <p style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Attendant sign in</p>
         </div>
 
@@ -76,6 +77,8 @@ export default function ValetLogin() {
         <p style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', marginTop: 18 }}>
           Trouble signing in? Contact your valet manager.
         </p>
+
+        <ValetInstall />
       </div>
     </div>
   )
