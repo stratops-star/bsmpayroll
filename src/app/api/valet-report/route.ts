@@ -6,84 +6,19 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const BSM_REPORT_TO = 'strat.ops@bsmfacilitysolutions.com'
 const APP = 'https://bsmfacilitysolutions.app'
-
 const NAVY = rgb(0.118, 0.106, 0.090)
 const GOLD = rgb(0.863, 0.722, 0.471)
 
-function e164(phone: string) {
-  const d = (phone || '').replace(/\D/g, '')
-  if (d.length === 10) return '+1' + d
-  if (d.length === 11 && d[0] === '1') return '+' + d
-  return d ? '+' + d : ''
-}
-
 type Ev = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null; employee_id: string | null
-  valet_customers: { full_name: string; email: string | null; phone: string | null; valet_units: { unit_number: string } | null } | null
+  vehicle_id: string | null; session_id: string | null; employee_id: string | null
+  valet_customers: { full_name: string; email: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
 }
-
 const EV_SELECT =
-  'id, action, event_at, note, vehicle_id, employee_id, valet_customers(full_name, email, phone, valet_units(unit_number)), valet_vehicles(license_plate)'
+  'id, action, event_at, note, vehicle_id, session_id, employee_id, valet_customers(full_name, email, valet_units(unit_number)), valet_vehicles(license_plate)'
 
-// pair a given event with its opposite (same vehicle)
-async function pair(svc: any, ev: Ev): Promise<{ park: Ev | null; retrieve: Ev | null }> {
-  if (!ev.vehicle_id) return ev.action === 'park' ? { park: ev, retrieve: null } : { park: null, retrieve: ev }
-  if (ev.action === 'retrieve') {
-    const { data } = await svc.from('valet_events').select(EV_SELECT)
-      .eq('vehicle_id', ev.vehicle_id).eq('action', 'park').lte('event_at', ev.event_at)
-      .order('event_at', { ascending: false }).limit(1)
-    return { park: (data && data[0]) || null, retrieve: ev }
-  }
-  const { data } = await svc.from('valet_events').select(EV_SELECT)
-    .eq('vehicle_id', ev.vehicle_id).eq('action', 'retrieve').gte('event_at', ev.event_at)
-    .order('event_at', { ascending: true }).limit(1)
-  return { park: ev, retrieve: (data && data[0]) || null }
-}
-
-async function photoPaths(svc: any, eventId: string): Promise<{ slot: string; path: string }[]> {
-  const { data } = await svc.from('valet_photos').select('slot, sequence, storage_path').eq('event_id', eventId).order('sequence')
-  return (data || []).map((p: any) => ({ slot: p.slot, path: p.storage_path }))
-}
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
-}
-
-// -------- GET: view data for the public report page (by event id) --------
-export async function GET(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get('id') || ''
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-  const svc = createServerClient()
-  const { data: ev } = await svc.from('valet_events').select(EV_SELECT).eq('id', id).maybeSingle()
-  if (!ev) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const { park, retrieve } = await pair(svc, ev as Ev)
-
-  async function section(e: Ev | null) {
-    if (!e) return null
-    const paths = await photoPaths(svc, e.id)
-    const photos: string[] = []
-    for (const p of paths) {
-      const { data: s } = await svc.storage.from('valet-photos').createSignedUrl(p.path, 3600)
-      if (s?.signedUrl) photos.push(s.signedUrl)
-    }
-    return { at: e.event_at, note: e.note, photos }
-  }
-
-  const base = (park || retrieve) as Ev
-  return NextResponse.json({
-    plate: base.valet_vehicles?.license_plate || '—',
-    name: base.valet_customers?.full_name || '—',
-    unit: base.valet_customers?.valet_units?.unit_number || '—',
-    park: await section(park),
-    retrieve: await section(retrieve),
-  })
-}
-
-// -------- POST: build the PDF and send to BSM + customer --------
 async function requireValet(req: NextRequest): Promise<boolean> {
   const auth = req.headers.get('authorization') || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
@@ -96,6 +31,36 @@ async function requireValet(req: NextRequest): Promise<boolean> {
   return !!me && me.active === true && ['valet', 'valet_manager', 'admin'].includes(me.role)
 }
 
+async function pair(svc: any, ev: Ev): Promise<{ park: Ev | null; retrieve: Ev | null }> {
+  if (ev.action === 'retrieve') {
+    let park: Ev | null = null
+    if (ev.session_id) {
+      const { data } = await svc.from('valet_events').select(EV_SELECT).eq('session_id', ev.session_id).eq('action', 'park').limit(1)
+      park = (data && data[0]) || null
+    }
+    if (!park && ev.vehicle_id) {
+      const { data } = await svc.from('valet_events').select(EV_SELECT).eq('vehicle_id', ev.vehicle_id).eq('action', 'park').lte('event_at', ev.event_at).order('event_at', { ascending: false }).limit(1)
+      park = (data && data[0]) || null
+    }
+    return { park, retrieve: ev }
+  }
+  let retrieve: Ev | null = null
+  if (ev.session_id) {
+    const { data } = await svc.from('valet_events').select(EV_SELECT).eq('session_id', ev.session_id).eq('action', 'retrieve').limit(1)
+    retrieve = (data && data[0]) || null
+  }
+  return { park: ev, retrieve }
+}
+
+async function photoPaths(svc: any, eventId: string) {
+  const { data } = await svc.from('valet_photos').select('slot, sequence, storage_path').eq('event_id', eventId).order('sequence')
+  return (data || []).map((p: any) => p.storage_path as string)
+}
+
+function fmt(iso: string) {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+}
+
 async function buildPDF(svc: any, park: Ev | null, retrieve: Ev | null, empMap: Record<string, string>) {
   const doc = await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica)
@@ -106,16 +71,23 @@ async function buildPDF(svc: any, park: Ev | null, retrieve: Ev | null, empMap: 
   const plate = base.valet_vehicles?.license_plate || '—'
   const name = base.valet_customers?.full_name || '—'
   const unit = base.valet_customers?.valet_units?.unit_number || '—'
+  const email = base.valet_customers?.email || '—'
 
-  page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: NAVY })
-  page.drawText('BSM Valet — Vehicle Report', { x: M, y: H - 44, size: 18, font: bold, color: rgb(1, 1, 1) })
-  page.drawText('Facility Solutions', { x: M, y: H - 60, size: 9, font, color: GOLD })
-  y = H - 96
+  page.drawRectangle({ x: 0, y: H - 78, width: W, height: 78, color: NAVY })
+  try {
+    const lb = new Uint8Array(await (await fetch(`${APP}/bsm-logo.png`)).arrayBuffer())
+    const logo = await doc.embedPng(lb)
+    const lh = 30, lw = lh * (logo.width / logo.height)
+    page.drawImage(logo, { x: M, y: H - 56, width: lw, height: lh })
+  } catch { /* logo optional */ }
+  page.drawText('VEHICLE REPORT', { x: M, y: H - 94, size: 10, font: bold, color: rgb(0.55, 0.5, 0.42) })
+  y = H - 112
+
   const line = (l: string, v: string) => { page.drawText(l, { x: M, y, size: 10, font: bold, color: NAVY }); page.drawText(v, { x: M + 90, y, size: 10, font, color: rgb(0.2, 0.2, 0.2) }); y -= 16 }
-  line('Plate', plate); line('Tenant', name); line('Unit', unit); y -= 6
+  line('Plate', plate); line('Tenant', name); line('Unit', unit); line('Email', email); y -= 6
 
   const draw = async (title: string, ev: Ev | null) => {
-    if (y < 160) { page = doc.addPage([W, H]); y = H - M }
+    if (y < 200) { page = doc.addPage([W, H]); y = H - M }
     page.drawText(title, { x: M, y, size: 12, font: bold, color: NAVY }); y -= 6
     page.drawLine({ start: { x: M, y }, end: { x: W - M, y }, thickness: 1, color: GOLD }); y -= 14
     if (!ev) { page.drawText('No record.', { x: M, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) }); y -= 20; return }
@@ -124,9 +96,9 @@ async function buildPDF(svc: any, park: Ev | null, retrieve: Ev | null, empMap: 
     const paths = await photoPaths(svc, ev.id)
     const cw = (W - M * 2 - 10) / 2, ch = cw * 0.75
     let col = 0
-    for (const p of paths) {
+    for (const path of paths) {
       try {
-        const { data: blob } = await svc.storage.from('valet-photos').download(p.path)
+        const { data: blob } = await svc.storage.from('valet-photos').download(path)
         if (!blob) continue
         const bytes = new Uint8Array(await blob.arrayBuffer())
         const img = await doc.embedJpg(bytes)
@@ -141,9 +113,24 @@ async function buildPDF(svc: any, park: Ev | null, retrieve: Ev | null, empMap: 
   }
   await draw('PARK — intake condition', park)
   await draw('RETRIEVE — return condition', retrieve)
+
+  if (y < 130) { page = doc.addPage([W, H]) }
+  const fy = 96
+  page.drawLine({ start: { x: M, y: fy + 16 }, end: { x: W - M, y: fy + 16 }, thickness: 0.8, color: rgb(0.85, 0.8, 0.72) })
+  page.drawText('Thank you for trusting BSM Facility Solutions with your vehicle.', { x: M, y: fy, size: 9, font: bold, color: rgb(0.2, 0.18, 0.15) })
+  const disc = 'This report documents your vehicle\u2019s condition at drop-off and pick-up. BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
+  let dy = fy - 14, ln = ''
+  for (const w of disc.split(' ')) {
+    const test = ln ? ln + ' ' + w : w
+    if (font.widthOfTextAtSize(test, 8) > W - 2 * M) { page.drawText(ln, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) }); dy -= 11; ln = w }
+    else ln = test
+  }
+  if (ln) page.drawText(ln, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) })
+
   return doc.save()
 }
 
+// POST { event_id } — email the tenant a copy after park or retrieve
 export async function POST(req: NextRequest) {
   if (!(await requireValet(req))) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   const { event_id } = await req.json().catch(() => ({}))
@@ -152,10 +139,12 @@ export async function POST(req: NextRequest) {
   const svc = createServerClient()
   const { data: ev } = await svc.from('valet_events').select(EV_SELECT).eq('id', event_id).maybeSingle()
   if (!ev) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-  const { park, retrieve } = await pair(svc, ev as Ev)
-  const link = retrieve ? `${APP}/valet/report/${retrieve.id}` : `${APP}/valet/report/${event_id}`
 
-  // attendant names
+  const tenantEmail = (ev as Ev).valet_customers?.email || ''
+  if (!tenantEmail) return NextResponse.json({ ok: true, emailed: false, reason: 'no tenant email' })
+
+  const { park, retrieve } = await pair(svc, ev as Ev)
+
   const empIds = Array.from(new Set([park?.employee_id, retrieve?.employee_id].filter(Boolean))) as string[]
   const empMap: Record<string, string> = {}
   if (empIds.length) {
@@ -172,53 +161,33 @@ export async function POST(req: NextRequest) {
   }
 
   const base = (retrieve || park) as Ev
-  const plate = base.valet_customers ? (base.valet_vehicles?.license_plate || '') : ''
-  const custName = base.valet_customers?.full_name || 'Resident'
-  const custEmail = base.valet_customers?.email || ''
-  const custPhone = base.valet_customers?.phone || ''
-  const fileName = `BSM-valet-${plate || 'report'}.pdf`
+  const plate = base.valet_vehicles?.license_plate || ''
+  const name = base.valet_customers?.full_name || 'there'
+  const phase = (ev as Ev).action === 'retrieve' ? 'returned to you' : 'received into valet'
 
-  // email (Resend) with PDF attachment
   let emailed = false
   const key = process.env.RESEND_API_KEY
   if (key) {
-    const to = [BSM_REPORT_TO, custEmail].filter(Boolean)
     const html =
-      `<p>Hi ${custName},</p>` +
-      `<p>Attached is your BSM Valet vehicle report for plate <strong>${plate}</strong>, ` +
-      `documenting the condition at park and retrieve.</p>` +
-      `<p>You can also view it here: <a href="${link}">${link}</a></p><p>— BSM Facility Solutions</p>`
+      `<p>Hi ${name},</p>` +
+      `<p>Attached is your BSM Valet vehicle report for plate <strong>${plate}</strong>, documenting its condition as it was ${phase}.</p>` +
+      `<p>Thank you for trusting BSM Facility Solutions with your vehicle.</p><p>— BSM Facility Solutions</p>`
     try {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: 'BSM Valet <careers@bsmfacilitysolutions.com>',
-          to, subject: `BSM Valet report — ${plate}`, html,
-          attachments: [{ filename: fileName, content: pdfB64 }],
+          to: [tenantEmail],
+          subject: `BSM Valet report — ${plate}`,
+          html,
+          attachments: [{ filename: `BSM-valet-${plate || 'report'}.pdf`, content: pdfB64 }],
         }),
       })
       emailed = r.ok
     } catch { emailed = false }
   }
 
-  // sms (Twilio) link to the report page
-  let texted = false
-  const sid = process.env.TWILIO_ACCOUNT_SID, tok = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_FROM
-  const toNum = e164(custPhone)
-  if (sid && tok && from && toNum) {
-    try {
-      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-        method: 'POST',
-        headers: { Authorization: 'Basic ' + Buffer.from(`${sid}:${tok}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ To: toNum, From: from, Body: `Your BSM Valet report for ${plate}: ${link}` }),
-      })
-      texted = r.ok
-    } catch { texted = false }
-  }
-
-  // mark reported on the retrieve event (or the event we were given)
-  const markId = retrieve?.id || event_id
-  await svc.from('valet_events').update({ reported_at: new Date().toISOString() }).eq('id', markId)
-  return NextResponse.json({ ok: true, emailed, texted, link })
+  await svc.from('valet_events').update({ reported_at: new Date().toISOString() }).eq('id', event_id)
+  return NextResponse.json({ ok: true, emailed })
 }
