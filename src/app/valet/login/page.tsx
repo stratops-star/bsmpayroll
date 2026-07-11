@@ -48,16 +48,19 @@ export default function ValetLogin() {
     }
 
     const { data: me } = await supabase
-      .from('app_users').select('role, active, approved').eq('id', data.user.id).single()
+      .from('app_users').select('role, active, approved, departments').eq('id', data.user.id).single()
     const role = me?.role || ''
-    if (!VALET_ROLES.includes(role) || me?.active === false) {
+    const dept = Array.isArray((me as any)?.departments) ? (me as any).departments : []
+    const hasValet = dept.includes('valet')
+    if (!(VALET_ROLES.includes(role) || hasValet) || me?.active === false) {
       await supabase.auth.signOut()
       setError('This account is not authorized for the valet app.')
       setLoading(false)
       return
     }
 
-    router.replace(role === 'valet_manager' || role === 'admin' ? '/valet/manager' : '/valet')
+    const mgr = role === 'valet_manager' || role === 'admin' || hasValet
+    router.replace(mgr ? '/valet/manager' : '/valet')
   }
 
   return (
