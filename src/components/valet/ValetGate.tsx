@@ -28,19 +28,23 @@ export default function ValetGate({
 
       const { data: me } = await supabase
         .from('app_users')
-        .select('role, active, approved')
+        .select('role, active, approved, departments')
         .eq('id', user.id)
         .single()
 
       const role = me?.role || ''
+      const dept = Array.isArray((me as any)?.departments) ? (me as any).departments : []
+      const hasValet = dept.includes('valet')          // valet module assigned → full valet access
+      const canValet = VALET_ROLES.includes(role) || hasValet
+      const isMgr = role === 'valet_manager' || role === 'admin' || hasValet
       const activeOk = me?.active === true
-      const approvedOk = role === 'admin' ? true : me?.approved === true
-      const ok = VALET_ROLES.includes(role) && activeOk && approvedOk
+      const approvedOk = (role === 'admin' || hasValet) ? true : me?.approved === true
+      const ok = canValet && activeOk && approvedOk
 
       if (!ok) { setState('denied'); return }
 
       // Manager-only areas bounce plain attendants back to the capture app.
-      if (req === 'manager' && role === 'valet') { router.replace('/valet'); return }
+      if (req === 'manager' && !isMgr) { router.replace('/valet'); return }
 
       setState('ok')
     })()
