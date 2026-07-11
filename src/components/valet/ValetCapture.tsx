@@ -9,6 +9,7 @@ import {
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import ValetTutorial, { ATTENDANT_STEPS } from '@/components/valet/ValetTutorial'
 import ValetInstall from '@/components/valet/ValetInstall'
+import ModuleSwitcher from '@/components/valet/ModuleSwitcher'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -232,10 +233,7 @@ export default function ValetCapture() {
   return (
     <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/bsm-mark.png" alt="BSM" style={{ height: 26, width: 'auto' }} />
-          <div style={{ fontWeight: 700, fontSize: 15 }}>BSM Valet</div>
-        </div>
+        <ModuleSwitcher title="BSM Valet" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ValetInstall variant="icon" />
           <button onClick={() => setTutorial(true)} style={miniBtn} aria-label="Help">?</button>
