@@ -9,7 +9,7 @@ const GOLD = '#DCB878'
 
 type Ev = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null; customer_id: string | null; employee_id: string | null
+  vehicle_id: string | null; session_id?: string | null; customer_id: string | null; employee_id: string | null
   valet_customers: { full_name: string; customer_type?: string; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
 }
@@ -45,7 +45,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, customer_id, employee_id, valet_customers(full_name, customer_type, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, valet_units(unit_number)), valet_vehicles(license_plate)')
       .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
@@ -75,15 +75,19 @@ export default function ValetHistory() {
 
   // pair a park with its retrieve (same vehicle) to build the full "stay"
   function stayFor(e: Ev): { park: Ev | null; retrieve: Ev | null } {
-    if (!e.vehicle_id) return e.action === 'park' ? { park: e, retrieve: null } : { park: null, retrieve: e }
-    const sameVeh = events.filter(x => x.vehicle_id === e.vehicle_id)
     if (e.action === 'retrieve') {
-      const park = sameVeh.filter(x => x.action === 'park' && new Date(x.event_at) <= new Date(e.event_at))
-        .sort((a, b) => +new Date(b.event_at) - +new Date(a.event_at))[0] || null
+      let park = (e.session_id ? events.find(x => x.session_id === e.session_id && x.action === 'park') : null) || null
+      if (!park && e.vehicle_id) {
+        park = events.filter(x => x.vehicle_id === e.vehicle_id && x.action === 'park' && new Date(x.event_at) <= new Date(e.event_at))
+          .sort((a, b) => +new Date(b.event_at) - +new Date(a.event_at))[0] || null
+      }
       return { park, retrieve: e }
     }
-    const retrieve = sameVeh.filter(x => x.action === 'retrieve' && new Date(x.event_at) >= new Date(e.event_at))
-      .sort((a, b) => +new Date(a.event_at) - +new Date(b.event_at))[0] || null
+    let retrieve = (e.session_id ? events.find(x => x.session_id === e.session_id && x.action === 'retrieve') : null) || null
+    if (!retrieve && e.vehicle_id) {
+      retrieve = events.filter(x => x.vehicle_id === e.vehicle_id && x.action === 'retrieve' && new Date(x.event_at) >= new Date(e.event_at))
+        .sort((a, b) => +new Date(a.event_at) - +new Date(b.event_at))[0] || null
+    }
     return { park: e, retrieve }
   }
 
@@ -238,6 +242,7 @@ export default function ValetHistory() {
       action: 'retrieve', employee_id: meId, location_id: locId,
       customer_id: e.customer_id, vehicle_id: e.vehicle_id,
       note: 'Force-closed by manager (no photos)',
+      ...(e.session_id ? { session_id: e.session_id } : {}),
     })
     setBusy(false)
     if (error) { flash(error.message); return }
