@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import ValetTenants from '@/components/valet/ValetTenants'
 import ValetHistory from '@/components/valet/ValetHistory'
+import ValetTutorial, { MANAGER_STEPS } from '@/components/valet/ValetTutorial'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -16,6 +17,12 @@ export default function ValetManager() {
   const [tab, setTab] = useState<'attendants' | 'tenants' | 'history'>('attendants')
   const [attNonce, setAttNonce] = useState(0)
   const [tenOpen, setTenOpen] = useState<{ mode: 'list' | 'add' | 'addcar'; n: number }>({ mode: 'list', n: 0 })
+  const [tutorial, setTutorial] = useState(false)
+
+  useEffect(() => {
+    try { if (!localStorage.getItem('bsm_valet_tut_manager_v1')) setTutorial(true) } catch { /* ignore */ }
+  }, [])
+  function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_manager_v1', '1') } catch { /* ignore */ } }
 
   useEffect(() => {
     (async () => {
@@ -33,24 +40,27 @@ export default function ValetManager() {
   return (
     <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: GOLD, display: 'grid', placeItems: 'center', color: NAVY, fontWeight: 800 }}>B</div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet — Manager</div>
-            <div style={{ fontSize: 11, color: '#B7AC97' }}>{meName}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <img src="/bsm-mark.png" alt="BSM" style={{ height: 26, width: 'auto' }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Valet — Manager</div>
+            <div style={{ fontSize: 11, color: '#B7AC97', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meName}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <a href="/valet" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Capture app</a>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={() => setTutorial(true)} style={miniBtn} aria-label="Help">?</button>
+          <a href="/valet" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Capture</a>
           <button onClick={async () => { await supabase.auth.signOut(); location.href = '/valet/login' }} style={miniBtn}>Sign out</button>
         </div>
       </header>
 
       {/* Quick add bar */}
-      <div style={{ background: NAVY, padding: '0 12px 14px', display: 'flex', gap: 8, justifyContent: 'center' }}>
-        <QuickBtn onClick={quickEmployee} icon="👤" label="Add employee" />
-        <QuickBtn onClick={quickTenant} icon="🏠" label="Add tenant" />
-        <QuickBtn onClick={quickCar} icon="🚗" label="Add car" />
+      <div style={{ background: NAVY, padding: '0 12px 14px' }}>
+        <div style={{ maxWidth: 620, margin: '0 auto', display: 'flex', gap: 8 }}>
+          <QuickBtn onClick={quickEmployee} icon={<IconEmployee />} label="Add employee" />
+          <QuickBtn onClick={quickTenant} icon={<IconTenant />} label="Add tenant" />
+          <QuickBtn onClick={quickCar} icon={<IconCar />} label="Add car" />
+        </div>
       </div>
 
       <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 4, padding: '0 12px' }}>
@@ -64,19 +74,52 @@ export default function ValetManager() {
           : tab === 'tenants' ? <ValetTenants open={tenOpen} />
           : <ValetHistory />}
       </main>
+
+      {tutorial && <ValetTutorial steps={MANAGER_STEPS} onClose={closeTutorial} />}
     </div>
   )
 }
 
-function QuickBtn({ onClick, icon, label }: { onClick: () => void; icon: string; label: string }) {
+function QuickBtn({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick} style={{
-      flex: 1, maxWidth: 180, background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.18)',
-      borderRadius: 12, padding: '10px 8px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+      flex: 1, minWidth: 0, background: 'rgba(255,255,255,.06)', color: '#fff', border: `1px solid ${GOLD}55`,
+      borderRadius: 12, padding: '11px 6px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
     }}>
-      <span style={{ fontSize: 18 }}>{icon}</span>{label}
+      {icon}<span>{label}</span>
     </button>
+  )
+}
+
+function IconEmployee() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9.5" cy="8" r="3" />
+      <path d="M4 19 a5.5 5.5 0 0 1 11 0" />
+      <circle cx="18" cy="16.5" r="3.6" fill="#1E1B17" /><path d="M18 15 v3 M16.5 16.5 h3" />
+    </svg>
+  )
+}
+function IconTenant() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 20 V5 h8 v15" />
+      <path d="M5.5 8 h1 M8.5 8 h1 M5.5 11 h1 M8.5 11 h1 M5.5 14 h1 M8.5 14 h1" />
+      <circle cx="16" cy="12.5" r="2.2" />
+      <path d="M12.5 20 a4 4 0 0 1 7 0" />
+      <circle cx="19.5" cy="17" r="3" fill="#1E1B17" /><path d="M19.5 15.6 v2.8 M18.1 17 h2.8" />
+    </svg>
+  )
+}
+function IconCar() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="5.5" r="2.6" fill="#1E1B17" /><path d="M12 4.2 v2.6 M10.7 5.5 h2.6" />
+      <path d="M6 18 l1.1-4 a2 2 0 0 1 1.9-1.4 h6 a2 2 0 0 1 1.9 1.4 l1.1 4" />
+      <rect x="5" y="18" width="14" height="4" rx="1.5" />
+      <circle cx="8.5" cy="22" r="0.7" /><circle cx="15.5" cy="22" r="0.7" />
+    </svg>
   )
 }
 
