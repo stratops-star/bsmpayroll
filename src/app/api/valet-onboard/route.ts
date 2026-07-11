@@ -37,7 +37,7 @@ async function email(to: string, subject: string, html: string) {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'BSM Valet <careers@bsmfacilitysolutions.com>', to: [to], subject, html }),
+      body: JSON.stringify({ from: 'BSM Valet <valet.fg@bsmfacilitysolutions.com>', to: [to], subject, html }),
     })
     return r.ok
   } catch { return false }
