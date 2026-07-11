@@ -7,11 +7,46 @@ const GOLD = '#DCB878'
 
 type Mod = { key: string; name: string; href: string; icon: string }
 const ALL: Record<string, Mod> = {
-  hub: { key: 'hub', name: 'All modules (Hub)', href: '/hub', icon: '▦' },
-  recruiting: { key: 'recruiting', name: 'Recruiting', href: '/recruiting', icon: '🧑\u200d💼' },
-  payroll: { key: 'payroll', name: 'Payroll', href: '/dashboard', icon: '💰' },
-  valet: { key: 'valet', name: 'Valet Parking', href: '/valet/manager', icon: '🚗' },
-  access: { key: 'access', name: 'User Access', href: '/recruiting/admin', icon: '🛡️' },
+  hub: { key: 'hub', name: 'All modules (Hub)', href: '/hub', icon: 'hub' },
+  recruiting: { key: 'recruiting', name: 'Recruiting', href: '/recruiting', icon: 'recruiting' },
+  payroll: { key: 'payroll', name: 'Payroll', href: '/dashboard', icon: 'payroll' },
+  valet: { key: 'valet', name: 'Valet Parking', href: '/valet/manager', icon: 'valet' },
+  access: { key: 'access', name: 'User Access', href: '/recruiting/admin', icon: 'access' },
+}
+
+function ModIcon({ k }: { k: string }) {
+  const p = { fill: 'none', stroke: GOLD, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  if (k === 'hub') return (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...p}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.2" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.2" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.2" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.2" />
+    </svg>
+  )
+  if (k === 'valet') return (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...p}>
+      <path d="M4 15 l1.4-4.2 a2 2 0 0 1 1.9-1.3 h7.4 a2 2 0 0 1 1.9 1.3 L18 15" />
+      <path d="M3.5 15 h17 v2.5 a1 1 0 0 1-1 1 H4.5 a1 1 0 0 1-1-1 z" />
+      <circle cx="7" cy="18.5" r="1.2" /><circle cx="17" cy="18.5" r="1.2" />
+    </svg>
+  )
+  if (k === 'payroll') return (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...p}>
+      <path d="M7 3 h7 l4 4 v11 a1 1 0 0 1-1 1 H7 a1 1 0 0 1-1-1 V4 a1 1 0 0 1 1-1 z" />
+      <path d="M14 3 v4 h4" />
+      <path d="M11 10 v6 M9.6 11 h2.2 a1.2 1.2 0 0 1 0 2.4 h-2.2 M9.6 13.4 h2.6" />
+    </svg>
+  )
+  if (k === 'access') return (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...p}>
+      <path d="M12 3 l7 2.5 v5 c0 4.2-3 7.4-7 8.5 -4-1.1-7-4.3-7-8.5 v-5 z" />
+      <path d="M9 12 l2 2 4-4.5" />
+    </svg>
+  )
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...p}>
+      <circle cx="12" cy="8" r="3.2" /><path d="M5.5 20 a6.5 6.5 0 0 1 13 0" />
+    </svg>
+  )
 }
 
 export default function ModuleSwitcher({ title }: { title: string }) {
@@ -59,7 +94,7 @@ export default function ModuleSwitcher({ title }: { title: string }) {
               onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(220,184,120,.12)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
               style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 8, textDecoration: 'none', color: '#EDE7DB', fontSize: 14, fontWeight: 500 }}>
-              <span style={{ width: 20, textAlign: 'center' }}>{m.icon}</span>{m.name}
+              <span style={{ width: 30, height: 30, flexShrink: 0, borderRadius: '50%', border: `1px solid ${GOLD}66`, display: 'grid', placeItems: 'center' }}><ModIcon k={m.icon} /></span>{m.name}
             </a>
           ))}
         </div>
