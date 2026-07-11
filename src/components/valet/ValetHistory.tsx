@@ -10,7 +10,7 @@ const GOLD = '#DCB878'
 type Ev = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
   vehicle_id: string | null; session_id?: string | null; customer_id: string | null; employee_id: string | null
-  valet_customers: { full_name: string; customer_type?: string; valet_units: { unit_number: string } | null } | null
+  valet_customers: { full_name: string; customer_type?: string; email?: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
 }
 type Photo = { slot: string; sequence: number; storage_path: string }
@@ -45,7 +45,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
       .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
@@ -119,6 +119,7 @@ export default function ValetHistory() {
       const plate = e.valet_vehicles?.license_plate || '—'
       const name = e.valet_customers?.full_name || '—'
       const unit = e.valet_customers?.valet_units?.unit_number || '—'
+      const email = e.valet_customers?.email || '—'
 
       page.drawRectangle({ x: 0, y: H - 78, width: W, height: 78, color: NAVY_RGB })
       try {
@@ -135,7 +136,7 @@ export default function ValetHistory() {
         page.drawText(val, { x: M + 90, y, size: 10, font, color: rgb(0.2, 0.2, 0.2) })
         y -= 16
       }
-      line('Plate', plate); line('Tenant', name); line('Unit', unit)
+      line('Plate', plate); line('Tenant', name); line('Unit', unit); line('Email', email)
       y -= 6
 
       const drawPhotos = async (title: string, ev: Ev | null) => {
