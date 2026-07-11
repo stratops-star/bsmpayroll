@@ -71,12 +71,13 @@ type Vehicle = { id: string; license_plate: string; window_sticker?: string | nu
 type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_units?: { unit_number: string } | null; valet_vehicles: Vehicle[] }
 type EventRow = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null
+  vehicle_id: string | null; session_id?: string | null; customer_id?: string | null
   valet_customers: { full_name: string } | null
   valet_vehicles: { license_plate: string } | null
 }
 type Chosen = {
   customerId: string | null; vehicleId: string | null
+  sessionId?: string | null
   displayName: string; plate: string
   newCustomer: QueuedEvent['newCustomer']; newVehicle: QueuedEvent['newVehicle']
 }
@@ -121,7 +122,7 @@ export default function ValetCapture() {
 
     const { data: evs } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, valet_customers(full_name), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name), valet_vehicles(license_plate)')
       .order('event_at', { ascending: false }).limit(60)
     setEvents((evs as EventRow[]) || [])
 
@@ -152,7 +153,7 @@ export default function ValetCapture() {
   }, [supabase, refresh, sync])
 
   // ---- currently parked (latest event per vehicle is a park) ----
-  const parked: { vehicle_id: string; name: string; plate: string; since: string }[] = []
+  const parked: { vehicle_id: string; name: string; plate: string; since: string; session_id: string | null; customer_id: string | null }[] = []
   const seen = new Set<string>()
   for (const e of events) {
     if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
@@ -163,6 +164,8 @@ export default function ValetCapture() {
         name: e.valet_customers?.full_name || '—',
         plate: e.valet_vehicles?.license_plate || '—',
         since: e.event_at,
+        session_id: e.session_id || null,
+        customer_id: e.customer_id || null,
       })
     }
   }
@@ -176,8 +179,8 @@ export default function ValetCapture() {
     setStep('capture')
   }
 
-  function chooseParked(p: { vehicle_id: string; name: string; plate: string }) {
-    setChosen({ customerId: null, vehicleId: p.vehicle_id, displayName: p.name, plate: p.plate, newCustomer: null, newVehicle: null })
+  function chooseParked(p: any) {
+    setChosen({ customerId: p.customer_id || null, vehicleId: p.vehicle_id, sessionId: p.session_id || null, displayName: p.name, plate: p.plate, newCustomer: null, newVehicle: null })
     setStep('capture')
   }
 
@@ -192,6 +195,7 @@ export default function ValetCapture() {
       note,
       customerId: chosen?.customerId || null,
       vehicleId: chosen?.vehicleId || null,
+      sessionId: chosen?.sessionId || null,
       newCustomer: chosen?.newCustomer || null,
       newVehicle: chosen?.newVehicle || null,
       photos: shots.map(s => ({ slot: s.slot, sequence: s.sequence, blob: s.blob, capturedAt: s.capturedAt })),
@@ -214,12 +218,10 @@ export default function ValetCapture() {
       <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src="/bsm-mark.png" alt="BSM" style={{ height: 26, width: 'auto' }} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet</div>
-            <div style={{ fontSize: 11, color: '#B7AC97' }}>{me?.name}</div>
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>BSM Valet</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ValetInstall variant="icon" />
           <button onClick={() => setTutorial(true)} style={miniBtn} aria-label="Help">?</button>
           {isManager && <a href="/valet/manager" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Manager</a>}
           <button onClick={() => setLang(lang === 'en' ? 'es' : 'en')} style={miniBtn}>{lang === 'en' ? 'ES' : 'EN'}</button>
@@ -310,8 +312,6 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
             </button>
           ))}
       </Accordion>
-
-      <div style={{ marginTop: 6 }}><ValetInstall /></div>
     </div>
   )
 }
@@ -398,22 +398,26 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
     <div>
       <TopBar title={action === 'retrieve' ? t('pickCar') : t('park')} onBack={onCancel} back={t('cancel')} />
 
-      {action === 'retrieve' && parked.length > 0 && (
-        <Section title={`${t('parkedNow')} (${parked.length})`}>
-          {parked.map((p: any) => (
-            <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
-                <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
-              </div>
-              <span style={{ color: GOLD }}>›</span>
-            </button>
-          ))}
-        </Section>
-      )}
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={action === 'retrieve' ? t('searchParked') : t('search')} autoFocus style={{ ...inp, marginBottom: 10 }} />
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search')} autoFocus style={{ ...inp, marginBottom: 10 }} />
-      {ql ? (
+      {action === 'retrieve' ? (
+        <div style={card}>
+          {(() => {
+            const list = (parked as any[]).filter(p => !ql || `${p.plate} ${p.name}`.toLowerCase().includes(ql))
+            if (parked.length === 0) return <Empty>{t('noParked')}</Empty>
+            if (list.length === 0) return <Empty>{t('noMatch')}</Empty>
+            return list.map((p: any) => (
+              <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
+                  <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
+                </div>
+                <span style={{ color: GOLD }}>›</span>
+              </button>
+            ))
+          })()}
+        </div>
+      ) : ql ? (
         <div style={card}>
           {matches.slice(0, 40).map(({ c, v }) => (
             <button key={c.id + v.id} onClick={() => onExisting(c, v)} style={rowBtn}>
@@ -564,13 +568,15 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
   useEffect(() => {
     (async () => {
       let p: EventRow | null = null, r: EventRow | null = null
-      const same = (events as EventRow[]).filter(x => x.vehicle_id && x.vehicle_id === e.vehicle_id)
+      const all = events as EventRow[]
       if (e.action === 'retrieve') {
         r = e
-        p = same.filter(x => x.action === 'park' && new Date(x.event_at) <= new Date(e.event_at)).sort((a, b) => +new Date(b.event_at) - +new Date(a.event_at))[0] || null
+        p = (e.session_id ? all.find(x => x.session_id === e.session_id && x.action === 'park') : null) || null
+        if (!p) p = all.filter(x => x.vehicle_id && x.vehicle_id === e.vehicle_id && x.action === 'park' && new Date(x.event_at) <= new Date(e.event_at)).sort((a, b) => +new Date(b.event_at) - +new Date(a.event_at))[0] || null
       } else {
         p = e
-        r = same.filter(x => x.action === 'retrieve' && new Date(x.event_at) >= new Date(e.event_at)).sort((a, b) => +new Date(a.event_at) - +new Date(b.event_at))[0] || null
+        r = (e.session_id ? all.find(x => x.session_id === e.session_id && x.action === 'retrieve') : null) || null
+        if (!r) r = all.filter(x => x.vehicle_id && x.vehicle_id === e.vehicle_id && x.action === 'retrieve' && new Date(x.event_at) >= new Date(e.event_at)).sort((a, b) => +new Date(a.event_at) - +new Date(b.event_at))[0] || null
       }
       setPark(p); setRet(r)
       setParkPics(p ? await loadPics(p.id) : [])
