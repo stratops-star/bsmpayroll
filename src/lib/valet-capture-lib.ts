@@ -102,6 +102,7 @@ export type QueuedEvent = {
   note: string
   customerId: string | null
   vehicleId: string | null
+  sessionId?: string | null
   newCustomer: { full_name: string; phone: string; email: string; unit_number: string; customer_type?: 'tenant' | 'guest'; host_customer_id?: string | null } | null
   newVehicle: { license_plate: string; make: string; model: string; color: string } | null
   photos: QueuedPhoto[]
@@ -212,6 +213,7 @@ export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void>
     vehicle_id: vehicleId,
     note: ev.note || null,
     event_at: ev.createdAt,
+    ...(ev.sessionId ? { session_id: ev.sessionId } : {}),
   }).select('id').single()
 
   if (ee) {
