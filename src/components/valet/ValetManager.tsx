@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-browser'
 import ValetTenants from '@/components/valet/ValetTenants'
 import ValetHistory from '@/components/valet/ValetHistory'
 import ValetTutorial, { MANAGER_STEPS } from '@/components/valet/ValetTutorial'
+import ModuleSwitcher from '@/components/valet/ModuleSwitcher'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -13,7 +14,6 @@ type Attendant = { id: string; full_name: string; email: string; phone: string |
 
 export default function ValetManager() {
   const [supabase] = useState(() => createClient())
-  const [meName, setMeName] = useState('')
   const [tab, setTab] = useState<'attendants' | 'tenants' | 'history'>('attendants')
   const [attNonce, setAttNonce] = useState(0)
   const [tenOpen, setTenOpen] = useState<{ mode: 'list' | 'add' | 'addcar'; n: number }>({ mode: 'list', n: 0 })
@@ -24,15 +24,6 @@ export default function ValetManager() {
   }, [])
   function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_manager_v1', '1') } catch { /* ignore */ } }
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: u } = await supabase.from('app_users').select('full_name, email').eq('id', user.id).single()
-      setMeName(u?.full_name || u?.email || '')
-    })()
-  }, [supabase])
-
   function quickEmployee() { setTab('attendants'); setAttNonce(n => n + 1) }
   function quickTenant() { setTab('tenants'); setTenOpen(o => ({ mode: 'add', n: o.n + 1 })) }
   function quickCar() { setTab('tenants'); setTenOpen(o => ({ mode: 'addcar', n: o.n + 1 })) }
@@ -40,13 +31,7 @@ export default function ValetManager() {
   return (
     <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <img src="/bsm-mark.png" alt="BSM" style={{ height: 26, width: 'auto' }} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Valet — Manager</div>
-            <div style={{ fontSize: 11, color: '#B7AC97', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meName}</div>
-          </div>
-        </div>
+        <ModuleSwitcher title="Valet — Manager" />
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button onClick={() => setTutorial(true)} style={miniBtn} aria-label="Help">?</button>
           <a href="/valet" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Capture</a>
