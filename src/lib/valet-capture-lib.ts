@@ -27,7 +27,7 @@ function loadLogo(): Promise<HTMLImageElement | null> {
     img.crossOrigin = 'anonymous'
     img.onload = () => res(img)
     img.onerror = () => res(null)
-    img.src = '/bsm-logo.png'
+    img.src = '/bsm-mark.png'
   })
   return logoPromise
 }
@@ -45,7 +45,7 @@ export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob;
   const stamp = now.toLocaleString()
   const bar = Math.max(40, Math.round(h * 0.065))
 
-  ctx.fillStyle = 'rgba(13,27,53,0.62)'
+  ctx.fillStyle = 'rgba(30,27,23,0.66)'
   ctx.fillRect(0, h - bar, w, bar)
 
   const fs = Math.round(bar * 0.4)
@@ -63,7 +63,7 @@ export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob;
     ctx.drawImage(logo, w - lw - pad, h - bar + pad, lw, lh)
   } else {
     ctx.font = `800 ${fs}px system-ui, sans-serif`
-    ctx.fillStyle = '#D4A843'
+    ctx.fillStyle = '#DCB878'
     ctx.textAlign = 'right'
     ctx.fillText('BSM', w - 16, h - bar / 2)
     ctx.textAlign = 'left'
@@ -102,7 +102,7 @@ export type QueuedEvent = {
   note: string
   customerId: string | null
   vehicleId: string | null
-  newCustomer: { full_name: string; phone: string; email: string; unit_number: string } | null
+  newCustomer: { full_name: string; phone: string; email: string; unit_number: string; customer_type?: 'tenant' | 'guest'; host_customer_id?: string | null } | null
   newVehicle: { license_plate: string; make: string; model: string; color: string } | null
   photos: QueuedPhoto[]
   createdAt: string
@@ -148,31 +148,42 @@ export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void>
   // 1. Resolve customer
   let customerId = ev.customerId
   if (!customerId && ev.newCustomer) {
+    const nc = ev.newCustomer
+    const ctype = nc.customer_type === 'guest' ? 'guest' : 'tenant'
     let unitId: string | null = null
-    if (ev.newCustomer.unit_number && ev.locationId) {
+    let hostId: string | null = null
+
+    if (ctype === 'guest' && nc.host_customer_id) {
+      // guest inherits the host's unit
+      hostId = nc.host_customer_id
+      const { data: host } = await supabase.from('valet_customers').select('unit_id').eq('id', hostId).maybeSingle()
+      unitId = host?.unit_id || null
+    } else if (nc.unit_number && ev.locationId) {
       const { data: existingUnit } = await supabase
         .from('valet_units').select('id')
-        .eq('location_id', ev.locationId).eq('unit_number', ev.newCustomer.unit_number).maybeSingle()
+        .eq('location_id', ev.locationId).eq('unit_number', nc.unit_number).maybeSingle()
       if (existingUnit?.id) {
         unitId = existingUnit.id
       } else {
         const { data: nu } = await supabase
           .from('valet_units')
-          .insert({ location_id: ev.locationId, unit_number: ev.newCustomer.unit_number })
+          .insert({ location_id: ev.locationId, unit_number: nc.unit_number })
           .select('id').single()
         unitId = nu?.id || null
       }
     }
-    const { data: nc, error: ce } = await supabase.from('valet_customers').insert({
+    const { data: created, error: ce } = await supabase.from('valet_customers').insert({
       location_id: ev.locationId,
       unit_id: unitId,
-      full_name: ev.newCustomer.full_name,
-      phone: ev.newCustomer.phone || null,
-      email: ev.newCustomer.email || null,
+      full_name: nc.full_name,
+      phone: nc.phone || null,
+      email: nc.email || null,
+      customer_type: ctype,
+      host_customer_id: hostId,
       created_by: ev.employeeId,
     }).select('id').single()
     if (ce) throw ce
-    customerId = nc.id
+    customerId = created.id
   }
 
   // 2. Resolve vehicle
