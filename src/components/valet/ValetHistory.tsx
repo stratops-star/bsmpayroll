@@ -30,16 +30,23 @@ export default function ValetHistory() {
   const [sel, setSel] = useState<Ev | null>(null)
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
+  const [meId, setMeId] = useState('')
+  const [locId, setLocId] = useState<string | null>(null)
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3500) }
 
   const load = useCallback(async () => {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) setMeId(user.id)
+    const { data: loc } = await supabase.from('valet_locations').select('id').eq('active', true).order('created_at').limit(1).maybeSingle()
+    setLocId(loc?.id || null)
     const start = new Date(from + 'T00:00:00').toISOString()
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
       .select('id, action, event_at, note, vehicle_id, customer_id, employee_id, valet_customers(full_name, customer_type, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
     const evs = (data as Ev[]) || []
@@ -109,10 +116,15 @@ export default function ValetHistory() {
       const name = e.valet_customers?.full_name || '—'
       const unit = e.valet_customers?.valet_units?.unit_number || '—'
 
-      page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: NAVY_RGB })
-      page.drawText('BSM Valet — Vehicle Report', { x: M, y: H - 44, size: 18, font: bold, color: rgb(1, 1, 1) })
-      page.drawText('Facility Solutions', { x: M, y: H - 60, size: 9, font, color: GOLD_RGB })
-      y = H - 96
+      page.drawRectangle({ x: 0, y: H - 78, width: W, height: 78, color: NAVY_RGB })
+      try {
+        const lb = new Uint8Array(await (await fetch('/bsm-logo.png')).arrayBuffer())
+        const logo = await doc.embedPng(lb)
+        const lh = 30, lw = lh * (logo.width / logo.height)
+        page.drawImage(logo, { x: M, y: H - 56, width: lw, height: lh })
+      } catch { /* logo optional */ }
+      page.drawText('VEHICLE REPORT', { x: M, y: H - 94, size: 10, font: bold, color: rgb(0.55, 0.5, 0.42) })
+      y = H - 112
 
       const line = (label: string, val: string) => {
         page.drawText(label, { x: M, y, size: 10, font: bold, color: NAVY_RGB })
@@ -148,6 +160,19 @@ export default function ValetHistory() {
 
       await drawPhotos('PARK — intake condition', park)
       await drawPhotos('RETRIEVE — return condition', retrieve)
+
+      if (y < 130) { page = doc.addPage([W, H]) }
+      const fy = 96
+      page.drawLine({ start: { x: M, y: fy + 16 }, end: { x: W - M, y: fy + 16 }, thickness: 0.8, color: rgb(0.85, 0.8, 0.72) })
+      page.drawText('Thank you for trusting BSM Facility Solutions with your vehicle.', { x: M, y: fy, size: 9, font: bold, color: rgb(0.2, 0.18, 0.15) })
+      const disc = 'This report documents your vehicle\u2019s condition at drop-off and pick-up. BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
+      let dy = fy - 14, dl = ''
+      for (const w of disc.split(' ')) {
+        const test = dl ? dl + ' ' + w : w
+        if (font.widthOfTextAtSize(test, 8) > W - 2 * M) { page.drawText(dl, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) }); dy -= 11; dl = w }
+        else dl = test
+      }
+      if (dl) page.drawText(dl, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) })
 
       const bytes = await doc.save()
       dl(bytes, `BSM-valet-${plate}-${new Date(e.event_at).toISOString().slice(0, 10)}.pdf`)
@@ -198,6 +223,27 @@ export default function ValetHistory() {
     setTimeout(() => URL.revokeObjectURL(url), 4000)
   }
 
+  async function voidCapture(e: Ev) {
+    setBusy(true)
+    const { error } = await supabase.from('valet_events').update({ voided: true }).eq('id', e.id)
+    setBusy(false)
+    if (error) { flash(error.message); return }
+    flash('Capture voided'); setSel(null); load()
+  }
+
+  async function forceClose(e: Ev) {
+    // insert a retrieve event (no photos) so the car leaves "currently parked"
+    setBusy(true)
+    const { error } = await supabase.from('valet_events').insert({
+      action: 'retrieve', employee_id: meId, location_id: locId,
+      customer_id: e.customer_id, vehicle_id: e.vehicle_id,
+      note: 'Force-closed by manager (no photos)',
+    })
+    setBusy(false)
+    if (error) { flash(error.message); return }
+    flash('Marked retrieved'); setSel(null); load()
+  }
+
   return (
     <div>
       {toast && <div style={toastStyle}>{toast}</div>}
@@ -239,15 +285,17 @@ export default function ValetHistory() {
       <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>{filtered.length} of {events.length} records</p>
 
       {sel && <Detail e={sel} emp={emp} stayFor={stayFor} photosFor={photosFor} fmt={fmt}
-        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)} busy={busy} />}
+        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)}
+        onVoid={() => voidCapture(sel)} onForceClose={() => forceClose(sel)} busy={busy} />}
     </div>
   )
 }
 
-function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, busy }: any) {
+function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onVoid, onForceClose, busy }: any) {
   const { park, retrieve } = stayFor(e)
   const [parkPics, setParkPics] = useState<any[]>([])
   const [retPics, setRetPics] = useState<any[]>([])
+  const stillParked = !!park && !retrieve
 
   useEffect(() => {
     (async () => {
@@ -282,6 +330,16 @@ function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, busy }: any) 
         <Photos title="PARK — intake" ev={park} pics={parkPics} />
         <Photos title="RETRIEVE — return" ev={retrieve} pics={retPics} />
         <button onClick={onPDF} disabled={busy} style={{ ...primaryBtn, marginTop: 16 }}>⬇ Download report PDF</button>
+        {stillParked && (
+          <button onClick={() => { if (confirm('Mark this car as retrieved without photos?')) onForceClose() }} disabled={busy}
+            style={{ ...primaryBtn, background: '#fff', color: '#B7791F', border: '1.5px solid #E7CfA0', marginTop: 8 }}>
+            Force-close (mark retrieved)
+          </button>
+        )}
+        <button onClick={() => { if (confirm('Void this capture? It will be removed from history.')) onVoid() }} disabled={busy}
+          style={{ ...primaryBtn, background: '#fff', color: '#B91C1C', border: '1.5px solid #F0C4C4', marginTop: 8 }}>
+          Void this capture
+        </button>
       </div>
     </div>
   )
