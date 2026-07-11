@@ -16,6 +16,7 @@ export default function ValetInstall() {
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone
     if (standalone) setInstalled(true)
     window.addEventListener('appinstalled', () => setInstalled(true))
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}) }
     return () => window.removeEventListener('beforeinstallprompt', onPrompt)
   }, [])
 
