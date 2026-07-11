@@ -39,6 +39,7 @@ const T: Record<string, { en: string; es: string }> = {
   noMatch: { en: 'No match — add them as a guest below.', es: 'Sin coincidencias — agrégalo como invitado abajo.' },
   startTyping: { en: 'Start typing a name or plate…', es: 'Escribe un nombre o placa…' },
   searchParked: { en: 'Search parked cars…', es: 'Buscar autos estacionados…' },
+  optional: { en: 'optional', es: 'opcional' },
   makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
   continue: { en: 'Continue', es: 'Continuar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -373,6 +374,7 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
         <div style={card}>
           <Field label={t('guestName')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
           <Field label={t('plate')} value={f.license_plate} onChange={(v: string) => set('license_plate', v.toUpperCase())} />
+          <Field label={`${t('email')} (${t('optional')})`} value={f.email} onChange={(v: string) => set('email', v)} type="email" />
           <div style={{ marginBottom: 10 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>{t('visiting')}</label>
             {host ? (
@@ -399,7 +401,7 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
             onClick={() => {
               if (!f.full_name.trim() || !f.license_plate.trim() || !host) return
               onNew(
-                { full_name: f.full_name.trim(), phone: '', email: '', unit_number: '', customer_type: 'guest', host_customer_id: host.id },
+                { full_name: f.full_name.trim(), phone: '', email: f.email.trim(), unit_number: '', customer_type: 'guest', host_customer_id: host.id },
                 { license_plate: f.license_plate.trim(), make: f.make.trim(), model: f.model.trim(), color: f.color.trim() },
               )
             }}
