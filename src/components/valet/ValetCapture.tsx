@@ -8,6 +8,7 @@ import {
 } from '@/lib/valet-capture-lib'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import ValetTutorial, { ATTENDANT_STEPS } from '@/components/valet/ValetTutorial'
+import ValetInstall from '@/components/valet/ValetInstall'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -21,7 +22,7 @@ const T: Record<string, { en: string; es: string }> = {
   recent: { en: 'Recent activity', es: 'Actividad reciente' },
   noParked: { en: 'No cars parked right now.', es: 'No hay autos estacionados.' },
   noRecent: { en: 'No activity yet.', es: 'Sin actividad todavía.' },
-  search: { en: 'Search name or plate…', es: 'Buscar nombre o placa…' },
+  search: { en: 'Search name, plate, apt, car…', es: 'Buscar nombre, placa, apto, auto…' },
   addNew: { en: '+ Add new customer', es: '+ Nuevo cliente' },
   name: { en: 'Full name', es: 'Nombre completo' },
   phone: { en: 'Phone', es: 'Teléfono' },
@@ -37,6 +38,7 @@ const T: Record<string, { en: string; es: string }> = {
   sticker: { en: 'Sticker', es: 'Calcomanía' },
   noMatch: { en: 'No match — add them as a guest below.', es: 'Sin coincidencias — agrégalo como invitado abajo.' },
   startTyping: { en: 'Start typing a name or plate…', es: 'Escribe un nombre o placa…' },
+  searchParked: { en: 'Search parked cars…', es: 'Buscar autos estacionados…' },
   makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
   continue: { en: 'Continue', es: 'Continuar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -65,8 +67,8 @@ const T: Record<string, { en: string; es: string }> = {
   noRec: { en: 'No record.', es: 'Sin registro.' },
 }
 
-type Vehicle = { id: string; license_plate: string; window_sticker?: string | null }
-type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_vehicles: Vehicle[] }
+type Vehicle = { id: string; license_plate: string; window_sticker?: string | null; make?: string | null; model?: string | null; color?: string | null }
+type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_units?: { unit_number: string } | null; valet_vehicles: Vehicle[] }
 type EventRow = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
   vehicle_id: string | null
@@ -113,7 +115,7 @@ export default function ValetCapture() {
   const refresh = useCallback(async () => {
     const { data: cust } = await supabase
       .from('valet_customers')
-      .select('id, full_name, phone, email, valet_vehicles(id, license_plate, window_sticker)')
+      .select('id, full_name, phone, email, valet_units(unit_number), valet_vehicles(id, license_plate, window_sticker, make, model, color)')
       .eq('active', true).order('full_name')
     setCustomers((cust as Customer[]) || [])
 
@@ -265,16 +267,25 @@ export default function ValetCapture() {
 
 // ---------------- Home ----------------
 function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onReport }: any) {
+  const [hq, setHq] = useState('')
+  const [openP, setOpenP] = useState(true)
+  const [openR, setOpenR] = useState(false)
+  const hql = hq.trim().toLowerCase()
+  const fParked = (parked as any[]).filter(p => !hql || `${p.plate} ${p.name}`.toLowerCase().includes(hql))
+  const fRecent = (events as EventRow[]).filter(e => !hql || `${e.valet_vehicles?.license_plate || ''} ${e.valet_customers?.full_name || ''}`.toLowerCase().includes(hql))
+
   return (
     <div>
-      <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
         <BigActionButton onClick={onPark} variant="park" label={t('park')} />
         <BigActionButton onClick={onRetrieve} variant="retrieve" label={t('retrieve')} />
       </div>
 
-      <Section title={`${t('parkedNow')} (${parked.length})`}>
-        {parked.length === 0 ? <Empty>{t('noParked')}</Empty> :
-          parked.map((p: any) => (
+      <input value={hq} onChange={e => setHq(e.target.value)} placeholder={t('searchParked')} style={{ ...inp, marginBottom: 12 }} />
+
+      <Accordion title={`${t('parkedNow')} (${fParked.length})`} open={openP || !!hql} onToggle={() => setOpenP(o => !o)}>
+        {fParked.length === 0 ? <Empty>{t('noParked')}</Empty> :
+          fParked.map(p => (
             <button key={p.vehicle_id} onClick={() => onPickParked(p)} style={rowBtn}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
@@ -283,11 +294,11 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('parkedSince')} {timeAgo(p.since, lang)} ›</div>
             </button>
           ))}
-      </Section>
+      </Accordion>
 
-      <Section title={t('recent')}>
-        {events.length === 0 ? <Empty>{t('noRecent')}</Empty> :
-          events.slice(0, 20).map((e: EventRow) => (
+      <Accordion title={`${t('recent')} (${fRecent.length})`} open={openR || !!hql} onToggle={() => setOpenR(o => !o)}>
+        {fRecent.length === 0 ? <Empty>{t('noRecent')}</Empty> :
+          fRecent.slice(0, 20).map((e: EventRow) => (
             <button key={e.id} onClick={() => onReport(e)} style={{ ...rowStatic, width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', cursor: 'pointer', textAlign: 'left' }}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, color: e.action === 'park' ? NAVY : '#B7791F', background: e.action === 'park' ? '#E4E9F2' : '#FEF3C7', padding: '2px 7px', borderRadius: 6, marginRight: 8 }}>
@@ -298,7 +309,21 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{timeAgo(e.event_at, lang)} ›</div>
             </button>
           ))}
-      </Section>
+      </Accordion>
+
+      <div style={{ marginTop: 6 }}><ValetInstall /></div>
+    </div>
+  )
+}
+
+function Accordion({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <button onClick={onToggle} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 4px' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: '#94A3B8' }}>{title}</span>
+        <span style={{ color: '#94A3B8', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
+      </button>
+      {open && <div style={card}>{children}</div>}
     </div>
   )
 }
@@ -317,9 +342,8 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
   if (ql) {
     for (const c of customers as Customer[]) {
       for (const v of (c.valet_vehicles || [])) {
-        if (c.full_name.toLowerCase().includes(ql) || (v.license_plate || '').toLowerCase().includes(ql)) {
-          matches.push({ c, v })
-        }
+        const hay = `${c.full_name} ${c.valet_units?.unit_number || ''} ${v.license_plate || ''} ${v.make || ''} ${v.model || ''} ${v.color || ''} ${v.window_sticker || ''}`.toLowerCase()
+        if (hay.includes(ql)) matches.push({ c, v })
       }
     }
   }
@@ -395,7 +419,9 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
             <button key={c.id + v.id} onClick={() => onExisting(c, v)} style={rowBtn}>
               <div style={{ minWidth: 0 }}>
                 <div><b style={{ color: NAVY }}>{v.license_plate}</b> · {c.full_name}</div>
-                {v.window_sticker && <div style={{ fontSize: 11, color: '#94A3B8' }}>{t('sticker')} {v.window_sticker}</div>}
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                  {[c.valet_units?.unit_number ? `Apt ${c.valet_units.unit_number}` : '', [v.color, v.make, v.model].filter(Boolean).join(' '), v.window_sticker ? `${t('sticker')} ${v.window_sticker}` : ''].filter(Boolean).join(' · ')}
+                </div>
               </div>
               <span style={{ color: GOLD, flexShrink: 0 }}>›</span>
             </button>
@@ -405,7 +431,9 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
       ) : (
         <div style={{ padding: '18px 12px', color: '#94A3B8', fontSize: 14, textAlign: 'center' }}>{t('startTyping')}</div>
       )}
-      <button onClick={() => setAdding(true)} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>{t('addGuest')}</button>
+      {action !== 'retrieve' && (
+        <button onClick={() => setAdding(true)} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>{t('addGuest')}</button>
+      )}
     </div>
   )
 }
