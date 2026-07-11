@@ -7,6 +7,7 @@ import {
   type QueuedEvent,
 } from '@/lib/valet-capture-lib'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import ValetTutorial, { ATTENDANT_STEPS } from '@/components/valet/ValetTutorial'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -32,6 +33,10 @@ const T: Record<string, { en: string; es: string }> = {
   guestName: { en: 'Guest name', es: 'Nombre del invitado' },
   visiting: { en: 'Visiting (host resident)', es: 'Visita a (residente)' },
   searchHost: { en: 'Search host tenant…', es: 'Buscar residente…' },
+  addGuest: { en: '+ Add guest', es: '+ Agregar invitado' },
+  sticker: { en: 'Sticker', es: 'Calcomanía' },
+  noMatch: { en: 'No match — add them as a guest below.', es: 'Sin coincidencias — agrégalo como invitado abajo.' },
+  startTyping: { en: 'Start typing a name or plate…', es: 'Escribe un nombre o placa…' },
   makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
   continue: { en: 'Continue', es: 'Continuar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -60,7 +65,7 @@ const T: Record<string, { en: string; es: string }> = {
   noRec: { en: 'No record.', es: 'Sin registro.' },
 }
 
-type Vehicle = { id: string; license_plate: string }
+type Vehicle = { id: string; license_plate: string; window_sticker?: string | null }
 type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_vehicles: Vehicle[] }
 type EventRow = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
@@ -96,13 +101,19 @@ export default function ValetCapture() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [report, setReport] = useState<EventRow | null>(null)
+  const [tutorial, setTutorial] = useState(false)
+
+  useEffect(() => {
+    try { if (!localStorage.getItem('bsm_valet_tut_attendant_v1')) setTutorial(true) } catch { /* ignore */ }
+  }, [])
+  function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_attendant_v1', '1') } catch { /* ignore */ } }
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
 
   const refresh = useCallback(async () => {
     const { data: cust } = await supabase
       .from('valet_customers')
-      .select('id, full_name, phone, email, valet_vehicles(id, license_plate)')
+      .select('id, full_name, phone, email, valet_vehicles(id, license_plate, window_sticker)')
       .eq('active', true).order('full_name')
     setCustomers((cust as Customer[]) || [])
 
@@ -200,13 +211,14 @@ export default function ValetCapture() {
     <div style={{ minHeight: '100vh', background: '#F1F3F8', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ background: NAVY, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: GOLD, display: 'grid', placeItems: 'center', color: NAVY, fontWeight: 800 }}>B</div>
+          <img src="/bsm-mark.png" alt="BSM" style={{ height: 26, width: 'auto' }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14 }}>BSM Valet</div>
             <div style={{ fontSize: 11, color: '#B7AC97' }}>{me?.name}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setTutorial(true)} style={miniBtn} aria-label="Help">?</button>
           {isManager && <a href="/valet/manager" style={{ ...miniBtn, textDecoration: 'none', display: 'inline-block' }}>Manager</a>}
           <button onClick={() => setLang(lang === 'en' ? 'es' : 'en')} style={miniBtn}>{lang === 'en' ? 'ES' : 'EN'}</button>
           <button onClick={async () => { await supabase.auth.signOut(); location.href = '/valet/login' }} style={miniBtn}>{t('signOut')}</button>
@@ -230,7 +242,7 @@ export default function ValetCapture() {
             onPickParked={p => { startFlow('retrieve'); chooseParked(p) }} />
         )}
         {step === 'pick' && (
-          <Pick t={t} action={action} customers={customers} parked={parked}
+          <Pick t={t} action={action} customers={customers} parked={parked} lang={lang}
             onExisting={chooseExisting} onParked={chooseParked}
             onNew={(nc, nv) => { setChosen({ customerId: null, vehicleId: null, displayName: nc.full_name, plate: nv.license_plate, newCustomer: nc, newVehicle: nv }); setStep('capture') }}
             onCancel={() => setStep('home')} />
@@ -246,6 +258,7 @@ export default function ValetCapture() {
       </main>
 
       {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} onClose={() => setReport(null)} />}
+      {tutorial && <ValetTutorial steps={ATTENDANT_STEPS} onClose={closeTutorial} />}
     </div>
   )
 }
@@ -254,16 +267,19 @@ export default function ValetCapture() {
 function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onReport }: any) {
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-        <button onClick={onPark} style={bigBtn(NAVY)}>🅿️<span style={{ marginTop: 6 }}>{t('park')}</span></button>
-        <button onClick={onRetrieve} style={bigBtn(GOLD, NAVY)}>🚗<span style={{ marginTop: 6 }}>{t('retrieve')}</span></button>
+      <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
+        <BigActionButton onClick={onPark} variant="park" label={t('park')} />
+        <BigActionButton onClick={onRetrieve} variant="retrieve" label={t('retrieve')} />
       </div>
 
       <Section title={`${t('parkedNow')} (${parked.length})`}>
         {parked.length === 0 ? <Empty>{t('noParked')}</Empty> :
           parked.map((p: any) => (
             <button key={p.vehicle_id} onClick={() => onPickParked(p)} style={rowBtn}>
-              <div><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
+                <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
+              </div>
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('parkedSince')} {timeAgo(p.since, lang)} ›</div>
             </button>
           ))}
@@ -288,85 +304,67 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
 }
 
 // ---------------- Pick customer / car ----------------
-function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel }: any) {
+function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel, lang }: any) {
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
-  const [kind, setKind] = useState<'tenant' | 'guest'>('tenant')
   const [hostQ, setHostQ] = useState('')
   const [host, setHost] = useState<Customer | null>(null)
-  const [f, setF] = useState({ full_name: '', phone: '', email: '', unit_number: '', license_plate: '', make: '', model: '', color: '' })
+  const [f, setF] = useState({ full_name: '', phone: '', email: '', license_plate: '', make: '', model: '', color: '' })
   const set = (k: string, v: string) => setF(s => ({ ...s, [k]: v }))
 
   const ql = q.trim().toLowerCase()
   const matches: { c: Customer; v: Vehicle }[] = []
-  for (const c of customers as Customer[]) {
-    for (const v of (c.valet_vehicles || [])) {
-      if (!ql || c.full_name.toLowerCase().includes(ql) || (v.license_plate || '').toLowerCase().includes(ql)) {
-        matches.push({ c, v })
+  if (ql) {
+    for (const c of customers as Customer[]) {
+      for (const v of (c.valet_vehicles || [])) {
+        if (c.full_name.toLowerCase().includes(ql) || (v.license_plate || '').toLowerCase().includes(ql)) {
+          matches.push({ c, v })
+        }
       }
     }
   }
 
+  // Attendants add GUESTS only (tenants come from the manager / roster import)
   if (adding) {
     const hostMatches = (customers as Customer[]).filter(c =>
       !hostQ.trim() || c.full_name.toLowerCase().includes(hostQ.trim().toLowerCase()))
     return (
       <div>
-        <TopBar title={t('addNew')} onBack={() => { setAdding(false); setKind('tenant'); setHost(null) }} back={t('back')} />
+        <TopBar title={t('addGuest')} onBack={() => { setAdding(false); setHost(null) }} back={t('back')} />
         <div style={card}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button onClick={() => setKind('tenant')} style={segBtn(kind === 'tenant')}>{t('tenant')}</button>
-            <button onClick={() => setKind('guest')} style={segBtn(kind === 'guest')}>{t('guest')}</button>
-          </div>
-
-          <Field label={kind === 'guest' ? t('guestName') : t('name')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
+          <Field label={t('guestName')} value={f.full_name} onChange={(v: string) => set('full_name', v)} />
           <Field label={t('plate')} value={f.license_plate} onChange={(v: string) => set('license_plate', v.toUpperCase())} />
-
-          {kind === 'guest' ? (
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>{t('visiting')}</label>
-              {host ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 10, padding: '10px 12px' }}>
-                  <span style={{ color: NAVY, fontWeight: 600 }}>{host.full_name}</span>
-                  <button onClick={() => setHost(null)} style={{ background: 'transparent', border: 'none', color: GOLD, fontWeight: 600, cursor: 'pointer' }}>✕</button>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>{t('visiting')}</label>
+            {host ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 10, padding: '10px 12px' }}>
+                <span style={{ color: NAVY, fontWeight: 600 }}>{host.full_name}</span>
+                <button onClick={() => setHost(null)} style={{ background: 'transparent', border: 'none', color: GOLD, fontWeight: 600, cursor: 'pointer' }}>✕</button>
+              </div>
+            ) : (
+              <>
+                <input value={hostQ} onChange={e => setHostQ(e.target.value)} placeholder={t('searchHost')} style={inp} />
+                <div style={{ ...card, marginTop: 6, maxHeight: 180, overflow: 'auto' }}>
+                  {hostMatches.slice(0, 30).map(c => (
+                    <button key={c.id} onClick={() => setHost(c)} style={rowBtn}>
+                      <span style={{ color: NAVY }}>{c.full_name}</span><span style={{ color: GOLD }}>›</span>
+                    </button>
+                  ))}
+                  {hostMatches.length === 0 && <Empty>—</Empty>}
                 </div>
-              ) : (
-                <>
-                  <input value={hostQ} onChange={e => setHostQ(e.target.value)} placeholder={t('searchHost')} style={inp} />
-                  <div style={{ ...card, marginTop: 6, maxHeight: 180, overflow: 'auto' }}>
-                    {hostMatches.slice(0, 30).map(c => (
-                      <button key={c.id} onClick={() => setHost(c)} style={rowBtn}>
-                        <span style={{ color: NAVY }}>{c.full_name}</span><span style={{ color: GOLD }}>›</span>
-                      </button>
-                    ))}
-                    {hostMatches.length === 0 && <Empty>—</Empty>}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <Field label={t('unit')} value={f.unit_number} onChange={(v: string) => set('unit_number', v)} />
-          )}
-
-          <Field label={t('phone')} value={f.phone} onChange={(v: string) => set('phone', v)} type="tel" />
-          <Field label={t('email')} value={f.email} onChange={(v: string) => set('email', v)} type="email" />
+              </>
+            )}
+          </div>
           <Field label={t('makeModel')} value={[f.make, f.model, f.color].filter(Boolean).join(' ')} onChange={(v: string) => { const [mk = '', md = '', cl = ''] = v.split(' '); setF(s => ({ ...s, make: mk, model: md, color: cl })) }} />
-
           <button
             onClick={() => {
-              if (!f.full_name.trim() || !f.license_plate.trim()) return
-              if (kind === 'guest' && !host) return
+              if (!f.full_name.trim() || !f.license_plate.trim() || !host) return
               onNew(
-                {
-                  full_name: f.full_name.trim(), phone: f.phone.trim(), email: f.email.trim(),
-                  unit_number: kind === 'guest' ? '' : f.unit_number.trim(),
-                  customer_type: kind,
-                  host_customer_id: kind === 'guest' && host ? host.id : null,
-                },
+                { full_name: f.full_name.trim(), phone: '', email: '', unit_number: '', customer_type: 'guest', host_customer_id: host.id },
                 { license_plate: f.license_plate.trim(), make: f.make.trim(), model: f.model.trim(), color: f.color.trim() },
               )
             }}
-            style={{ ...primaryBtn, opacity: (kind === 'guest' && !host) ? 0.6 : 1 }}>{t('continue')}</button>
+            style={{ ...primaryBtn, opacity: (!host || !f.full_name.trim() || !f.license_plate.trim()) ? 0.6 : 1 }}>{t('continue')}</button>
         </div>
       </div>
     )
@@ -380,22 +378,34 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
         <Section title={`${t('parkedNow')} (${parked.length})`}>
           {parked.map((p: any) => (
             <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
-              <div><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</div><span style={{ color: GOLD }}>›</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
+                <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
+              </div>
+              <span style={{ color: GOLD }}>›</span>
             </button>
           ))}
         </Section>
       )}
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search')} style={{ ...inp, marginBottom: 10 }} />
-      <div style={card}>
-        {matches.slice(0, 40).map(({ c, v }) => (
-          <button key={c.id + v.id} onClick={() => onExisting(c, v)} style={rowBtn}>
-            <div><b style={{ color: NAVY }}>{v.license_plate}</b> · {c.full_name}</div><span style={{ color: GOLD }}>›</span>
-          </button>
-        ))}
-        {matches.length === 0 && <Empty>—</Empty>}
-      </div>
-      <button onClick={() => setAdding(true)} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>{t('addNew')}</button>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search')} autoFocus style={{ ...inp, marginBottom: 10 }} />
+      {ql ? (
+        <div style={card}>
+          {matches.slice(0, 40).map(({ c, v }) => (
+            <button key={c.id + v.id} onClick={() => onExisting(c, v)} style={rowBtn}>
+              <div style={{ minWidth: 0 }}>
+                <div><b style={{ color: NAVY }}>{v.license_plate}</b> · {c.full_name}</div>
+                {v.window_sticker && <div style={{ fontSize: 11, color: '#94A3B8' }}>{t('sticker')} {v.window_sticker}</div>}
+              </div>
+              <span style={{ color: GOLD, flexShrink: 0 }}>›</span>
+            </button>
+          ))}
+          {matches.length === 0 && <Empty>{t('noMatch')}</Empty>}
+        </div>
+      ) : (
+        <div style={{ padding: '18px 12px', color: '#94A3B8', fontSize: 14, textAlign: 'center' }}>{t('startTyping')}</div>
+      )}
+      <button onClick={() => setAdding(true)} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>{t('addGuest')}</button>
     </div>
   )
 }
@@ -551,9 +561,15 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
       const W = 595, H = 842, M = 40; let page = doc.addPage([W, H]); let y = H - M
-      page.drawRectangle({ x: 0, y: H - 70, width: W, height: 70, color: rgb(0.118, 0.106, 0.090) })
-      page.drawText('BSM Valet — Vehicle Report', { x: M, y: H - 44, size: 18, font: bold, color: rgb(1, 1, 1) })
-      y = H - 96
+      page.drawRectangle({ x: 0, y: H - 78, width: W, height: 78, color: rgb(0.118, 0.106, 0.090) })
+      try {
+        const lb = new Uint8Array(await (await fetch('/bsm-logo.png')).arrayBuffer())
+        const logo = await doc.embedPng(lb)
+        const lh = 30, lw = lh * (logo.width / logo.height)
+        page.drawImage(logo, { x: M, y: H - 56, width: lw, height: lh })
+      } catch { /* logo optional */ }
+      page.drawText('VEHICLE REPORT', { x: M, y: H - 94, size: 10, font: bold, color: rgb(0.55, 0.5, 0.42) })
+      y = H - 112
       page.drawText(`Plate: ${plate}`, { x: M, y, size: 11, font: bold, color: rgb(0.118, 0.106, 0.090) }); y -= 16
       page.drawText(`Name: ${name}`, { x: M, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) }); y -= 20
       const sec = async (title: string, ev: EventRow | null, urls: string[]) => {
@@ -579,6 +595,20 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
       }
       await sec('PARK — intake', park, parkPics)
       await sec('RETRIEVE — return', ret, retPics)
+
+      if (y < 130) { page = doc.addPage([W, H]) }
+      const fy = 96
+      page.drawLine({ start: { x: M, y: fy + 16 }, end: { x: W - M, y: fy + 16 }, thickness: 0.8, color: rgb(0.85, 0.8, 0.72) })
+      page.drawText('Thank you for trusting BSM Facility Solutions with your vehicle.', { x: M, y: fy, size: 9, font: bold, color: rgb(0.2, 0.18, 0.15) })
+      const disc = 'This report documents your vehicle\u2019s condition at drop-off and pick-up. BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
+      let dy = fy - 14, ln = ''
+      for (const w of disc.split(' ')) {
+        const test = ln ? ln + ' ' + w : w
+        if (font.widthOfTextAtSize(test, 8) > W - 2 * M) { page.drawText(ln, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) }); dy -= 11; ln = w }
+        else ln = test
+      }
+      if (ln) page.drawText(ln, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) })
+
       const bytes = await doc.save()
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
       const a = document.createElement('a'); a.href = url; a.download = `BSM-valet-${plate}.pdf`; a.click()
@@ -657,8 +687,44 @@ const miniBtn: React.CSSProperties = { background: 'rgba(255,255,255,.1)', color
 const miniBtnDark: React.CSSProperties = { background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const rowBtn: React.CSSProperties = { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', padding: '12px 8px', fontSize: 14, cursor: 'pointer', textAlign: 'left', color: '#334155' }
 const rowStatic: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F8', padding: '11px 8px', fontSize: 14, color: '#334155' }
-function bigBtn(bg: string, color = '#fff'): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: bg, color, border: 'none', borderRadius: 16, padding: '26px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', minHeight: 110 }
+const parkedBadge: React.CSSProperties = { fontSize: 10, fontWeight: 800, letterSpacing: 0.4, color: '#8A6D2F', background: '#F5EAD3', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap' }
+function BigActionButton({ onClick, variant, label }: { onClick: () => void; variant: 'park' | 'retrieve'; label: string }) {
+  const park = variant === 'park'
+  const bg = park ? NAVY : GOLD
+  const fg = park ? GOLD : NAVY
+  const txt = park ? '#fff' : NAVY
+  return (
+    <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', background: bg, border: `1.5px solid ${park ? GOLD : NAVY}`, borderRadius: 16, padding: '16px 18px', cursor: 'pointer', width: '100%', minHeight: 84 }}>
+      <div style={{ width: 58, flexShrink: 0, display: 'grid', placeItems: 'center' }}>
+        {park ? <ParkIcon color={fg} /> : <RetrieveIcon color={fg} />}
+      </div>
+      <div style={{ width: 1.5, alignSelf: 'stretch', background: fg, opacity: 0.45, margin: '2px 16px' }} />
+      <div style={{ color: txt, fontSize: 21, fontWeight: 800, letterSpacing: 0.2 }}>{label}</div>
+    </button>
+  )
+}
+function ParkIcon({ color }: { color: string }) {
+  return (
+    <svg width="44" height="44" viewBox="0 0 64 64" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 22 H12 V33" /><path d="M44 22 H52 V33" />
+      <rect x="25" y="7" width="14" height="15" rx="2.5" />
+      <path d="M30 11 v7 M30 11 h3.2 a2.2 2.2 0 0 1 0 4.2 H30" />
+      <path d="M18 45 l2.2-8 a4 4 0 0 1 3.8-2.9 h16 a4 4 0 0 1 3.8 2.9 l2.2 8" />
+      <rect x="16" y="45" width="32" height="10" rx="3" />
+      <circle cx="23" cy="55" r="1.8" /><circle cx="41" cy="55" r="1.8" />
+    </svg>
+  )
+}
+function RetrieveIcon({ color }: { color: string }) {
+  return (
+    <svg width="44" height="44" viewBox="0 0 64 64" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 25 H12 V36" /><path d="M44 25 H52 V36" />
+      <circle cx="32" cy="14" r="6.5" /><path d="M32 20.5 v6 M32 24 h3.2" />
+      <path d="M18 47 l2.2-8 a4 4 0 0 1 3.8-2.9 h16 a4 4 0 0 1 3.8 2.9 l2.2 8" />
+      <rect x="16" y="47" width="32" height="10" rx="3" />
+      <circle cx="23" cy="57" r="1.8" /><circle cx="41" cy="57" r="1.8" />
+    </svg>
+  )
 }
 function segBtn(active: boolean): React.CSSProperties {
   return { flex: 1, padding: '10px', borderRadius: 10, border: active ? `1.5px solid ${NAVY}` : '1.5px solid #CBD5E1', background: active ? NAVY : '#fff', color: active ? '#fff' : '#64748B', fontWeight: 700, fontSize: 14, cursor: 'pointer' }
