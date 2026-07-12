@@ -473,31 +473,72 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
 function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const shootingRef = useRef(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [hint, setHint] = useState('')
   const idx = shots.length
   const slot = SLOTS[idx]
 
   useEffect(() => {
     let cancelled = false
+    const preload = new Image(); preload.src = '/bsm-mark.png' // warm logo cache → first stamp is instant
     ;(async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+        })
         if (cancelled) { stream.getTracks().forEach(tk => tk.stop()); return }
         streamRef.current = stream
-        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}) }
+        const v = videoRef.current
+        if (v) {
+          v.srcObject = stream
+          await v.play().catch(() => {})
+          const poll = setInterval(() => {
+            if (cancelled) { clearInterval(poll); return }
+            if (v.readyState >= 2 && v.videoWidth > 0) { setReady(true); clearInterval(poll) }
+          }, 120)
+          setTimeout(() => clearInterval(poll), 10000)
+        }
       } catch { setErr(t('camDenied')) }
     })()
     return () => { cancelled = true; streamRef.current?.getTracks().forEach(tk => tk.stop()); streamRef.current = null }
   }, [t])
 
+  // A black/blank frame has near-zero brightness and almost no variance.
+  function frameLooksLive(v: HTMLVideoElement): boolean {
+    if (v.readyState < 2 || !v.videoWidth) return false
+    try {
+      const c = document.createElement('canvas'); c.width = 40; c.height = 40
+      const ctx = c.getContext('2d'); if (!ctx) return true
+      ctx.drawImage(v, 0, 0, 40, 40)
+      const d = ctx.getImageData(0, 0, 40, 40).data
+      let sum = 0, sumSq = 0; const n = 40 * 40
+      for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += l; sumSq += l * l }
+      const mean = sum / n, variance = sumSq / n - mean * mean
+      return !(mean < 8 && variance < 6)
+    } catch { return true }
+  }
+
   async function shoot() {
-    if (!videoRef.current || busy || !slot) return
-    setBusy(true)
-    const { blob, capturedAt } = await stampFrame(videoRef.current)
-    const url = URL.createObjectURL(blob)
-    setShots((prev: Shot[]) => [...prev, { slot: slot.key, sequence: idx, blob, capturedAt, url }])
-    setBusy(false)
+    const v = videoRef.current
+    if (!v || shootingRef.current || !slot || !!err) return
+    if (!ready || !frameLooksLive(v)) {
+      setHint(lang === 'es' ? 'Espere — la cámara aún está enfocando…' : 'Hold on — the camera is still focusing…')
+      return
+    }
+    shootingRef.current = true
+    setBusy(true); setHint('')
+    try {
+      const { blob, capturedAt } = await stampFrame(v)
+      const url = URL.createObjectURL(blob)
+      setShots((prev: Shot[]) => [...prev, { slot: slot.key, sequence: idx, blob, capturedAt, url }])
+    } catch {
+      setHint(lang === 'es' ? 'No se pudo capturar, intente de nuevo.' : 'Capture failed — try again.')
+    } finally {
+      setBusy(false); shootingRef.current = false
+    }
   }
 
   function retake() {
@@ -532,14 +573,25 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
           <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', background: '#000', aspectRatio: '3 / 4' }}>
             {err
               ? <div style={{ color: '#fff', display: 'grid', placeItems: 'center', height: '100%', padding: 20, textAlign: 'center', fontSize: 14 }}>{err}</div>
-              : <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-            <CornerMiniMap slotKey={slot.key} />
+              : <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {!err && !ready && (
+              <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.55)', color: '#fff' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ width: 34, height: 34, margin: '0 auto 10px', border: '3px solid rgba(255,255,255,.3)', borderTopColor: GOLD, borderRadius: '50%', animation: 'valspin 0.8s linear infinite' }} />
+                  <div style={{ fontSize: 13 }}>{lang === 'es' ? 'Iniciando cámara…' : 'Starting camera…'}</div>
+                </div>
+              </div>
+            )}
+            {!err && <CornerMiniMap slotKey={slot.key} />}
           </div>
+          <style>{`@keyframes valspin { to { transform: rotate(360deg) } }`}</style>
 
-          <button onClick={shoot} disabled={busy || !!err} style={{ ...primaryBtn, background: GOLD, color: NAVY, marginTop: 12, fontSize: 17 }}>
-            📸 {busy ? '…' : t('capture')}
+          <button onClick={shoot} disabled={busy || !!err || !ready}
+            style={{ ...primaryBtn, background: (busy || !ready || err) ? '#E3D9C4' : GOLD, color: NAVY, marginTop: 12, fontSize: 17, opacity: (busy || !ready || err) ? 0.7 : 1 }}>
+            📸 {err ? t('capture') : !ready ? (lang === 'es' ? 'Iniciando…' : 'Starting…') : busy ? '…' : t('capture')}
           </button>
-          {idx > 0 && <button onClick={retake} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginTop: 8 }}>{t('retake')}</button>}
+          {hint && <div style={{ textAlign: 'center', color: '#B7791F', fontSize: 13, marginTop: 8, fontWeight: 600 }}>{hint}</div>}
+          {idx > 0 && <button onClick={retake} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginTop: 8 }}>‹ {lang === 'es' ? 'Atrás — rehacer la última' : 'Back — redo last photo'}</button>}
         </>
       ) : (
         <div style={{ textAlign: 'center' }}>
