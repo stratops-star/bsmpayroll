@@ -171,13 +171,13 @@ export default function ValetHistory() {
       page.drawLine({ start: { x: M, y: fy + 16 }, end: { x: W - M, y: fy + 16 }, thickness: 0.8, color: rgb(0.85, 0.8, 0.72) })
       page.drawText('Thank you for trusting BSM Facility Solutions with your vehicle.', { x: M, y: fy, size: 9, font: bold, color: rgb(0.2, 0.18, 0.15) })
       const disc = 'This report documents your vehicle\u2019s condition at drop-off and pick-up. BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
-      let dy = fy - 14, dl = ''
+      let dy = fy - 14, lineBuf = ''
       for (const w of disc.split(' ')) {
-        const test = dl ? dl + ' ' + w : w
-        if (font.widthOfTextAtSize(test, 8) > W - 2 * M) { page.drawText(dl, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) }); dy -= 11; dl = w }
-        else dl = test
+        const test = lineBuf ? lineBuf + ' ' + w : w
+        if (font.widthOfTextAtSize(test, 8) > W - 2 * M) { page.drawText(lineBuf, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) }); dy -= 11; lineBuf = w }
+        else lineBuf = test
       }
-      if (dl) page.drawText(dl, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) })
+      if (lineBuf) page.drawText(lineBuf, { x: M, y: dy, size: 8, font, color: rgb(0.42, 0.39, 0.34) })
 
       const bytes = await doc.save()
       dl(bytes, `BSM-valet-${plate}-${new Date(e.event_at).toISOString().slice(0, 10)}.pdf`)
