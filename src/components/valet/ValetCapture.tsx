@@ -41,6 +41,9 @@ const T: Record<string, { en: string; es: string }> = {
   startTyping: { en: 'Start typing a name or plate…', es: 'Escribe un nombre o placa…' },
   searchParked: { en: 'Search parked cars…', es: 'Buscar autos estacionados…' },
   optional: { en: 'optional', es: 'opcional' },
+  emailSent: { en: 'Report emailed to tenant ✓', es: 'Reporte enviado al inquilino ✓' },
+  emailNoAddr: { en: 'No email on file — report not sent', es: 'Sin correo — reporte no enviado' },
+  emailFailed: { en: 'Report email didn’t send', es: 'No se pudo enviar el reporte' },
   makeModel: { en: 'Make / model / color (optional)', es: 'Marca / modelo / color (opcional)' },
   continue: { en: 'Continue', es: 'Continuar' },
   cancel: { en: 'Cancel', es: 'Cancelar' },
@@ -220,7 +223,7 @@ export default function ValetCapture() {
       try {
         await serverWrite(ev, supabase)
         online = true
-        // email the tenant a copy — after park and after retrieve
+        // email the tenant a copy — after park and after retrieve; report the result
         try {
           const { data: row } = await supabase.from('valet_events').select('id').eq('client_ref', ev.clientRef).maybeSingle()
           if (row?.id) {
@@ -229,7 +232,13 @@ export default function ValetCapture() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
               body: JSON.stringify({ event_id: row.id }),
-            }).catch(() => {})
+            }).then(async r => {
+              if (!r.ok) { flash(t('emailFailed')); return }
+              const d = await r.json().catch(() => ({}))
+              if (d.emailed) flash(t('emailSent'))
+              else if (String(d.reason || '').includes('no tenant email')) flash(t('emailNoAddr'))
+              else flash(t('emailFailed'))
+            }).catch(() => flash(t('emailFailed')))
           }
         } catch { /* email is best-effort */ }
       } catch { online = false }
