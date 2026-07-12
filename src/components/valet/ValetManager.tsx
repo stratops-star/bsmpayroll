@@ -6,6 +6,7 @@ import ValetTenants from '@/components/valet/ValetTenants'
 import ValetHistory from '@/components/valet/ValetHistory'
 import ValetTutorial, { MANAGER_STEPS } from '@/components/valet/ValetTutorial'
 import ModuleSwitcher from '@/components/valet/ModuleSwitcher'
+import ValetAudit from '@/components/valet/ValetAudit'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -14,7 +15,7 @@ type Attendant = { id: string; full_name: string; email: string; phone: string |
 
 export default function ValetManager() {
   const [supabase] = useState(() => createClient())
-  const [tab, setTab] = useState<'attendants' | 'tenants' | 'history'>('attendants')
+  const [tab, setTab] = useState<'attendants' | 'tenants' | 'history' | 'audit'>('attendants')
   const [attNonce, setAttNonce] = useState(0)
   const [tenOpen, setTenOpen] = useState<{ mode: 'list' | 'add' | 'addcar'; n: number }>({ mode: 'list', n: 0 })
   const [tutorial, setTutorial] = useState(false)
@@ -52,11 +53,13 @@ export default function ValetManager() {
         <Tab active={tab === 'attendants'} onClick={() => setTab('attendants')}>Attendants</Tab>
         <Tab active={tab === 'tenants'} onClick={() => setTab('tenants')}>Tenants</Tab>
         <Tab active={tab === 'history'} onClick={() => setTab('history')}>History</Tab>
+        <Tab active={tab === 'audit'} onClick={() => setTab('audit')}>Audit</Tab>
       </div>
 
       <main style={{ maxWidth: 620, margin: '0 auto', padding: 16 }}>
         {tab === 'attendants' ? <Attendants supabase={supabase} openAdd={attNonce} />
           : tab === 'tenants' ? <ValetTenants open={tenOpen} />
+          : tab === 'audit' ? <ValetAudit />
           : <ValetHistory />}
       </main>
 
