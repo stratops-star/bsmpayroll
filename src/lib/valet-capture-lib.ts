@@ -6,16 +6,19 @@
 //  - serverWrite: the single write path used both live and on sync
 // ============================================================
 
-export type SlotKey = 'front_left' | 'front_right' | 'rear_right' | 'rear_left' | 'plate'
+export type SlotKey = 'front' | 'front_right' | 'right' | 'rear_right' | 'rear' | 'rear_left' | 'left' | 'front_left'
 
 export const SLOTS: {
   key: SlotKey; label: string; label_es: string; hint: string; hint_es: string
 }[] = [
-  { key: 'front_left',  label: 'Front-Left corner',  label_es: 'Esquina delantera izq.', hint: 'Stand at the front-left corner — capture the whole side.', hint_es: 'Párese en la esquina delantera izquierda.' },
-  { key: 'front_right', label: 'Front-Right corner', label_es: 'Esquina delantera der.', hint: 'Move to the front-right corner.', hint_es: 'Muévase a la esquina delantera derecha.' },
-  { key: 'rear_right',  label: 'Rear-Right corner',  label_es: 'Esquina trasera der.',  hint: 'Move to the rear-right corner.', hint_es: 'Muévase a la esquina trasera derecha.' },
-  { key: 'rear_left',   label: 'Rear-Left corner',   label_es: 'Esquina trasera izq.',  hint: 'Move to the rear-left corner.', hint_es: 'Muévase a la esquina trasera izquierda.' },
-  { key: 'plate',       label: 'License plate',      label_es: 'Placa',                 hint: 'Close-up of the license plate.', hint_es: 'Primer plano de la placa.' },
+  { key: 'front',       label: 'Front',            label_es: 'Frente',                hint: 'Stand square in front of the car — include the plate.', hint_es: 'Parese frente al auto e incluya la placa.' },
+  { key: 'front_right', label: 'Front-Right corner', label_es: 'Esquina delantera der.', hint: 'Move to the front-right corner.', hint_es: 'Muevase a la esquina delantera derecha.' },
+  { key: 'right',       label: 'Right side',       label_es: 'Lado derecho',          hint: 'Passenger side — capture the full side.', hint_es: 'Lado del pasajero, capture todo el costado.' },
+  { key: 'rear_right',  label: 'Rear-Right corner', label_es: 'Esquina trasera der.',  hint: 'Move to the rear-right corner.', hint_es: 'Muevase a la esquina trasera derecha.' },
+  { key: 'rear',        label: 'Rear',             label_es: 'Parte trasera',         hint: 'Stand square behind the car — include the plate.', hint_es: 'Parese detras del auto e incluya la placa.' },
+  { key: 'rear_left',   label: 'Rear-Left corner', label_es: 'Esquina trasera izq.',  hint: 'Move to the rear-left corner.', hint_es: 'Muevase a la esquina trasera izquierda.' },
+  { key: 'left',        label: 'Left side',        label_es: 'Lado izquierdo',        hint: 'Driver side — capture the full side.', hint_es: 'Lado del conductor, capture todo el costado.' },
+  { key: 'front_left',  label: 'Front-Left corner', label_es: 'Esquina delantera izq.', hint: 'Move to the front-left corner.', hint_es: 'Muevase a la esquina delantera izquierda.' },
 ]
 
 // ---------- Logo + timestamp stamp ----------
