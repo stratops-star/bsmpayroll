@@ -113,6 +113,18 @@ export default function ValetCapture() {
   }, [])
   function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_attendant_v1', '1') } catch { /* ignore */ } }
 
+  async function forceCloseEvent(park: EventRow) {
+    if (!me) return
+    const { error } = await supabase.from('valet_events').insert({
+      action: 'retrieve', employee_id: me.id, location_id: locationId,
+      customer_id: park.customer_id, vehicle_id: park.vehicle_id,
+      note: 'Force-closed by attendant (no photos)',
+      ...(park.session_id ? { session_id: park.session_id } : {}),
+    })
+    if (error) { flash(error.message); return }
+    flash('Marked retrieved'); setReport(null); await refresh()
+  }
+
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
 
   const refresh = useCallback(async () => {
@@ -275,7 +287,7 @@ export default function ValetCapture() {
         )}
       </main>
 
-      {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} onClose={() => setReport(null)} />}
+      {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} me={me} locationId={locationId} onForceClose={forceCloseEvent} onClose={() => setReport(null)} />}
       {tutorial && <ValetTutorial steps={ATTENDANT_STEPS} onClose={closeTutorial} />}
     </div>
   )
@@ -521,6 +533,7 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
             {err
               ? <div style={{ color: '#fff', display: 'grid', placeItems: 'center', height: '100%', padding: 20, textAlign: 'center', fontSize: 14 }}>{err}</div>
               : <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            <CornerMiniMap slotKey={slot.key} />
           </div>
 
           <button onClick={shoot} disabled={busy || !!err} style={{ ...primaryBtn, background: GOLD, color: NAVY, marginTop: 12, fontSize: 17 }}>
@@ -542,6 +555,33 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
 }
 
 // ---------------- Review ----------------
+function CornerMiniMap({ slotKey }: { slotKey: string }) {
+  const pts: Record<string, { x: number; y: number }> = {
+    front: { x: 80, y: 26 }, front_right: { x: 122, y: 34 }, right: { x: 128, y: 150 }, rear_right: { x: 122, y: 266 },
+    rear: { x: 80, y: 274 }, rear_left: { x: 38, y: 266 }, left: { x: 32, y: 150 }, front_left: { x: 38, y: 34 },
+  }
+  const c = pts[slotKey]
+  const all = Object.entries(pts)
+  return (
+    <div style={{ position: 'absolute', top: 10, right: 10, width: 76, background: 'rgba(15,12,9,.55)', borderRadius: 12, padding: 6, border: '1px solid rgba(220,184,120,.4)' }}>
+      <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, color: GOLD, textAlign: 'center', marginBottom: 2 }}>FRONT</div>
+      <svg viewBox="0 0 160 300" style={{ width: '100%', display: 'block' }}>
+        <rect x="34" y="20" width="92" height="260" rx="34" fill="rgba(30,27,23,.35)" stroke={GOLD} strokeWidth="4" />
+        <path d="M48 74 q32-14 64 0 l-6 40 h-52 z" fill="none" stroke={GOLD} strokeWidth="2.5" opacity="0.5" />
+        <path d="M48 226 q32 14 64 0 l-6-40 h-52 z" fill="none" stroke={GOLD} strokeWidth="2.5" opacity="0.5" />
+        <rect x="52" y="120" width="56" height="60" rx="6" fill="none" stroke={GOLD} strokeWidth="2.5" opacity="0.5" />
+        {all.map(([k, pt]) => <circle key={k} cx={pt.x} cy={pt.y} r="8" fill={GOLD} opacity={k === slotKey ? 1 : 0.28} />)}
+        {c && (
+          <circle cx={c.x} cy={c.y} fill="none" stroke={GOLD} strokeWidth="4">
+            <animate attributeName="r" values="12;26;12" dur="1.3s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="1;0.1;1" dur="1.3s" repeatCount="indefinite" />
+          </circle>
+        )}
+      </svg>
+    </div>
+  )
+}
+
 function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBack }: any) {
   return (
     <div>
@@ -563,7 +603,7 @@ function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBac
 }
 
 // ---------------- Report sheet (tap a car → see its stamped photos) ----------------
-function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
+function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClose, onClose }: any) {
   const [park, setPark] = useState<EventRow | null>(null)
   const [ret, setRet] = useState<EventRow | null>(null)
   const [parkPics, setParkPics] = useState<string[]>([])
@@ -689,6 +729,12 @@ function ReportSheet({ e, events, supabase, t, lang, onClose }: any) {
         <Block title={t('park')} ev={park} pics={parkPics} />
         <Block title={t('retrieve')} ev={ret} pics={retPics} />
         <button onClick={download} disabled={busy} style={{ ...primaryBtn, marginTop: 16, opacity: busy ? 0.6 : 1 }}>⬇ {t('downloadPdf')}</button>
+        {park && !ret && onForceClose && (
+          <button onClick={() => { if (confirm(lang === 'es' ? '¿Marcar como retirado sin fotos?' : 'Mark this car as retrieved without photos?')) onForceClose(park) }}
+            style={{ ...primaryBtn, background: '#fff', color: '#B7791F', border: '1.5px solid #E7CFA0', marginTop: 8 }}>
+            {lang === 'es' ? 'Forzar cierre (marcar retirado)' : 'Force-close (mark retrieved)'}
+          </button>
+        )}
       </div>
     </div>
   )
