@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'BSM Valet <valet.fg@bsmfacilitysolutions.com>',
+          from: 'BSM Valet <valet.fg@bsmfacilitysolutions.app>',
           to: [tenantEmail],
           subject: `BSM Valet report — ${plate}`,
           html,
