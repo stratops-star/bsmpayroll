@@ -164,6 +164,8 @@ export async function POST(req: NextRequest) {
   const plate = base.valet_vehicles?.license_plate || ''
   const name = base.valet_customers?.full_name || 'there'
   const phase = (ev as Ev).action === 'retrieve' ? 'returned to you' : 'received into valet'
+  const returnedAt = retrieve ? fmt(retrieve.event_at) : ''
+  const disclaimer = 'BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
 
   let emailed = false
   const key = process.env.RESEND_API_KEY
@@ -171,6 +173,10 @@ export async function POST(req: NextRequest) {
     const html =
       `<p>Hi ${name},</p>` +
       `<p>Attached is your BSM Valet vehicle report for plate <strong>${plate}</strong>, documenting its condition as it was ${phase}.</p>` +
+      (returnedAt
+        ? `<p><strong>Vehicle returned:</strong> ${returnedAt} (ET)</p>` +
+          `<p style="color:#555;font-size:13px;line-height:1.5">${disclaimer}</p>`
+        : '') +
       `<p>Thank you for trusting BSM Facility Solutions with your vehicle.</p><p>— BSM Facility Solutions</p>`
     try {
       const r = await fetch('https://api.resend.com/emails', {
