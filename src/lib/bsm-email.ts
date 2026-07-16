@@ -39,17 +39,17 @@ export function bsmEmail(o: EmailOpts): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:${PAGE};">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(o.preheader)}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAGE};padding:28px 12px">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-             style="max-width:540px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(30,27,23,.08);font-family:${FONT}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${PAGE}" style="background:${PAGE};margin:0;padding:0;width:100%">
+    <tr><td align="center" valign="top" style="padding:28px 12px">
+      <table role="presentation" width="540" cellpadding="0" cellspacing="0" border="0" align="center" bgcolor="#FFFFFF"
+             style="width:540px;max-width:540px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(30,27,23,.08);font-family:${FONT}">
 
-        <tr><td style="background:${CHAR};padding:26px 28px;text-align:center">
+        <tr><td bgcolor="${CHAR}" align="center" style="background:${CHAR};padding:26px 28px;text-align:center">
           <img src="${APP}/bsm-logo.png" alt="BSM Facility Solutions" width="150" style="height:auto;display:block;margin:0 auto 4px" />
           <div style="color:${GOLD};font-size:11px;letter-spacing:2.5px;font-weight:700;margin-top:8px">${esc(o.eyebrow)}</div>
         </td></tr>
 
-        <tr><td style="height:3px;background:${GOLD};font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td bgcolor="${GOLD}" height="3" style="height:3px;background:${GOLD};font-size:0;line-height:0">&nbsp;</td></tr>
 
         <tr><td style="padding:30px 28px 8px">
           <h1 style="margin:0 0 4px;color:${CHAR};font-size:21px;font-weight:700;letter-spacing:-.2px">${esc(o.headline)}</h1>
@@ -61,7 +61,7 @@ export function bsmEmail(o: EmailOpts): string {
         ${o.ctaUrl && o.ctaLabel ? `
         <tr><td style="padding:24px 28px 4px" align="center">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="background:${GOLD};border-radius:10px">
+            <td bgcolor="${GOLD}" align="center" style="background:${GOLD};border-radius:10px">
               <a href="${o.ctaUrl}" style="display:inline-block;padding:14px 30px;color:${CHAR};font-size:15px;font-weight:700;text-decoration:none;font-family:${FONT}">${esc(o.ctaLabel)}</a>
             </td>
           </tr></table>
@@ -91,7 +91,7 @@ export function bsmEmail(o: EmailOpts): string {
           <p style="margin:14px 0 0;color:${CHAR};font-size:14px;font-weight:700">${esc(o.signoff)}</p>
         </td></tr>
 
-        <tr><td style="background:${CHAR};padding:18px 28px;text-align:center">
+        <tr><td bgcolor="${CHAR}" align="center" style="background:${CHAR};padding:18px 28px;text-align:center">
           <div style="color:${GOLD};font-size:12px;font-weight:700;letter-spacing:.4px">BSM Facility Solutions</div>
           <div style="color:#7C7266;font-size:11px;margin-top:5px;line-height:1.5">${esc(o.footerNote)}</div>
         </td></tr>
