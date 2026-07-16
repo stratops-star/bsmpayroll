@@ -163,21 +163,108 @@ export async function POST(req: NextRequest) {
   const base = (retrieve || park) as Ev
   const plate = base.valet_vehicles?.license_plate || ''
   const name = base.valet_customers?.full_name || 'there'
-  const phase = (ev as Ev).action === 'retrieve' ? 'returned to you' : 'received into valet'
+  const unit = base.valet_customers?.valet_units?.unit_number || ''
+  const isReturn = (ev as Ev).action === 'retrieve'
+  const parkedAt = park ? fmt(park.event_at) : ''
   const returnedAt = retrieve ? fmt(retrieve.event_at) : ''
   const disclaimer = 'BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
 
   let emailed = false
   const key = process.env.RESEND_API_KEY
   if (key) {
-    const html =
-      `<p>Hi ${name},</p>` +
-      `<p>Attached is your BSM Valet vehicle report for plate <strong>${plate}</strong>, documenting its condition as it was ${phase}.</p>` +
-      (returnedAt
-        ? `<p><strong>Vehicle returned:</strong> ${returnedAt} (ET)</p>` +
-          `<p style="color:#555;font-size:13px;line-height:1.5">${disclaimer}</p>`
-        : '') +
-      `<p>Thank you for trusting BSM Facility Solutions with your vehicle.</p><p>— BSM Facility Solutions</p>`
+    const GOLD = '#DCB878', CHAR = '#1E1B17', INK = '#3F3A32', MUTE = '#8C8375'
+    const row = (label: string, value: string) => value
+      ? `<tr>
+           <td style="padding:9px 0;border-bottom:1px solid #F0EDE7;color:${MUTE};font-size:13px;white-space:nowrap">${label}</td>
+           <td style="padding:9px 0 9px 18px;border-bottom:1px solid #F0EDE7;color:${CHAR};font-size:14px;font-weight:600;text-align:right">${value}</td>
+         </tr>` : ''
+
+    const headline = isReturn ? 'Your vehicle has been returned' : 'Your vehicle is parked'
+    const lede = isReturn
+      ? `Your vehicle has been returned to you. The attached report documents its condition at both drop-off and pick-up, with time-stamped photos from every angle.`
+      : `Your vehicle has been received and parked by our valet team. The attached report documents its condition at drop-off, with time-stamped photos from every angle.`
+
+    const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#F5F3EF;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0">${headline} — ${plate}. Your BSM Valet report is attached.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3EF;padding:28px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(30,27,23,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+
+        <!-- header -->
+        <tr><td style="background:${CHAR};padding:26px 28px;text-align:center">
+          <img src="${APP}/bsm-logo.png" alt="BSM Facility Solutions" width="150" style="height:auto;display:block;margin:0 auto 4px" />
+          <div style="color:${GOLD};font-size:11px;letter-spacing:2.5px;font-weight:700;margin-top:8px">VALET SERVICE</div>
+        </td></tr>
+        <tr><td style="height:3px;background:${GOLD};font-size:0;line-height:0">&nbsp;</td></tr>
+
+        <!-- body -->
+        <tr><td style="padding:30px 28px 8px">
+          <h1 style="margin:0 0 4px;color:${CHAR};font-size:21px;font-weight:700;letter-spacing:-.2px">${headline}</h1>
+          <div style="width:34px;height:2px;background:${GOLD};margin:12px 0 18px"></div>
+          <p style="margin:0 0 6px;color:${INK};font-size:15px">Hi ${name},</p>
+          <p style="margin:0;color:${INK};font-size:15px;line-height:1.6">${lede}</p>
+        </td></tr>
+
+        <!-- details -->
+        <tr><td style="padding:22px 28px 4px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #F0EDE7">
+            ${row('License plate', plate)}
+            ${row('Resident', name)}
+            ${row('Unit', unit)}
+            ${row('Parked', parkedAt ? parkedAt + ' ET' : '')}
+            ${row('Returned', returnedAt ? returnedAt + ' ET' : '')}
+          </table>
+        </td></tr>
+
+        <!-- attachment cue -->
+        <tr><td style="padding:20px 28px 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FBF8F2;border:1px solid #EFE6D3;border-radius:10px">
+            <tr><td style="padding:14px 16px;color:${INK};font-size:13.5px;line-height:1.5">
+              <strong style="color:${CHAR}">Your report is attached</strong> as a PDF — including every photo taken by your attendant.
+            </td></tr>
+          </table>
+        </td></tr>
+
+        ${returnedAt ? `
+        <!-- disclaimer -->
+        <tr><td style="padding:16px 28px 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-left:3px solid ${GOLD};border-radius:0 8px 8px 0">
+            <tr><td style="padding:10px 0 10px 14px;color:${MUTE};font-size:12.5px;line-height:1.6">
+              Your vehicle was returned on <strong style="color:${CHAR}">${returnedAt} ET</strong>. ${disclaimer}
+            </td></tr>
+          </table>
+        </td></tr>` : ''}
+
+        <!-- signoff -->
+        <tr><td style="padding:26px 28px 30px">
+          <p style="margin:0 0 4px;color:${INK};font-size:15px;line-height:1.6">Thank you for trusting BSM Facility Solutions with your vehicle.</p>
+          <p style="margin:14px 0 0;color:${CHAR};font-size:14px;font-weight:700">The BSM Valet Team</p>
+        </td></tr>
+
+        <!-- footer -->
+        <tr><td style="background:${CHAR};padding:18px 28px;text-align:center">
+          <div style="color:${GOLD};font-size:12px;font-weight:700;letter-spacing:.4px">BSM Facility Solutions</div>
+          <div style="color:#7C7266;font-size:11px;margin-top:5px;line-height:1.5">This report was generated automatically at the time of service.<br/>Please do not reply to this message.</div>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+
+    const text = [
+      `${headline} — ${plate}`, '',
+      `Hi ${name},`, '', lede, '',
+      plate ? `License plate: ${plate}` : '',
+      unit ? `Unit: ${unit}` : '',
+      parkedAt ? `Parked: ${parkedAt} ET` : '',
+      returnedAt ? `Returned: ${returnedAt} ET` : '', '',
+      returnedAt ? disclaimer : '', '',
+      'Thank you for trusting BSM Facility Solutions with your vehicle.',
+      '— The BSM Valet Team',
+    ].filter(Boolean).join('\n')
+
     try {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -185,8 +272,9 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           from: 'BSM Valet <valet.fg@bsmfacilitysolutions.app>',
           to: [tenantEmail],
-          subject: `BSM Valet report — ${plate}`,
+          subject: isReturn ? `Your vehicle has been returned — ${plate}` : `Your vehicle is parked — ${plate}`,
           html,
+          text,
           attachments: [{ filename: `BSM-valet-${plate || 'report'}.pdf`, content: pdfB64 }],
         }),
       })
