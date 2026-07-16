@@ -24,17 +24,19 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
   useEffect(() => {
     (async () => {
       const cand = () => supabase.from('candidates').select('id', { count: 'exact', head: true })
-      const [q, v, ip, rq] = await Promise.all([
+      const [q, v, ip, rq, of] = await Promise.all([
         cand().eq('status', 'applied'),
         cand().eq('status', 'interview').neq('stage', '2nd_interview'),
         cand().eq('status', 'interview').eq('stage', '2nd_interview'),
         supabase.from('man_power_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+        cand().eq('onboarding_status', 'offer_pending'),
       ])
       setCounts({
         tab_queue: q.count ?? 0,
         tab_virtual: v.count ?? 0,
         tab_inperson: ip.count ?? 0,
         tab_requests: rq.count ?? 0,
+        tab_offers: of.count ?? 0,
       })
     })()
   }, [path])
