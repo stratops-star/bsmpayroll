@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { sendBsmEmail, APP } from '@/lib/bsm-email'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -77,37 +78,52 @@ export async function POST(req: NextRequest) {
 
   await supabase.from('offers').update({ snapshot, status: 'sent', sent_at: new Date().toISOString() }).eq('id', id)
 
-  // ── Email the signing link ──
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://bsmfacilitysolutions.app'
-  const link = `${origin}/offer/${offer.token}`
-  const key = process.env.RESEND_API_KEY
-  const from = process.env.RESEND_FROM || 'BSM Facility Solutions <careers@bsmfacilitysolutions.app>'
-  let email = false
+  // ── Email the signing link (BSM house style) ──
+  const link = `${APP}/offer/${offer.token}`
+  const es = L === 'es'
+  const signBy = fmtDate(offer.sign_by, L)
+  const rate = offer.hourly_rate != null ? `$${Number(offer.hourly_rate).toFixed(2)}/hr` : null
 
-  if (key) {
-    const es = L === 'es'
-    const subject = es ? 'Su oferta de empleo — BSM Facility Solutions' : 'Your offer of employment — BSM Facility Solutions'
-    const html = es
-      ? `<div style="font-family:system-ui,sans-serif;max-width:560px;color:#222"><p>Hola ${cand.full_name},</p>
-         <p>Nos complace extenderle una <strong>oferta condicional de empleo</strong> para el puesto de <strong>${offer.position}</strong> con BSM Facility Solutions.</p>
-         <p>Revise y firme su carta de oferta aquí:</p>
-         <p><a href="${link}" style="background:#D4A843;color:#0D1B35;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">Ver y firmar mi oferta</a></p>
-         <p style="color:#6B7280;font-size:13px">Por favor firme antes del <strong>${fmtDate(offer.sign_by, L)}</strong>. Si tiene preguntas, llame al ${st.questions_phone || ''}.</p>
-         <p style="color:#6B7280;font-size:13px">— Equipo de Reclutamiento de BSM</p></div>`
-      : `<div style="font-family:system-ui,sans-serif;max-width:560px;color:#222"><p>Hi ${cand.full_name},</p>
-         <p>We're pleased to extend a <strong>conditional offer of employment</strong> for the <strong>${offer.position}</strong> position with BSM Facility Solutions.</p>
-         <p>Review and sign your offer letter here:</p>
-         <p><a href="${link}" style="background:#D4A843;color:#0D1B35;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">View &amp; sign my offer</a></p>
-         <p style="color:#6B7280;font-size:13px">Please sign by <strong>${fmtDate(offer.sign_by, L)}</strong>. If you have questions, call ${st.questions_phone || ''}.</p>
-         <p style="color:#6B7280;font-size:13px">— BSM Recruiting Team</p></div>`
-    try {
-      const r = await fetch('https://api.resend.com/emails', {
-        method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: [cand.email], subject, html }),
-      })
-      email = r.ok
-    } catch { email = false }
-  }
+  const email = await sendBsmEmail({
+    to: [cand.email],
+    from: 'BSM Facility Solutions <careers@bsmfacilitysolutions.app>',
+    subject: es ? `Su oferta de empleo — ${offer.position}` : `Your offer of employment — ${offer.position}`,
+    email: {
+      preheader: es
+        ? `Oferta condicional para ${offer.position}. Revise y firme antes del ${signBy}.`
+        : `Conditional offer for ${offer.position}. Review and sign by ${signBy}.`,
+      eyebrow: 'CAREERS',
+      headline: es ? 'Su oferta de empleo' : 'Your offer of employment',
+      greeting: es ? 'Hola' : 'Hi',
+      name: cand.full_name,
+      lede: es
+        ? `Nos complace extenderle una <strong>oferta condicional de empleo</strong> para el puesto de <strong>${offer.position}</strong> con BSM Facility Solutions. Revise su carta completa y fírmela electrónicamente — solo toma un minuto desde su teléfono.`
+        : `We're pleased to extend a <strong>conditional offer of employment</strong> for the <strong>${offer.position}</strong> position with BSM Facility Solutions. Review your full letter and sign it electronically — it takes about a minute on your phone.`,
+      ctaLabel: es ? 'Ver y firmar mi oferta' : 'View & sign my offer',
+      ctaUrl: link,
+      rows: [
+        [es ? 'Puesto' : 'Position', offer.position],
+        [es ? 'Tarifa por hora' : 'Hourly rate', rate],
+        [es ? 'Fecha de inicio' : 'Start date', fmtDate(offer.start_date, L)],
+        [es ? 'Horario' : 'Schedule', offer.schedule],
+        [es ? 'Ubicación' : 'Location', offer.location],
+      ],
+      calloutHtml: es
+        ? `<strong>Por favor firme antes del ${signBy}.</strong> Su carta detalla el puesto, la compensación, los beneficios y las responsabilidades.`
+        : `<strong>Please sign by ${signBy}.</strong> Your letter details the position, compensation, benefits, and responsibilities.`,
+      disclaimerHtml: st.questions_phone
+        ? (es ? `¿Tiene preguntas? Llámenos al <strong>${st.questions_phone}</strong> antes de firmar.`
+              : `Questions? Call us at <strong>${st.questions_phone}</strong> before you sign.`)
+        : undefined,
+      thanks: es
+        ? 'Nos entusiasma la posibilidad de que se una a nuestro equipo.'
+        : "We're excited about the opportunity to have you join our team.",
+      signoff: es ? 'El Equipo de BSM Facility Solutions' : 'The BSM Facility Solutions Team',
+      footerNote: es
+        ? 'Este enlace es personal. Por favor no reenvíe este mensaje.'
+        : 'This link is personal to you. Please do not forward this message.',
+    },
+  })
 
   return NextResponse.json({ ok: true, email, link })
 }
