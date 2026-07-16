@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { renderOfferPdf } from '@/lib/offer-pdf'
+import { sendBsmEmail, APP } from '@/lib/bsm-email'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -53,58 +54,82 @@ export async function POST(req: NextRequest) {
 
   const { data: signedLink } = await supabase.storage.from('offers').createSignedUrl(path, 60 * 60 * 24 * 7)
 
-  // ── Notify: candidate copy + recruiter + manager ──
-  const key = process.env.RESEND_API_KEY
-  const from = process.env.RESEND_FROM || 'BSM Facility Solutions <careers@bsmfacilitysolutions.app>'
-  if (key) {
-    const b64 = pdf.toString('base64')
-    const { data: cand } = await supabase.from('candidates').select('full_name, email').eq('id', offer.candidate_id).single()
+  // ── Notify: candidate copy + recruiter + manager (BSM house style) ──
+  const b64 = pdf.toString('base64')
+  const attach = [{ filename: 'BSM-Signed-Offer.pdf', content: b64 }]
+  const FROM = 'BSM Facility Solutions <careers@bsmfacilitysolutions.app>'
+  const { data: cand } = await supabase.from('candidates').select('full_name, email').eq('id', offer.candidate_id).single()
+  const es = L === 'es'
+  const rate = offer.hourly_rate != null ? `$${Number(offer.hourly_rate).toFixed(2)}/hr` : null
+  const startFmt = offer.start_date ? new Date(offer.start_date + 'T00:00:00').toLocaleDateString(es ? 'es-US' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null
 
-    // recipients: recruiter who created it + manager who owns the request
-    const ids: string[] = []
-    if (offer.created_by) ids.push(offer.created_by)
-    if (offer.request_id) {
-      const { data: r } = await supabase.from('man_power_requests').select('created_by').eq('id', offer.request_id).single()
-      if (r?.created_by) ids.push(r.created_by)
-    }
-    const staff: string[] = []
-    if (ids.length) {
-      const { data: us } = await supabase.from('app_users').select('email').in('id', [...new Set(ids)])
-      for (const u of us ?? []) if (u.email) staff.push(u.email)
-    }
+  // 1. Candidate's signed copy
+  if (cand?.email) {
+    await sendBsmEmail({
+      to: [cand.email], from: FROM, attachments: attach,
+      subject: es ? `Su oferta firmada — ${offer.position}` : `Your signed offer — ${offer.position}`,
+      email: {
+        preheader: es ? 'Su carta de oferta firmada está adjunta. Bienvenido a BSM.' : 'Your signed offer letter is attached. Welcome to BSM.',
+        eyebrow: 'CAREERS',
+        headline: es ? '¡Bienvenido a BSM!' : 'Welcome to BSM!',
+        greeting: es ? 'Hola' : 'Hi',
+        name: cand.full_name,
+        lede: es
+          ? `Gracias por firmar su oferta condicional de empleo para el puesto de <strong>${offer.position}</strong>. Su copia firmada está adjunta a este correo — guárdela para sus registros.`
+          : `Thank you for signing your conditional offer of employment for the <strong>${offer.position}</strong> position. Your signed copy is attached to this email — please keep it for your records.`,
+        rows: [
+          [es ? 'Puesto' : 'Position', offer.position],
+          [es ? 'Tarifa por hora' : 'Hourly rate', rate],
+          [es ? 'Fecha de inicio' : 'Start date', startFmt],
+          [es ? 'Firmada' : 'Signed', now.toLocaleString(es ? 'es-US' : 'en-US')],
+        ],
+        calloutHtml: es
+          ? '<strong>¿Qué sigue?</strong> Nuestro equipo se comunicará con usted en breve con los siguientes pasos para completar su incorporación y documentación.'
+          : "<strong>What happens next?</strong> Our team will be in touch shortly with your next steps to complete onboarding and your paperwork.",
+        thanks: es ? 'Nos alegra mucho tenerlo en el equipo.' : "We're glad to have you on the team.",
+        signoff: es ? 'El Equipo de BSM Facility Solutions' : 'The BSM Facility Solutions Team',
+        footerNote: es ? 'Conserve este correo y el PDF adjunto para sus registros.' : 'Please keep this email and the attached PDF for your records.',
+      },
+    })
+  }
 
-    const send = (to: string[], subject: string, html: string, attach = false) =>
-      fetch('https://api.resend.com/emails', {
-        method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, subject, html, ...(attach ? { attachments: [{ filename: 'BSM-Signed-Offer.pdf', content: b64 }] } : {}) }),
-      }).catch(() => null)
+  // 2. Staff notification — recruiter who built it + manager who owns the request
+  const ids: string[] = []
+  if (offer.created_by) ids.push(offer.created_by)
+  if (offer.request_id) {
+    const { data: r } = await supabase.from('man_power_requests').select('created_by').eq('id', offer.request_id).single()
+    if (r?.created_by) ids.push(r.created_by)
+  }
+  const staff: string[] = []
+  if (ids.length) {
+    const { data: us } = await supabase.from('app_users').select('email').in('id', [...new Set(ids)])
+    for (const u of us ?? []) if (u.email) staff.push(u.email)
+  }
 
-    // copy to candidate
-    if (cand?.email) {
-      const es = L === 'es'
-      await send([cand.email],
-        es ? 'Su oferta firmada — BSM Facility Solutions' : 'Your signed offer — BSM Facility Solutions',
-        es ? `<div style="font-family:system-ui,sans-serif;max-width:560px"><p>Hola ${cand.full_name},</p><p>Gracias por firmar su oferta condicional de empleo. Adjuntamos su copia firmada.</p><p>Nuestro equipo se comunicará con usted con los siguientes pasos para su incorporación.</p><p style="color:#6B7280;font-size:13px">— Equipo de BSM Facility Solutions</p></div>`
-           : `<div style="font-family:system-ui,sans-serif;max-width:560px"><p>Hi ${cand.full_name},</p><p>Thank you for signing your conditional offer of employment. Your signed copy is attached.</p><p>Our team will be in touch with your onboarding next steps.</p><p style="color:#6B7280;font-size:13px">— The BSM Facility Solutions Team</p></div>`,
-        true)
-    }
-
-    // notify staff
-    if (staff.length) {
-      await send(staff, `✅ Offer signed — ${cand?.full_name || 'Candidate'} (${offer.position})`,
-        `<div style="font-family:system-ui,sans-serif;max-width:560px">
-           <p><strong>${cand?.full_name}</strong> has signed their conditional offer letter.</p>
-           <table style="font-size:14px;border-collapse:collapse">
-             <tr><td style="padding:3px 12px 3px 0;color:#6B7280">Position</td><td><strong>${offer.position || '—'}</strong></td></tr>
-             <tr><td style="padding:3px 12px 3px 0;color:#6B7280">Rate</td><td>${offer.hourly_rate != null ? '$' + offer.hourly_rate + '/hr' : '—'}</td></tr>
-             <tr><td style="padding:3px 12px 3px 0;color:#6B7280">Start date</td><td>${offer.start_date || '—'}</td></tr>
-             <tr><td style="padding:3px 12px 3px 0;color:#6B7280">Signed</td><td>${now.toLocaleString('en-US')}</td></tr>
-           </table>
-           <p style="margin-top:14px;background:#ECFDF5;border:1px solid #A7F3D0;padding:10px 12px;border-radius:8px;font-size:14px">
-             <strong>Ready for Fingercheck.</strong> This candidate can now begin onboarding.</p>
-           <p style="font-size:13px"><a href="${signedLink?.signedUrl || ''}">View the signed PDF</a></p>
-         </div>`, true)
-    }
+  if (staff.length) {
+    await sendBsmEmail({
+      to: staff, from: FROM, attachments: attach,
+      subject: `Offer signed — ${cand?.full_name || 'Candidate'} (${offer.position})`,
+      email: {
+        preheader: `${cand?.full_name} signed their offer. Ready for Fingercheck onboarding.`,
+        eyebrow: 'CAREERS',
+        headline: 'Offer signed',
+        lede: `<strong>${cand?.full_name}</strong> has signed their conditional offer letter. The signed PDF is attached.`,
+        ctaLabel: 'View signed PDF',
+        ctaUrl: signedLink?.signedUrl || `${APP}/recruiting/offers`,
+        rows: [
+          ['Candidate', cand?.full_name],
+          ['Position', offer.position],
+          ['Hourly rate', rate],
+          ['Start date', offer.start_date],
+          ['Signed', now.toLocaleString('en-US')],
+          ['Signed by', printed_name],
+        ],
+        calloutHtml: '<strong>Ready for Fingercheck.</strong> This candidate has cleared the offer stage and can now begin onboarding.',
+        signoff: 'BSM Workforce Platform',
+        footerNote: 'Automated notification from the BSM recruiting platform.',
+      },
+    })
   }
 
   return NextResponse.json({ ok: true, url: signedLink?.signedUrl ?? null })
