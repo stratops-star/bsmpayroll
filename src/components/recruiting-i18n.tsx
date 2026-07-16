@@ -11,6 +11,7 @@ export const DICT: Record<string, { en: string; es: string }> = {
   tab_interview: { en: 'Interview', es: 'Entrevista' },
   tab_pool: { en: 'Candidate Pool', es: 'Grupo de candidatos' },
   tab_rejected: { en: 'Rejected', es: 'Rechazados' },
+  tab_offers: { en: 'Offers', es: 'Ofertas' },
   tab_virtual: { en: 'Virtual', es: 'Virtual' },
   tab_inperson: { en: 'In-Person', es: 'Presencial' },
   virtual_sub: { en: 'Virtual interview · scheduled by day', es: 'Entrevista virtual · agendada por día' },
