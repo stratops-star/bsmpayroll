@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-const NAVY = '#0D1B35', GOLD = '#D4A843'
+// BSM house brand tokens
+const CHAR = '#1E1B17', GOLD = '#DCB878', INK = '#3F3A32', MUTE = '#8C8375'
+const PAGE = '#F5F3EF', HAIR = '#F0EDE7', CREAM = '#FBF8F2', CREAM_B = '#EFE6D3'
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+const APP = 'https://bsmfacilitysolutions.app'
 
 const T = {
-  en: { review: 'Please review your offer letter below, then sign at the bottom.', sign: 'Sign here', draw: 'Draw', type: 'Type', clear: 'Clear', typedPh: 'Type your full name', printed: 'Printed name', date: 'Date', accept: 'I have read and accept this conditional offer', submit: 'Sign & accept offer', sending: 'Submitting…', needSig: 'Please add your signature.', needName: 'Please enter your printed name.', needAccept: 'Please confirm you accept the offer.', doneTitle: 'Offer signed', doneBody: 'Thank you! Your signed offer letter has been sent to BSM Facility Solutions and a copy has been emailed to you.', download: 'Download signed PDF', signedOn: 'Signed on', legal: 'By signing electronically you agree your electronic signature is the legal equivalent of your handwritten signature.' },
-  es: { review: 'Revise su carta de oferta a continuación y luego firme al final.', sign: 'Firme aquí', draw: 'Dibujar', type: 'Escribir', clear: 'Borrar', typedPh: 'Escriba su nombre completo', printed: 'Nombre en letra de molde', date: 'Fecha', accept: 'He leído y acepto esta oferta condicional', submit: 'Firmar y aceptar oferta', sending: 'Enviando…', needSig: 'Por favor agregue su firma.', needName: 'Por favor escriba su nombre.', needAccept: 'Por favor confirme que acepta la oferta.', doneTitle: 'Oferta firmada', doneBody: '¡Gracias! Su carta de oferta firmada fue enviada a BSM Facility Solutions y se le envió una copia por correo.', download: 'Descargar PDF firmado', signedOn: 'Firmada el', legal: 'Al firmar electrónicamente, usted acepta que su firma electrónica es el equivalente legal de su firma manuscrita.' },
+  en: { eyebrow: 'CONDITIONAL OFFER', review: 'Please review your offer letter below, then sign at the bottom of this page.', sign: 'Sign your offer', signSub: 'Draw your signature or type your name.', draw: 'Draw', type: 'Type', clear: 'Clear signature', typedPh: 'Type your full name', printed: 'Printed name', date: 'Date', accept: 'I have read and accept the terms of this conditional offer of employment.', submit: 'Sign and accept offer', sending: 'Submitting your signature…', needSig: 'Please add your signature.', needName: 'Please enter your printed name.', needAccept: 'Please confirm that you accept the offer.', doneTitle: 'Your offer is signed', doneBody: 'Thank you. A copy of your signed offer letter has been emailed to you, and our team has been notified. We will be in touch shortly with your next steps.', download: 'Download signed PDF', signedOn: 'Signed', legal: 'By signing electronically, you agree that your electronic signature is the legal equivalent of your handwritten signature.', footer: 'This offer is personal to you. Please do not forward this link.' },
+  es: { eyebrow: 'OFERTA CONDICIONAL', review: 'Revise su carta de oferta a continuación y luego firme al final de esta página.', sign: 'Firme su oferta', signSub: 'Dibuje su firma o escriba su nombre.', draw: 'Dibujar', type: 'Escribir', clear: 'Borrar firma', typedPh: 'Escriba su nombre completo', printed: 'Nombre en letra de molde', date: 'Fecha', accept: 'He leído y acepto los términos de esta oferta condicional de empleo.', submit: 'Firmar y aceptar la oferta', sending: 'Enviando su firma…', needSig: 'Por favor agregue su firma.', needName: 'Por favor escriba su nombre.', needAccept: 'Por favor confirme que acepta la oferta.', doneTitle: 'Su oferta está firmada', doneBody: 'Gracias. Le enviamos por correo una copia de su carta de oferta firmada y nuestro equipo ya fue notificado. Nos comunicaremos con usted en breve con los siguientes pasos.', download: 'Descargar PDF firmado', signedOn: 'Firmada', legal: 'Al firmar electrónicamente, usted acepta que su firma electrónica es el equivalente legal de su firma manuscrita.', footer: 'Esta oferta es personal. Por favor no reenvíe este enlace.' },
 }
 
 export default function OfferSign({ token, snap, alreadySigned, signedAt, signedName, signedUrl }: {
@@ -28,7 +32,6 @@ export default function OfferSign({ token, snap, alreadySigned, signedAt, signed
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drew = useRef(false)
 
-  // signature pad
   useEffect(() => {
     if (done || mode !== 'draw') return
     const c = canvasRef.current; if (!c) return
@@ -70,122 +73,144 @@ export default function OfferSign({ token, snap, alreadySigned, signedAt, signed
   }
 
   const today = new Date().toLocaleDateString(L === 'es' ? 'es-US' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const card: React.CSSProperties = { background: '#fff', borderRadius: 16, boxShadow: '0 2px 14px rgba(30,27,23,.08)', overflow: 'hidden' }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F5F6FA', fontFamily: 'system-ui, sans-serif', padding: '0 0 40px' }}>
-      {/* header */}
-      <div style={{ background: '#1A1A1A', padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div><div style={{ color: GOLD, fontSize: 20, fontWeight: 800, letterSpacing: 2 }}>BSM</div><div style={{ color: GOLD, fontSize: 6, letterSpacing: 3 }}>FACILITY SOLUTIONS</div></div>
-        <div style={{ marginLeft: 'auto', color: '#fff', fontWeight: 700, fontSize: 15, textAlign: 'right' }}>POSITION OFFER</div>
+    <div style={{ minHeight: '100vh', background: PAGE, fontFamily: FONT, color: INK }}>
+      {/* Letterhead */}
+      <div style={{ background: CHAR, padding: '26px 24px', textAlign: 'center' }}>
+        <img src={`${APP}/bsm-logo.png`} alt="BSM Facility Solutions" width={150} style={{ height: 'auto', display: 'block', margin: '0 auto' }} />
+        <div style={{ color: GOLD, fontSize: 11, letterSpacing: 2.5, fontWeight: 700, marginTop: 8 }}>{t.eyebrow}</div>
       </div>
+      <div style={{ height: 3, background: GOLD }} />
 
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 16px' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 14px 48px' }}>
         {done ? (
-          <div style={{ background: '#fff', borderRadius: 16, padding: 32, textAlign: 'center', margin: '24px 0', borderTop: `4px solid ${GOLD}` }}>
-            <div style={{ fontSize: 38, marginBottom: 8 }}>✅</div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: NAVY, margin: '0 0 8px' }}>{t.doneTitle}</h1>
-            <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.55, margin: '0 0 18px' }}>{t.doneBody}</p>
-            {(signedAt || alreadySigned) && <p style={{ fontSize: 12, color: '#9CA3AF', margin: '0 0 16px' }}>{t.signedOn} {signedAt ? new Date(signedAt).toLocaleString(L === 'es' ? 'es-US' : 'en-US') : today}{signedName ? ` · ${signedName}` : ''}</p>}
-            {pdfUrl && <a href={pdfUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', background: GOLD, color: NAVY, fontWeight: 700, padding: '11px 22px', borderRadius: 10, textDecoration: 'none', fontSize: 14 }}>⬇ {t.download}</a>}
+          <div style={{ ...card, padding: '36px 30px', textAlign: 'center', margin: '22px 0' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 26, background: GOLD, margin: '0 auto 14px', display: 'grid', placeItems: 'center' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={CHAR} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
+            <h1 style={{ fontSize: 21, fontWeight: 700, color: CHAR, margin: '0 0 6px', letterSpacing: '-.2px' }}>{t.doneTitle}</h1>
+            <div style={{ width: 34, height: 2, background: GOLD, margin: '12px auto 16px' }} />
+            <p style={{ fontSize: 15, color: INK, lineHeight: 1.6, margin: '0 0 18px' }}>{t.doneBody}</p>
+            {(signedAt || alreadySigned) && <p style={{ fontSize: 12.5, color: MUTE, margin: '0 0 18px' }}>{t.signedOn}: {signedAt ? new Date(signedAt).toLocaleString(L === 'es' ? 'es-US' : 'en-US') : today}{signedName ? ` — ${signedName}` : ''}</p>}
+            {pdfUrl && <a href={pdfUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', background: GOLD, color: CHAR, fontWeight: 700, padding: '13px 28px', borderRadius: 10, textDecoration: 'none', fontSize: 15 }}>{t.download}</a>}
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: '#6B7280', margin: '18px 0 12px', textAlign: 'center' }}>{t.review}</p>
+          <p style={{ fontSize: 14, color: MUTE, margin: '20px 0 14px', textAlign: 'center', lineHeight: 1.6 }}>{t.review}</p>
         )}
 
-        {/* letter */}
-        <div style={{ background: '#fff', borderRadius: 14, padding: '30px 32px', fontSize: 13.5, lineHeight: 1.6, color: '#222', boxShadow: '0 4px 24px -12px rgba(13,27,53,.25)' }}>
-          <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 14 }}>{snap.company?.address}<br />{snap.company?.phone} · {snap.company?.email} · {snap.company?.web}</div>
-          <div style={{ background: '#FFF3A3', display: 'inline-block', padding: '1px 5px', fontWeight: 700, marginBottom: 12 }}>{snap.letter_date}</div>
-          <p style={{ margin: '0 0 16px' }}><b>{lab.subject}:</b> {snap.subject}</p>
+        {/* The letter */}
+        <div style={{ ...card, padding: '34px 34px 38px', fontSize: 13.5, lineHeight: 1.65 }}>
+          <div style={{ fontSize: 11, color: MUTE, marginBottom: 16, lineHeight: 1.6 }}>
+            {snap.company?.address}<br />{snap.company?.phone} &nbsp;·&nbsp; {snap.company?.email} &nbsp;·&nbsp; {snap.company?.web}
+          </div>
+          <div style={{ height: 1, background: HAIR, margin: '0 0 18px' }} />
+
+          <div style={{ fontWeight: 700, color: CHAR, marginBottom: 14 }}>{snap.letter_date}</div>
+          <p style={{ margin: '0 0 18px', color: CHAR }}><b>{lab.subject}:</b> {snap.subject}</p>
 
           <p style={{ margin: '0 0 12px' }}>Dear {snap.candidate_name},</p>
           <p style={{ margin: '0 0 10px' }}>{snap.intro}</p>
-          <ul style={{ margin: '0 0 12px', paddingLeft: 22 }}><li>{snap.contingency}</li></ul>
-          <p style={{ margin: '0 0 16px' }}>{snap.details_lead}</p>
+          <ul style={{ margin: '0 0 12px', paddingLeft: 20 }}><li>{snap.contingency}</li></ul>
+          <p style={{ margin: '0 0 4px' }}>{snap.details_lead}</p>
 
           <H>{lab.details}:</H>
-          <ul style={{ margin: '0 0 6px', paddingLeft: 22 }}>
+          <ul style={{ margin: '0 0 8px', paddingLeft: 20 }}>
             <li><b>{lab.position}:</b> {d.position}</li>
             <li><b>{lab.start}:</b> {d.start_date}</li>
           </ul>
           <Bar>{lab.schedule}: {d.schedule}</Bar>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 22 }}><li><b>{lab.location}:</b> {d.location}</li></ul>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}><li><b>{lab.location}:</b> {d.location}</li></ul>
 
           <H>{lab.comp}:</H>
           <Bar>{lab.rate}: {d.hourly_rate}</Bar>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 22 }}>
-            <li><b>{lab.pay}:</b> {snap.pay_schedule}<ul style={{ paddingLeft: 20, marginTop: 3 }}><li style={{ listStyle: 'circle' }}>{snap.pay_detail}</li></ul></li>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+            <li><b>{lab.pay}:</b> {snap.pay_schedule}
+              <ul style={{ paddingLeft: 18, marginTop: 4 }}><li style={{ listStyle: 'circle' }}>{snap.pay_detail}</li></ul>
+            </li>
           </ul>
 
           <H>{lab.benefits}:</H>
-          <ul style={{ margin: 0, paddingLeft: 22 }}>{(snap.benefits || []).map((b: string, i: number) => <li key={i}>{b}</li>)}</ul>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>{(snap.benefits || []).map((b: string, i: number) => <li key={i} style={{ marginBottom: 2 }}>{b}</li>)}</ul>
 
           {(snap.duties || []).length > 0 && (<>
             <H>{lab.duties}:</H>
-            {snap.duties_intro && <p style={{ margin: '0 0 6px' }}>{snap.duties_intro}</p>}
-            <ul style={{ margin: 0, paddingLeft: 34 }}>{(snap.duties || []).map((x: string, i: number) => <li key={i} style={{ listStyle: 'circle' }}>{x}</li>)}</ul>
+            {snap.duties_intro && <p style={{ margin: '0 0 7px' }}>{snap.duties_intro}</p>}
+            <ul style={{ margin: 0, paddingLeft: 32 }}>{(snap.duties || []).map((x: string, i: number) => <li key={i} style={{ listStyle: 'circle', marginBottom: 2 }}>{x}</li>)}</ul>
           </>)}
 
           <H>{lab.hours}</H>
           {(snap.overtime || '').split(/\n{2,}/).filter(Boolean).map((p: string, i: number) => <p key={i} style={{ margin: '0 0 10px' }}>{p}</p>)}
 
-          {snap.jd_note && <p style={{ margin: '0 0 12px', fontStyle: 'italic' }}>{snap.jd_note}</p>}
+          {snap.jd_note && <p style={{ margin: '0 0 12px', fontStyle: 'italic', color: MUTE }}>{snap.jd_note}</p>}
           <p style={{ margin: '0 0 12px' }}><b>{lab.atwill}:</b> {snap.at_will}</p>
           <p style={{ margin: '0 0 12px' }}><b>{lab.next}:</b> {snap.next_steps}</p>
-          <p style={{ margin: '0 0 18px' }}>{snap.closing}</p>
+          <p style={{ margin: '0 0 20px' }}>{snap.closing}</p>
 
           <p style={{ margin: 0 }}>{lab.sincerely},</p>
-          <p style={{ fontStyle: 'italic', fontSize: 17, margin: '4px 0 2px' }}>{snap.signer?.name}</p>
-          <p style={{ margin: 0, fontSize: 12.5 }}>{snap.signer?.title}<br />BSM Facility Solutions<br />{snap.signer?.phone}</p>
+          <p style={{ fontStyle: 'italic', fontSize: 18, margin: '6px 0 4px', color: CHAR, fontFamily: 'Georgia, serif' }}>{snap.signer?.name}</p>
+          <p style={{ margin: 0, fontSize: 12.5, color: MUTE, lineHeight: 1.6 }}>{snap.signer?.title}<br />BSM Facility Solutions<br />{snap.signer?.phone}</p>
 
-          <div style={{ borderTop: '1px solid #E5E7EB', margin: '22px 0 0', paddingTop: 16 }}>
-            <H>{lab.ack}</H>
-            <p style={{ margin: 0 }}>{snap.acknowledgment}</p>
+          <div style={{ background: CREAM, border: `1px solid ${CREAM_B}`, borderRadius: 10, padding: '16px 18px', marginTop: 26 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: .4, color: CHAR, marginBottom: 8 }}>{lab.ack}</div>
+            <p style={{ margin: 0, fontSize: 13 }}>{snap.acknowledgment}</p>
           </div>
         </div>
 
-        {/* signature */}
+        {/* Signature */}
         {!done && (
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, marginTop: 16, borderTop: `4px solid ${GOLD}` }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: NAVY, margin: '0 0 12px' }}>✍️ {t.sign}</h2>
+          <div style={{ ...card, marginTop: 16 }}>
+            <div style={{ height: 3, background: GOLD }} />
+            <div style={{ padding: '26px 28px 30px' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: CHAR, margin: '0 0 2px', letterSpacing: '-.2px' }}>{t.sign}</h2>
+              <div style={{ width: 30, height: 2, background: GOLD, margin: '10px 0 8px' }} />
+              <p style={{ fontSize: 13.5, color: MUTE, margin: '0 0 16px' }}>{t.signSub}</p>
 
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              {(['draw', 'type'] as const).map(m => (
-                <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid ' + (mode === m ? NAVY : '#E5E7EB'), background: mode === m ? NAVY : '#fff', color: mode === m ? '#fff' : '#6B7280', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>{m === 'draw' ? t.draw : t.type}</button>
-              ))}
-            </div>
-
-            {mode === 'draw' ? (
-              <div>
-                <canvas ref={canvasRef} style={{ width: '100%', height: 150, border: '1px dashed #CBD5E1', borderRadius: 10, background: '#FCFCFD', touchAction: 'none', cursor: 'crosshair' }} />
-                <button onClick={clearPad} style={{ marginTop: 6, background: 'none', border: 0, color: '#6B7280', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>{t.clear}</button>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                {(['draw', 'type'] as const).map(m => (
+                  <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid ' + (mode === m ? CHAR : '#E5E1DA'), background: mode === m ? CHAR : '#fff', color: mode === m ? GOLD : MUTE, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>{m === 'draw' ? t.draw : t.type}</button>
+                ))}
               </div>
-            ) : (
-              <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={t.typedPh}
-                style={{ width: '100%', padding: '14px 12px', border: '1px dashed #CBD5E1', borderRadius: 10, fontSize: 26, fontStyle: 'italic', fontFamily: 'Georgia, serif', boxSizing: 'border-box', outline: 'none' }} />
-            )}
 
-            <div style={{ marginTop: 14 }}>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 4, textTransform: 'uppercase' }}>{t.printed}</label>
-              <input value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 9, fontSize: 14, boxSizing: 'border-box' }} />
+              {mode === 'draw' ? (
+                <div>
+                  <canvas ref={canvasRef} style={{ width: '100%', height: 160, border: `1px dashed ${CREAM_B}`, borderRadius: 10, background: CREAM, touchAction: 'none', cursor: 'crosshair', display: 'block' }} />
+                  <button onClick={clearPad} style={{ marginTop: 7, background: 'none', border: 0, color: MUTE, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0, fontFamily: FONT }}>{t.clear}</button>
+                </div>
+              ) : (
+                <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={t.typedPh}
+                  style={{ width: '100%', padding: '18px 14px', border: `1px dashed ${CREAM_B}`, borderRadius: 10, background: CREAM, fontSize: 28, fontStyle: 'italic', fontFamily: 'Georgia, serif', boxSizing: 'border-box', outline: 'none', color: CHAR }} />
+              )}
+
+              <div style={{ marginTop: 18 }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: MUTE, marginBottom: 5, textTransform: 'uppercase', letterSpacing: .5 }}>{t.printed}</label>
+                <input value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: '1px solid #E5E1DA', borderRadius: 9, fontSize: 14, boxSizing: 'border-box', fontFamily: FONT, color: CHAR }} />
+              </div>
+              <div style={{ marginTop: 12, fontSize: 13, color: MUTE }}>{t.date}: <b style={{ color: CHAR }}>{today}</b></div>
+
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 18, fontSize: 13.5, color: INK, cursor: 'pointer', lineHeight: 1.5 }}>
+                <input type="checkbox" checked={accept} onChange={e => setAccept(e.target.checked)} style={{ marginTop: 3, accentColor: CHAR, width: 16, height: 16 }} />
+                <span>{t.accept}</span>
+              </label>
+
+              {err && <p style={{ color: '#B42318', fontSize: 13, background: '#FEF3F2', border: '1px solid #FECDCA', padding: '10px 12px', borderRadius: 8, margin: '14px 0 0' }}>{err}</p>}
+
+              <button onClick={submit} disabled={busy} style={{ width: '100%', marginTop: 18, background: GOLD, color: CHAR, border: 0, borderRadius: 10, padding: 15, fontSize: 15, fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? .6 : 1, fontFamily: FONT }}>{busy ? t.sending : t.submit}</button>
+              <p style={{ fontSize: 11, color: MUTE, margin: '12px 0 0', lineHeight: 1.55, textAlign: 'center' }}>{t.legal}</p>
             </div>
-            <div style={{ marginTop: 10, fontSize: 12.5, color: '#6B7280' }}>{t.date}: <b style={{ color: '#222' }}>{today}</b></div>
-
-            <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 14, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
-              <input type="checkbox" checked={accept} onChange={e => setAccept(e.target.checked)} style={{ marginTop: 3 }} />
-              <span>{t.accept}</span>
-            </label>
-
-            {err && <p style={{ color: '#DC2626', fontSize: 13, background: '#FEF2F2', padding: '9px 12px', borderRadius: 8, margin: '12px 0 0' }}>{err}</p>}
-
-            <button onClick={submit} disabled={busy} style={{ width: '100%', marginTop: 16, background: GOLD, color: NAVY, border: 0, borderRadius: 10, padding: 13, fontSize: 15, fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? t.sending : t.submit}</button>
-            <p style={{ fontSize: 10.5, color: '#9CA3AF', margin: '10px 0 0', lineHeight: 1.5, textAlign: 'center' }}>{t.legal}</p>
           </div>
         )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ background: CHAR, padding: '20px 24px', textAlign: 'center' }}>
+        <div style={{ color: GOLD, fontSize: 12, fontWeight: 700, letterSpacing: .4 }}>BSM Facility Solutions</div>
+        <div style={{ color: '#7C7266', fontSize: 11, marginTop: 5, lineHeight: 1.5 }}>{t.footer}</div>
       </div>
     </div>
   )
 }
 
-const H = ({ children }: any) => <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.3, margin: '16px 0 5px', color: '#111' }}>{children}</div>
-const Bar = ({ children }: any) => <div style={{ fontWeight: 700, fontSize: 12, background: '#F1F2F4', padding: '3px 5px' }}>{children}</div>
+const H = ({ children }: any) => <div style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: .5, margin: '18px 0 6px', color: CHAR, textTransform: 'uppercase' }}>{children}</div>
+const Bar = ({ children }: any) => <div style={{ fontWeight: 700, fontSize: 12.5, background: CREAM, border: `1px solid ${CREAM_B}`, borderRadius: 6, padding: '5px 9px', color: CHAR }}>{children}</div>
