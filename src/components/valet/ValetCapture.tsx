@@ -44,6 +44,9 @@ const T: Record<string, { en: string; es: string }> = {
   notOnList: { en: 'Car not on the list?', es: '¿El auto no está en la lista?' },
   showAll: { en: 'Show all parked cars', es: 'Ver todos los estacionados' },
   showFewer: { en: 'Show fewer', es: 'Ver menos' },
+  resendReport: { en: 'Send report to tenant', es: 'Enviar reporte al inquilino' },
+  resendAgain: { en: 'Send the report again', es: 'Enviar el reporte otra vez' },
+  sending: { en: 'Sending…', es: 'Enviando…' },
   backToParked: { en: 'Back to parked cars', es: 'Volver a autos estacionados' },
   noIntakeWarn: {
     en: 'These cars have no drop-off photos on file. Use this only for cars that were already in the garage before the app. The report will show return photos only.',
@@ -124,6 +127,64 @@ export default function ValetCapture() {
     try { if (!localStorage.getItem('bsm_valet_tut_attendant_v1')) setTutorial(true) } catch { /* ignore */ }
   }, [])
   function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_attendant_v1', '1') } catch { /* ignore */ } }
+
+  // Quietly retry report emails that failed for a transient reason (rate limit,
+  // network, Resend 5xx). Permanent failures (unverified domain, bad key, no
+  // address) are marked email_retryable=false and are never retried here.
+  const retrySweep = useCallback(async () => {
+    try {
+      const lastKey = 'valet_retry_sweep_at'
+      const last = Number(localStorage.getItem(lastKey) || 0)
+      if (Date.now() - last < 10 * 60 * 1000) return          // at most once per 10 minutes
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: due } = await supabase
+        .from('valet_events')
+        .select('id')
+        .is('reported_at', null)
+        .eq('email_retryable', true)
+        .gt('email_attempts', 0)
+        .lt('email_attempts', 5)
+        .gte('event_at', cutoff)
+        .order('event_at', { ascending: false })
+        .limit(5)
+      const list = (due as any[]) || []
+      if (list.length === 0) { localStorage.setItem(lastKey, String(Date.now())); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+      let sent = 0
+      for (const row of list) {
+        try {
+          const r = await fetch('/api/valet-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ event_id: row.id }),
+          })
+          const d = await r.json().catch(() => ({}))
+          if (d?.emailed) sent++
+        } catch { /* try again next sweep */ }
+      }
+      localStorage.setItem(lastKey, String(Date.now()))
+      if (sent > 0) { flash(`${sent} ${sent === 1 ? 'report' : 'reports'} emailed ✓`); await refresh() }
+    } catch { /* sweep is best-effort */ }
+  }, [supabase, refresh])
+
+  async function resendReport(ev: EventRow) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const r = await fetch('/api/valet-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ event_id: ev.id }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (d?.emailed) flash(t('emailSent'))
+      else flash(d?.reason || d?.error || t('emailFailed'))
+    } catch {
+      flash(t('emailFailed'))
+    }
+    setReport(null)
+    await refresh()
+  }
 
   async function forceCloseEvent(park: EventRow) {
     if (!me) return
@@ -211,11 +272,12 @@ export default function ValetCapture() {
       }
       await refresh()
       await sync()
+      retrySweep()
     })()
-    const onOnline = () => sync()
+    const onOnline = () => { sync(); retrySweep() }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
-  }, [supabase, refresh, sync])
+  }, [supabase, refresh, sync, retrySweep])
 
   // ---- currently parked (latest event per vehicle is a park) ----
   const parked: { vehicle_id: string; name: string; plate: string; since: string; session_id: string | null; customer_id: string | null; ev: EventRow }[] = []
@@ -350,7 +412,7 @@ export default function ValetCapture() {
         )}
       </main>
 
-      {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} me={me} locationId={locationId} onForceClose={forceCloseEvent} onClose={() => setReport(null)} />}
+      {report && <ReportSheet e={report} events={events} supabase={supabase} t={t} lang={lang} me={me} locationId={locationId} onForceClose={forceCloseEvent} onResend={resendReport} onClose={() => setReport(null)} />}
       {tutorial && <ValetTutorial steps={ATTENDANT_STEPS} onClose={closeTutorial} />}
     </div>
   )
@@ -784,12 +846,13 @@ function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBac
 }
 
 // ---------------- Report sheet (tap a car → see its stamped photos) ----------------
-function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClose, onClose }: any) {
+function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClose, onResend, onClose }: any) {
   const [park, setPark] = useState<EventRow | null>(null)
   const [ret, setRet] = useState<EventRow | null>(null)
   const [parkPics, setParkPics] = useState<string[]>([])
   const [retPics, setRetPics] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [sending, setSending] = useState(false)
 
   async function loadPics(id: string): Promise<string[]> {
     const { data } = await supabase.from('valet_photos').select('storage_path, sequence').eq('event_id', id).order('sequence')
@@ -919,6 +982,12 @@ function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClos
         <Block title={t('park')} ev={park} pics={parkPics} />
         <Block title={t('retrieve')} ev={ret} pics={retPics} />
         <button onClick={download} disabled={busy} style={{ ...primaryBtn, marginTop: 16, opacity: busy ? 0.6 : 1 }}>⬇ {t('downloadPdf')}</button>
+        {onResend && e.valet_customers?.email && (
+          <button onClick={async () => { setSending(true); await onResend(e); setSending(false) }} disabled={sending}
+            style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 8, opacity: sending ? 0.6 : 1 }}>
+            {sending ? t('sending') : e.reported_at ? t('resendAgain') : t('resendReport')}
+          </button>
+        )}
         {park && !ret && onForceClose && (
           <button onClick={() => { if (confirm(lang === 'es' ? '¿Marcar como retirado sin fotos?' : 'Mark this car as retrieved without photos?')) onForceClose(park) }}
             style={{ ...primaryBtn, background: '#fff', color: '#B7791F', border: '1.5px solid #E7CFA0', marginTop: 8 }}>
