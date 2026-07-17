@@ -128,46 +128,6 @@ export default function ValetCapture() {
   }, [])
   function closeTutorial() { setTutorial(false); try { localStorage.setItem('bsm_valet_tut_attendant_v1', '1') } catch { /* ignore */ } }
 
-  // Quietly retry report emails that failed for a transient reason (rate limit,
-  // network, Resend 5xx). Permanent failures (unverified domain, bad key, no
-  // address) are marked email_retryable=false and are never retried here.
-  const retrySweep = useCallback(async () => {
-    try {
-      const lastKey = 'valet_retry_sweep_at'
-      const last = Number(localStorage.getItem(lastKey) || 0)
-      if (Date.now() - last < 10 * 60 * 1000) return          // at most once per 10 minutes
-      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      const { data: due } = await supabase
-        .from('valet_events')
-        .select('id')
-        .is('reported_at', null)
-        .eq('email_retryable', true)
-        .gt('email_attempts', 0)
-        .lt('email_attempts', 5)
-        .gte('event_at', cutoff)
-        .order('event_at', { ascending: false })
-        .limit(5)
-      const list = (due as any[]) || []
-      if (list.length === 0) { localStorage.setItem(lastKey, String(Date.now())); return }
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || ''
-      let sent = 0
-      for (const row of list) {
-        try {
-          const r = await fetch('/api/valet-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ event_id: row.id }),
-          })
-          const d = await r.json().catch(() => ({}))
-          if (d?.emailed) sent++
-        } catch { /* try again next sweep */ }
-      }
-      localStorage.setItem(lastKey, String(Date.now()))
-      if (sent > 0) { flash(`${sent} ${sent === 1 ? 'report' : 'reports'} emailed ✓`); await refresh() }
-    } catch { /* sweep is best-effort */ }
-  }, [supabase, refresh])
-
   async function resendReport(ev: EventRow) {
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -246,6 +206,46 @@ export default function ValetCapture() {
       } catch { /* ignore */ }
     }
     setPendingCount((await listQueue()).length)
+  }, [supabase, refresh])
+
+  // Quietly retry report emails that failed for a transient reason (rate limit,
+  // network, Resend 5xx). Permanent failures (unverified domain, bad key, no
+  // address) are marked email_retryable=false and are never retried here.
+  const retrySweep = useCallback(async () => {
+    try {
+      const lastKey = 'valet_retry_sweep_at'
+      const last = Number(localStorage.getItem(lastKey) || 0)
+      if (Date.now() - last < 10 * 60 * 1000) return          // at most once per 10 minutes
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: due } = await supabase
+        .from('valet_events')
+        .select('id')
+        .is('reported_at', null)
+        .eq('email_retryable', true)
+        .gt('email_attempts', 0)
+        .lt('email_attempts', 5)
+        .gte('event_at', cutoff)
+        .order('event_at', { ascending: false })
+        .limit(5)
+      const list = (due as any[]) || []
+      if (list.length === 0) { localStorage.setItem(lastKey, String(Date.now())); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+      let sent = 0
+      for (const row of list) {
+        try {
+          const r = await fetch('/api/valet-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ event_id: row.id }),
+          })
+          const d = await r.json().catch(() => ({}))
+          if (d?.emailed) sent++
+        } catch { /* try again next sweep */ }
+      }
+      localStorage.setItem(lastKey, String(Date.now()))
+      if (sent > 0) { flash(`${sent} ${sent === 1 ? 'report' : 'reports'} emailed ✓`); await refresh() }
+    } catch { /* sweep is best-effort */ }
   }, [supabase, refresh])
 
   useEffect(() => {
