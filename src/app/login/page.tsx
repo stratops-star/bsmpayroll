@@ -96,6 +96,19 @@ function LoginForm() {
           </form>
         </div>
         <p className="text-center text-xs text-gray-400 mt-5">Access restricted to BSM accounts</p>
+
+        <div className="mt-6 pt-5 border-t border-gray-200 text-center">
+          <p className="text-xs text-gray-500 mb-2">Valet attendant?</p>
+          <a href="/valet/login"
+            className="inline-flex items-center justify-center gap-2 w-full bg-[#1E1B17] text-white border border-[#DCB878] py-2.5 rounded-lg text-sm font-semibold hover:bg-[#2A2621] transition-colors no-underline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DCB878" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 15 l1.4-4.2a2 2 0 0 1 1.9-1.3h7.4a2 2 0 0 1 1.9 1.3L18 15" />
+              <path d="M3.5 15h17v2.5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z" />
+              <circle cx="7" cy="18.5" r="1.2" /><circle cx="17" cy="18.5" r="1.2" />
+            </svg>
+            Valet sign in
+          </a>
+        </div>
       </div>
     </div>
   )
