@@ -8,7 +8,7 @@ const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
 
 type Ev = {
-  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
+  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null; reported_at?: string | null
   vehicle_id: string | null; session_id?: string | null; customer_id: string | null; employee_id: string | null
   valet_customers: { full_name: string; customer_type?: string; email?: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
@@ -45,7 +45,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, reported_at, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
       .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
@@ -282,7 +282,10 @@ export default function ValetHistory() {
                   {e.valet_customers?.customer_type === 'guest' && <span style={{ fontSize: 10, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '1px 6px', borderRadius: 6 }}>GUEST</span>}
                   <span style={{ fontSize: 13, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.valet_customers?.full_name || '—'}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{fmt(e.event_at)} · {emp[e.employee_id || ''] || '—'}</div>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <span>{fmt(e.event_at)} · {emp[e.employee_id || ''] || '—'}</span>
+                  <EmailBadge e={e} />
+                </div>
               </div>
               <span style={{ color: GOLD, flexShrink: 0 }}>›</span>
             </button>
@@ -294,6 +297,22 @@ export default function ValetHistory() {
         onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)}
         onVoid={() => voidCapture(sel)} onForceClose={() => forceClose(sel)} busy={busy} />}
     </div>
+  )
+}
+
+export function emailState(e: any): { key: 'sent' | 'none' | 'failed'; label: string; fg: string; bg: string } {
+  if (e?.reported_at) return { key: 'sent', label: 'EMAILED ✓', fg: '#166534', bg: '#DCFCE7' }
+  if (!e?.valet_customers?.email) return { key: 'none', label: 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9' }
+  return { key: 'failed', label: 'NOT SENT', fg: '#B7791F', bg: '#FEF3C7' }
+}
+
+function EmailBadge({ e }: { e: any }) {
+  const s = emailState(e)
+  return (
+    <span title={s.key === 'sent' ? 'Report emailed to the tenant' : s.key === 'none' ? 'No email on file for this customer' : 'The report email did not send'}
+      style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, color: s.fg, background: s.bg, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap' }}>
+      {s.label}
+    </span>
   )
 }
 
@@ -333,6 +352,20 @@ function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onVoid, onFor
           <button onClick={onClose} style={tinyBtn}>Close</button>
         </div>
         <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>{name} · Unit {unit}</div>
+        {(() => {
+          const st = emailState(e)
+          const addr = e.valet_customers?.email
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, color: st.fg, background: st.bg, padding: '3px 7px', borderRadius: 5 }}>{st.label}</span>
+              <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                {st.key === 'sent' ? `Report sent to ${addr}${e.reported_at ? ' · ' + fmt(e.reported_at) : ''}`
+                  : st.key === 'none' ? 'No email on file for this customer'
+                  : `Not sent to ${addr} — check Resend logs`}
+              </span>
+            </div>
+          )
+        })()}
         <Photos title="PARK — intake" ev={park} pics={parkPics} />
         <Photos title="RETRIEVE — return" ev={retrieve} pics={retPics} />
         <button onClick={onPDF} disabled={busy} style={{ ...primaryBtn, marginTop: 16 }}>⬇ Download report PDF</button>
