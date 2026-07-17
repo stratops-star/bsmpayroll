@@ -42,6 +42,8 @@ const T: Record<string, { en: string; es: string }> = {
   searchParked: { en: 'Search parked cars…', es: 'Buscar autos estacionados…' },
   optional: { en: 'optional', es: 'opcional' },
   notOnList: { en: 'Car not on the list?', es: '¿El auto no está en la lista?' },
+  showAll: { en: 'Show all parked cars', es: 'Ver todos los estacionados' },
+  showFewer: { en: 'Show fewer', es: 'Ver menos' },
   backToParked: { en: 'Back to parked cars', es: 'Volver a autos estacionados' },
   noIntakeWarn: {
     en: 'These cars have no drop-off photos on file. Use this only for cars that were already in the garage before the app. The report will show return photos only.',
@@ -358,6 +360,7 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
   const [hq, setHq] = useState('')
   const [openP, setOpenP] = useState(true)
   const [openR, setOpenR] = useState(false)
+  const [showAllParked, setShowAllParked] = useState(false)
   const hql = hq.trim().toLowerCase()
   const fParked = (parked as any[]).filter(p => !hql || `${p.plate} ${p.name}`.toLowerCase().includes(hql))
   const fRecent = (events as EventRow[]).filter(e => !hql || `${e.valet_vehicles?.license_plate || ''} ${e.valet_customers?.full_name || ''}`.toLowerCase().includes(hql))
@@ -373,7 +376,7 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
 
       <Accordion title={`${t('parkedNow')} (${fParked.length})`} open={openP || !!hql} onToggle={() => setOpenP(o => !o)}>
         {fParked.length === 0 ? <Empty>{t('noParked')}</Empty> :
-          fParked.map(p => (
+          ((hql || showAllParked) ? fParked : fParked.slice(0, 3)).map(p => (
             <button key={p.vehicle_id} onClick={() => onPickParked(p)} style={rowBtn}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
@@ -382,6 +385,13 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('parkedSince')} {timeAgo(p.since, lang)} ›</div>
             </button>
           ))}
+        {!hql && fParked.length > 3 && (
+          <button onClick={() => setShowAllParked(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'transparent', border: 'none', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '11px 0', cursor: 'pointer', fontFamily: 'inherit' }}>
+            {showAllParked ? t('showFewer') : `${t('showAll')} (${fParked.length})`}
+            <span style={{ display: 'inline-block', transform: showAllParked ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s', color: GOLD }}>›</span>
+          </button>
+        )}
       </Accordion>
 
       <Accordion title={`${t('recent')} (${fRecent.length})`} open={openR || !!hql} onToggle={() => setOpenR(o => !o)}>
@@ -418,6 +428,7 @@ function Accordion({ title, open, onToggle, children }: { title: string; open: b
 function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel, lang }: any) {
   const [q, setQ] = useState('')
   const [searchAll, setSearchAll] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [adding, setAdding] = useState(false)
   const [hostQ, setHostQ] = useState('')
   const [host, setHost] = useState<Customer | null>(null)
@@ -520,7 +531,8 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
                 const list = (parked as any[]).filter(p => !ql || `${p.plate} ${p.name}`.toLowerCase().includes(ql))
                 if (parked.length === 0) return <Empty>{t('noParked')}</Empty>
                 if (list.length === 0) return <Empty>{t('noMatch')}</Empty>
-                return list.map((p: any) => (
+                const shown = (ql || showAll) ? list : list.slice(0, 3)
+                return shown.map((p: any) => (
                   <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
@@ -531,7 +543,16 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
                 ))
               })()}
             </div>
-            <button onClick={() => { setSearchAll(true); setQ('') }} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>
+
+            {!ql && parked.length > 3 && (
+              <button onClick={() => setShowAll(v => !v)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'transparent', border: 'none', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '11px 0', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {showAll ? t('showFewer') : `${t('showAll')} (${parked.length})`}
+                <span style={{ display: 'inline-block', transform: showAll ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s', color: GOLD }}>›</span>
+              </button>
+            )}
+
+            <button onClick={() => { setSearchAll(true); setQ('') }} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 4 }}>
               {t('notOnList')}
             </button>
           </>
