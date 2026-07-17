@@ -282,6 +282,7 @@ export async function POST(req: NextRequest) {
     } catch { emailed = false }
   }
 
-  await svc.from('valet_events').update({ reported_at: new Date().toISOString() }).eq('id', event_id)
+  // Only stamp reported_at when the email actually went out — it's the audit marker.
+  if (emailed) await svc.from('valet_events').update({ reported_at: new Date().toISOString() }).eq('id', event_id)
   return NextResponse.json({ ok: true, emailed })
 }
