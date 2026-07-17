@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
 
-export default function ValetInstall({ variant = 'button' }: { variant?: 'button' | 'icon' }) {
+export default function ValetInstall({ variant = 'button', appName = 'BSM Valet', label = 'Add app to home screen' }: { variant?: 'button' | 'icon'; appName?: string; label?: string }) {
   const [deferred, setDeferred] = useState<any>(null)
   const [showHelp, setShowHelp] = useState(false)
   const [installed, setInstalled] = useState(false)
@@ -46,7 +46,7 @@ export default function ValetInstall({ variant = 'button' }: { variant?: 'button
             </svg>
           </div>
           <div style={{ width: 1.5, alignSelf: 'stretch', background: GOLD, opacity: 0.4, margin: '2px 14px' }} />
-          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Add app to home screen</div>
+          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{label}</div>
         </button>
       )}
 
@@ -60,7 +60,7 @@ export default function ValetInstall({ variant = 'button' }: { variant?: 'button
                 <path d="M2 12 h6 M5.5 9 l3 3-3 3" />
               </svg>
             </div>
-            <h3 style={{ color: NAVY, margin: '0 0 4px', fontSize: 23, fontWeight: 700 }}>Install BSM Valet</h3>
+            <h3 style={{ color: NAVY, margin: '0 0 4px', fontSize: 23, fontWeight: 700 }}>Install {appName}</h3>
             <div style={{ width: 96, height: 1, background: GOLD, margin: '12px auto 16px' }} />
             {isIos ? (
               <p style={{ color: '#5B5347', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
