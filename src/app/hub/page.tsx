@@ -31,6 +31,11 @@ export default function Hub() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setScreen('no-session'); return }
       if (!user.email?.toLowerCase().endsWith('@' + BSM_DOMAIN)) {
+        // Valet attendants aren't @bsm — send them to their app instead of signing them out.
+        const { data: v } = await supabase.from('app_users').select('role, departments, active').eq('id', user.id).single()
+        const vDepts: string[] = Array.isArray((v as any)?.departments) ? (v as any).departments : []
+        const isValet = v?.active !== false && (['valet', 'valet_manager'].includes(v?.role || '') || vDepts.includes('valet'))
+        if (isValet) { router.replace('/valet'); return }
         await supabase.auth.signOut(); setScreen('wrong-domain'); return
       }
       const { data: u } = await supabase
@@ -51,8 +56,8 @@ export default function Hub() {
   async function signOut() { await supabase.auth.signOut(); location.href = '/' }
 
   if (screen === 'loading') return <Center><p style={{ color: '#94A3B8' }}>Loading…</p></Center>
-  if (screen === 'no-session') return <Center><Msg title="Sign in required">Please sign in with your BSM email.</Msg></Center>
-  if (screen === 'wrong-domain') return <Center><Msg title="BSM accounts only">Only @{BSM_DOMAIN} accounts can access this app.</Msg></Center>
+  if (screen === 'no-session') return <Center><Msg title="Sign in required">Please sign in with your BSM email.</Msg><ValetLink /></Center>
+  if (screen === 'wrong-domain') return <Center><Msg title="BSM accounts only">Only @{BSM_DOMAIN} accounts can access this app.</Msg><ValetLink /></Center>
   if (screen === 'waiting') return (
     <Center>
       <Msg title="You're almost in">
@@ -173,6 +178,19 @@ function ModuleIcon({ k }: { k: string }) {
 const ghostBtn: React.CSSProperties = {
   background: 'rgba(255,255,255,.08)', color: '#D9D2C6', border: '1px solid rgba(255,255,255,.15)',
   borderRadius: 9, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+}
+
+function ValetLink() {
+  return (
+    <a href="/valet/login" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: '#211E1A', color: '#fff', border: `1px solid ${GOLD}`, borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 600, textDecoration: 'none' }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 15 l1.4-4.2a2 2 0 0 1 1.9-1.3h7.4a2 2 0 0 1 1.9 1.3L18 15" />
+        <path d="M3.5 15h17v2.5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z" />
+        <circle cx="7" cy="18.5" r="1.2" /><circle cx="17" cy="18.5" r="1.2" />
+      </svg>
+      Valet attendant sign in
+    </a>
+  )
 }
 
 function Center({ children }: { children: React.ReactNode }) {
