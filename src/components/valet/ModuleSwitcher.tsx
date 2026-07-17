@@ -51,7 +51,7 @@ function ModIcon({ k }: { k: string }) {
 
 export default function ModuleSwitcher({ title }: { title: string }) {
   const [open, setOpen] = useState(false)
-  const [mods, setMods] = useState<Mod[]>([ALL.hub])
+  const [mods, setMods] = useState<Mod[]>([])
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -66,7 +66,10 @@ export default function ModuleSwitcher({ title }: { title: string }) {
       if (role === 'admin') { keys.add('recruiting'); keys.add('payroll'); keys.add('valet'); keys.add('access') }
       depts.forEach(d => { if (ALL[d]) keys.add(d) })
       if (role === 'valet_manager' || role === 'valet') keys.add('valet')
-      setMods([ALL.hub, ...Array.from(keys).map(k => ALL[k]).filter(Boolean)])
+      // The hub is BSM-staff only — it signs out anyone without a @bsm email.
+      const isStaff = (user.email || '').toLowerCase().endsWith('@bsmfacilitysolutions.com')
+      const list = Array.from(keys).map(k => ALL[k]).filter(Boolean)
+      setMods(isStaff ? [ALL.hub, ...list] : list)
     })()
   }, [])
 
@@ -76,17 +79,20 @@ export default function ModuleSwitcher({ title }: { title: string }) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  const canSwitch = mods.length > 1
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', cursor: 'pointer', color: '#fff', padding: 0 }}>
+      <button onClick={() => canSwitch && setOpen(o => !o)} disabled={!canSwitch}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', cursor: canSwitch ? 'pointer' : 'default', color: '#fff', padding: 0 }}>
         <img src="/bsm-mark.png" alt="BSM" style={{ height: 28, width: 'auto' }} />
         <div style={{ textAlign: 'left', lineHeight: 1.15 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
-          <div style={{ fontSize: 10.5, color: GOLD }}>tap to switch ▾</div>
+          {canSwitch && <div style={{ fontSize: 10.5, color: GOLD }}>tap to switch ▾</div>}
         </div>
       </button>
 
-      {open && (
+      {open && canSwitch && (
         <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, minWidth: 220, background: '#26221D', border: `1px solid ${GOLD}55`, borderRadius: 12, padding: 6, zIndex: 80, boxShadow: '0 16px 40px rgba(0,0,0,.5)' }}>
           <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.6, color: '#8C8375', padding: '6px 10px 8px' }}>Switch module</div>
           {mods.map(m => (
