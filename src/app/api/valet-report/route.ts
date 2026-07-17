@@ -141,7 +141,10 @@ export async function POST(req: NextRequest) {
   if (!ev) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
   const tenantEmail = (ev as Ev).valet_customers?.email || ''
-  if (!tenantEmail) return NextResponse.json({ ok: true, emailed: false, reason: 'no tenant email' })
+  if (!tenantEmail) {
+    await svc.from('valet_events').update({ email_error: 'No email on file for this customer.' }).eq('id', event_id)
+    return NextResponse.json({ ok: true, emailed: false, reason: 'no tenant email' })
+  }
 
   const { park, retrieve } = await pair(svc, ev as Ev)
 
@@ -157,6 +160,7 @@ export async function POST(req: NextRequest) {
     const bytes = await buildPDF(svc, park, retrieve, empMap)
     pdfB64 = Buffer.from(bytes).toString('base64')
   } catch (e: any) {
+    await svc.from('valet_events').update({ email_error: 'Report PDF could not be generated: ' + (e?.message || 'error') }).eq('id', event_id)
     return NextResponse.json({ error: 'PDF build failed: ' + (e?.message || 'error') }, { status: 500 })
   }
 
@@ -170,7 +174,9 @@ export async function POST(req: NextRequest) {
   const disclaimer = 'BSM Facility Solutions is not responsible for any damage reported more than 8 hours after the vehicle is returned to you.'
 
   let emailed = false
+  let failReason = ''
   const key = process.env.RESEND_API_KEY
+  if (!key) failReason = 'Email service is not configured (missing RESEND_API_KEY in Vercel).'
   if (key) {
     const GOLD = '#DCB878', CHAR = '#1E1B17', INK = '#3F3A32', MUTE = '#8C8375'
     const row = (label: string, value: string) => value
@@ -279,10 +285,35 @@ export async function POST(req: NextRequest) {
         }),
       })
       emailed = r.ok
-    } catch { emailed = false }
+      if (!r.ok) {
+        let detail = ''
+        try {
+          const body: any = await r.json()
+          detail = body?.message || body?.error?.message || body?.name || ''
+        } catch { /* non-JSON body */ }
+        if (r.status === 403) {
+          failReason = `Resend rejected the send (403). Usually the sending domain isn't verified.${detail ? ' — ' + detail : ''}`
+        } else if (r.status === 401) {
+          failReason = 'Resend rejected the API key (401). Check RESEND_API_KEY in Vercel.'
+        } else if (r.status === 422) {
+          failReason = `Resend couldn't accept the message (422).${detail ? ' — ' + detail : ''}`
+        } else if (r.status === 429) {
+          failReason = 'Resend rate limit reached (429). Try again shortly.'
+        } else {
+          failReason = `Resend error ${r.status}.${detail ? ' — ' + detail : ''}`
+        }
+      }
+    } catch (e: any) {
+      emailed = false
+      failReason = 'Could not reach the email service: ' + (e?.message || 'network error')
+    }
   }
 
-  // Only stamp reported_at when the email actually went out — it's the audit marker.
-  if (emailed) await svc.from('valet_events').update({ reported_at: new Date().toISOString() }).eq('id', event_id)
-  return NextResponse.json({ ok: true, emailed })
+  // reported_at is the audit marker — only stamped on a real send. Otherwise store why it failed.
+  await svc.from('valet_events').update(
+    emailed
+      ? { reported_at: new Date().toISOString(), email_error: null }
+      : { email_error: failReason || 'The report email did not send.' }
+  ).eq('id', event_id)
+  return NextResponse.json({ ok: true, emailed, reason: emailed ? null : failReason })
 }
