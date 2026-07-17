@@ -41,6 +41,12 @@ const T: Record<string, { en: string; es: string }> = {
   startTyping: { en: 'Start typing a name or plate…', es: 'Escribe un nombre o placa…' },
   searchParked: { en: 'Search parked cars…', es: 'Buscar autos estacionados…' },
   optional: { en: 'optional', es: 'opcional' },
+  notOnList: { en: 'Car not on the list?', es: '¿El auto no está en la lista?' },
+  backToParked: { en: 'Back to parked cars', es: 'Volver a autos estacionados' },
+  noIntakeWarn: {
+    en: 'These cars have no drop-off photos on file. Use this only for cars that were already in the garage before the app. The report will show return photos only.',
+    es: 'Estos autos no tienen fotos de entrada. Use esto solo para autos que ya estaban en el garaje antes de la app. El reporte mostrará solo las fotos de salida.',
+  },
   emailSent: { en: 'Report emailed to tenant ✓', es: 'Reporte enviado al inquilino ✓' },
   emailNoAddr: { en: 'No email on file — report not sent', es: 'Sin correo — reporte no enviado' },
   emailFailed: { en: 'Report email didn’t send', es: 'No se pudo enviar el reporte' },
@@ -83,6 +89,7 @@ type EventRow = {
 type Chosen = {
   customerId: string | null; vehicleId: string | null
   sessionId?: string | null
+  unlisted?: boolean
   displayName: string; plate: string
   newCustomer: QueuedEvent['newCustomer']; newVehicle: QueuedEvent['newVehicle']
 }
@@ -131,36 +138,75 @@ export default function ValetCapture() {
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
 
   const refresh = useCallback(async () => {
-    const { data: cust } = await supabase
-      .from('valet_customers')
-      .select('id, full_name, phone, email, valet_units(unit_number), valet_vehicles(id, license_plate, window_sticker, make, model, color)')
-      .eq('active', true).order('full_name')
-    setCustomers((cust as Customer[]) || [])
+    try {
+      const { data: cust, error: ce } = await supabase
+        .from('valet_customers')
+        .select('id, full_name, phone, email, valet_units(unit_number), valet_vehicles(id, license_plate, window_sticker, make, model, color)')
+        .eq('active', true).order('full_name')
+      if (ce) throw ce
+      const list = (cust as Customer[]) || []
+      setCustomers(list)
+      try { localStorage.setItem('valet_cache_customers', JSON.stringify(list)) } catch { /* ignore */ }
 
-    const { data: evs } = await supabase
-      .from('valet_events')
-      .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name, email), valet_vehicles(license_plate)')
-      .order('event_at', { ascending: false }).limit(60)
-    setEvents((evs as EventRow[]) || [])
-
+      const { data: evs, error: ee } = await supabase
+        .from('valet_events')
+        .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name, email), valet_vehicles(license_plate)')
+        .order('event_at', { ascending: false }).limit(60)
+      if (ee) throw ee
+      const ev = (evs as EventRow[]) || []
+      setEvents(ev)
+      try { localStorage.setItem('valet_cache_events', JSON.stringify(ev)) } catch { /* ignore */ }
+    } catch {
+      // offline — restore last-known roster + parked state from cache
+      try { const c = JSON.parse(localStorage.getItem('valet_cache_customers') || '[]'); if (Array.isArray(c) && c.length) setCustomers(c) } catch { /* ignore */ }
+      try { const e = JSON.parse(localStorage.getItem('valet_cache_events') || '[]'); if (Array.isArray(e)) setEvents(e) } catch { /* ignore */ }
+    }
     setPendingCount((await listQueue()).length)
   }, [supabase])
 
   const sync = useCallback(async () => {
-    const n = await drainQueue(supabase)
-    if (n > 0) { flash(`${n} synced ✓`); await refresh() }
+    const ids = await drainQueue(supabase)
+    if (ids.length > 0) {
+      flash(`${ids.length} synced ✓`)
+      await refresh()
+      // email the tenant a copy for each capture that just synced (best-effort)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token || ''
+        for (const id of ids) {
+          fetch('/api/valet-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ event_id: id }),
+          }).catch(() => {})
+        }
+      } catch { /* ignore */ }
+    }
     setPendingCount((await listQueue()).length)
   }, [supabase, refresh])
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      let user: any = null
+      try { const r = await supabase.auth.getUser(); user = r.data.user } catch { /* offline */ }
+      if (!user) { const { data: { session } } = await supabase.auth.getSession(); user = session?.user || null }
       if (!user) return
-      const { data: u } = await supabase.from('app_users').select('full_name, email, role').eq('id', user.id).single()
-      setMe({ id: user.id, name: u?.full_name || u?.email || user.email || '' })
-      setIsManager(u?.role === 'valet_manager' || u?.role === 'admin')
-      const { data: loc } = await supabase.from('valet_locations').select('id').eq('active', true).order('created_at').limit(1).maybeSingle()
-      setLocationId(loc?.id || null)
+      try {
+        const { data: u } = await supabase.from('app_users').select('full_name, email, role').eq('id', user.id).single()
+        const meObj = { id: user.id, name: u?.full_name || u?.email || user.email || '' }
+        const mgr = u?.role === 'valet_manager' || u?.role === 'admin'
+        setMe(meObj); setIsManager(mgr)
+        const { data: loc } = await supabase.from('valet_locations').select('id').eq('active', true).order('created_at').limit(1).maybeSingle()
+        setLocationId(loc?.id || null)
+        try { localStorage.setItem('valet_cache_ctx', JSON.stringify({ me: meObj, isManager: mgr, locationId: loc?.id || null })) } catch { /* ignore */ }
+      } catch {
+        // offline — restore who/where from cache
+        try {
+          const ctx = JSON.parse(localStorage.getItem('valet_cache_ctx') || 'null')
+          if (ctx?.me) { setMe(ctx.me); setIsManager(!!ctx.isManager); setLocationId(ctx.locationId || null) }
+          else setMe({ id: user.id, name: '' })
+        } catch { setMe({ id: user.id, name: '' }) }
+      }
       await refresh()
       await sync()
     })()
@@ -191,8 +237,8 @@ export default function ValetCapture() {
     setAction(a); setChosen(null); setShots([]); setNote(''); setStep('pick')
   }
 
-  function chooseExisting(c: Customer, v: Vehicle) {
-    setChosen({ customerId: c.id, vehicleId: v.id, displayName: c.full_name, plate: v.license_plate, newCustomer: null, newVehicle: null })
+  function chooseExisting(c: Customer, v: Vehicle, unlisted = false) {
+    setChosen({ customerId: c.id, vehicleId: v.id, displayName: c.full_name, plate: v.license_plate, newCustomer: null, newVehicle: null, unlisted })
     setStep('capture')
   }
 
@@ -204,12 +250,17 @@ export default function ValetCapture() {
   async function onSave() {
     if (!me || shots.length < SLOTS.length) return
     setSaving(true)
+    // Car was already in the garage before the app — record why there is no intake set.
+    const noIntake = action === 'retrieve' && chosen?.unlisted && !chosen?.sessionId
+    const finalNote = noIntake
+      ? ['No intake on file — car was already in the garage.', note.trim()].filter(Boolean).join(' ')
+      : note
     const ev: QueuedEvent = {
       clientRef: uuid(),
       action,
       employeeId: me.id,
       locationId,
-      note,
+      note: finalNote,
       customerId: chosen?.customerId || null,
       vehicleId: chosen?.vehicleId || null,
       sessionId: chosen?.sessionId || null,
@@ -366,6 +417,7 @@ function Accordion({ title, open, onToggle, children }: { title: string; open: b
 // ---------------- Pick customer / car ----------------
 function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCancel, lang }: any) {
   const [q, setQ] = useState('')
+  const [searchAll, setSearchAll] = useState(false)
   const [adding, setAdding] = useState(false)
   const [hostQ, setHostQ] = useState('')
   const [host, setHost] = useState<Customer | null>(null)
@@ -434,25 +486,56 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
     <div>
       <TopBar title={action === 'retrieve' ? t('pickCar') : t('park')} onBack={onCancel} back={t('cancel')} />
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={action === 'retrieve' ? t('searchParked') : t('search')} autoFocus style={{ ...inp, marginBottom: 10 }} />
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={action === 'retrieve' && !searchAll ? t('searchParked') : t('search')} autoFocus style={{ ...inp, marginBottom: 10 }} />
 
       {action === 'retrieve' ? (
-        <div style={card}>
-          {(() => {
-            const list = (parked as any[]).filter(p => !ql || `${p.plate} ${p.name}`.toLowerCase().includes(ql))
-            if (parked.length === 0) return <Empty>{t('noParked')}</Empty>
-            if (list.length === 0) return <Empty>{t('noMatch')}</Empty>
-            return list.map((p: any) => (
-              <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
-                  <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
-                </div>
-                <span style={{ color: GOLD }}>›</span>
-              </button>
-            ))
-          })()}
-        </div>
+        searchAll ? (
+          <>
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', marginBottom: 10, fontSize: 12.5, color: '#8A6D2F', lineHeight: 1.5 }}>
+              {t('noIntakeWarn')}
+            </div>
+            <div style={card}>
+              {matches.slice(0, 40).map(({ c, v }) => (
+                <button key={c.id + v.id} onClick={() => onExisting(c, v, true)} style={rowBtn}>
+                  <div style={{ minWidth: 0 }}>
+                    <div><b style={{ color: NAVY }}>{v.license_plate}</b> · {c.full_name}</div>
+                    <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                      {[c.valet_units?.unit_number ? `Apt ${c.valet_units.unit_number}` : '', [v.color, v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <span style={{ color: GOLD, flexShrink: 0 }}>›</span>
+                </button>
+              ))}
+              {ql && matches.length === 0 && <Empty>{t('noMatch')}</Empty>}
+              {!ql && <Empty>{t('startTyping')}</Empty>}
+            </div>
+            <button onClick={() => setSearchAll(false)} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginTop: 12 }}>
+              ‹ {t('backToParked')}
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={card}>
+              {(() => {
+                const list = (parked as any[]).filter(p => !ql || `${p.plate} ${p.name}`.toLowerCase().includes(ql))
+                if (parked.length === 0) return <Empty>{t('noParked')}</Empty>
+                if (list.length === 0) return <Empty>{t('noMatch')}</Empty>
+                return list.map((p: any) => (
+                  <button key={p.vehicle_id} onClick={() => onParked(p)} style={rowBtn}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
+                      <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
+                    </div>
+                    <span style={{ color: GOLD }}>›</span>
+                  </button>
+                ))
+              })()}
+            </div>
+            <button onClick={() => { setSearchAll(true); setQ('') }} style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 12 }}>
+              {t('notOnList')}
+            </button>
+          </>
+        )
       ) : ql ? (
         <div style={card}>
           {matches.slice(0, 40).map(({ c, v }) => (
