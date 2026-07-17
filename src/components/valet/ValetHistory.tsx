@@ -8,7 +8,7 @@ const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
 
 type Ev = {
-  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null; reported_at?: string | null
+  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null; reported_at?: string | null; email_error?: string | null
   vehicle_id: string | null; session_id?: string | null; customer_id: string | null; employee_id: string | null
   valet_customers: { full_name: string; customer_type?: string; email?: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
@@ -45,7 +45,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, reported_at, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, reported_at, email_error, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
       .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
@@ -286,6 +286,12 @@ export default function ValetHistory() {
                   <span>{fmt(e.event_at)} · {emp[e.employee_id || ''] || '—'}</span>
                   <EmailBadge e={e} />
                 </div>
+                {(() => {
+                  const st = emailState(e)
+                  return st.key === 'sent' ? null : (
+                    <div style={{ fontSize: 11, color: st.key === 'failed' ? '#B7791F' : '#A0AEC0', marginTop: 3, lineHeight: 1.4 }}>{st.reason}</div>
+                  )
+                })()}
               </div>
               <span style={{ color: GOLD, flexShrink: 0 }}>›</span>
             </button>
@@ -300,10 +306,11 @@ export default function ValetHistory() {
   )
 }
 
-export function emailState(e: any): { key: 'sent' | 'none' | 'failed'; label: string; fg: string; bg: string } {
-  if (e?.reported_at) return { key: 'sent', label: 'EMAILED ✓', fg: '#166534', bg: '#DCFCE7' }
-  if (!e?.valet_customers?.email) return { key: 'none', label: 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9' }
-  return { key: 'failed', label: 'NOT SENT', fg: '#B7791F', bg: '#FEF3C7' }
+export function emailState(e: any): { key: 'sent' | 'none' | 'failed' | 'pending'; label: string; fg: string; bg: string; reason: string } {
+  if (e?.reported_at) return { key: 'sent', label: 'EMAILED ✓', fg: '#166534', bg: '#DCFCE7', reason: '' }
+  if (!e?.valet_customers?.email) return { key: 'none', label: 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9', reason: e?.email_error || 'No email on file for this customer.' }
+  if (!e?.email_error) return { key: 'pending', label: 'NOT SENT', fg: '#64748B', bg: '#F1F5F9', reason: 'No send was attempted for this record.' }
+  return { key: 'failed', label: 'NOT SENT', fg: '#B7791F', bg: '#FEF3C7', reason: e.email_error }
 }
 
 function EmailBadge({ e }: { e: any }) {
@@ -359,9 +366,7 @@ function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onVoid, onFor
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, color: st.fg, background: st.bg, padding: '3px 7px', borderRadius: 5 }}>{st.label}</span>
               <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                {st.key === 'sent' ? `Report sent to ${addr}${e.reported_at ? ' · ' + fmt(e.reported_at) : ''}`
-                  : st.key === 'none' ? 'No email on file for this customer'
-                  : `Not sent to ${addr} — check Resend logs`}
+                {st.key === 'sent' ? `Report sent to ${addr}${e.reported_at ? ' · ' + fmt(e.reported_at) : ''}` : st.reason}
               </span>
             </div>
           )
