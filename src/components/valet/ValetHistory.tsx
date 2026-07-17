@@ -32,6 +32,8 @@ export default function ValetHistory() {
   const [busy, setBusy] = useState(false)
   const [meId, setMeId] = useState('')
   const [locId, setLocId] = useState<string | null>(null)
+  const [openStays, setOpenStays] = useState<{ vehicle_id: string; customer_id: string | null; since: string }[]>([])
+  const [tenants, setTenants] = useState<{ id: string; full_name: string; unit: string }[]>([])
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3500) }
 
@@ -58,6 +60,30 @@ export default function ValetHistory() {
       ;(us || []).forEach((u: any) => { m[u.id] = u.full_name || '' })
       setEmp(m)
     }
+    // Tenants on the roster (guests excluded) — for the coverage KPI
+    const { data: tens } = await supabase
+      .from('valet_customers')
+      .select('id, full_name, customer_type, valet_units(unit_number)')
+      .eq('active', true).order('full_name')
+    setTenants(((tens as any[]) || [])
+      .filter(c => c.customer_type !== 'guest')
+      .map(c => ({ id: c.id, full_name: c.full_name, unit: c.valet_units?.unit_number || '' })))
+
+    // Currently parked is all-time, not range-bound: newest event per vehicle must be a park
+    const { data: allEvs } = await supabase
+      .from('valet_events')
+      .select('action, event_at, vehicle_id, customer_id')
+      .neq('voided', true)
+      .order('event_at', { ascending: false }).limit(3000)
+    const seen = new Set<string>()
+    const open: { vehicle_id: string; customer_id: string | null; since: string }[] = []
+    for (const e of ((allEvs as any[]) || [])) {
+      if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
+      seen.add(e.vehicle_id)
+      if (e.action === 'park') open.push({ vehicle_id: e.vehicle_id, customer_id: e.customer_id, since: e.event_at })
+    }
+    setOpenStays(open)
+
     setLoading(false)
   }, [supabase, from, to])
 
@@ -269,6 +295,8 @@ export default function ValetHistory() {
         ⬇ Export PDF ({filtered.length})
       </button>
 
+      <Kpis events={events} openStays={openStays} tenants={tenants} from={from} to={to} />
+
       <div style={card}>
         {loading ? <Empty>Loading…</Empty> : filtered.length === 0 ? <Empty>No activity in this range.</Empty> :
           filtered.map(e => (
@@ -320,6 +348,85 @@ function EmailBadge({ e }: { e: any }) {
       style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, color: s.fg, background: s.bg, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap' }}>
       {s.label}
     </span>
+  )
+}
+
+
+// ---------------- KPIs ----------------
+function Kpis({ events, openStays, tenants, from, to }: any) {
+  const [showMissing, setShowMissing] = useState(false)
+
+  const parks = (events as Ev[]).filter(e => e.action === 'park').length
+  const rets = (events as Ev[]).filter(e => e.action === 'retrieve').length
+
+  // Tenants who cycled a car (parked at least once) in this range
+  const cycled = new Set<string>()
+  for (const e of events as Ev[]) {
+    if (e.action === 'park' && e.customer_id && (e.valet_customers as any)?.customer_type !== 'guest') cycled.add(e.customer_id)
+  }
+  const total = (tenants as any[]).length
+  const done = (tenants as any[]).filter(t => cycled.has(t.id)).length
+  const missing = (tenants as any[]).filter(t => !cycled.has(t.id))
+  const pct = total ? Math.round((done / total) * 100) : 0
+  const allIn = total > 0 && done === total
+
+  const sameDay = from === to
+  const rangeLabel = sameDay ? 'today' : 'in range'
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+        <Kpi label="Currently parked" value={openStays.length} accent />
+        <Kpi label={`Parked ${rangeLabel}`} value={parks} />
+        <Kpi label={`Retrieved ${rangeLabel}`} value={rets} />
+        <Kpi label="Open stays" value={openStays.length} hint={openStays.length > 0 ? 'awaiting pickup' : 'all returned'} />
+      </div>
+
+      {/* tenant cycling coverage */}
+      <div style={{ ...card, marginTop: 10, padding: '14px 14px 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, color: '#94A3B8', textTransform: 'uppercase' }}>Tenants who cycled a car</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: allIn ? '#166534' : NAVY }}>
+            {done} of {total} <span style={{ color: '#94A3B8', fontWeight: 600 }}>({pct}%)</span>
+          </div>
+        </div>
+        <div style={{ height: 8, background: '#F1F3F8', borderRadius: 5, overflow: 'hidden', marginTop: 9 }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: allIn ? '#22C55E' : GOLD, transition: 'width .3s' }} />
+        </div>
+        {allIn ? (
+          <div style={{ fontSize: 12, color: '#166534', marginTop: 8, fontWeight: 600 }}>✓ Every tenant on the roster has cycled a car in this range.</div>
+        ) : (
+          <>
+            <button onClick={() => setShowMissing(v => !v)}
+              style={{ background: 'transparent', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 600, padding: '9px 0 0', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {showMissing ? 'Hide' : `Show the ${missing.length} not yet seen`}
+              <span style={{ display: 'inline-block', transform: showMissing ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s', color: GOLD }}>›</span>
+            </button>
+            {showMissing && (
+              <div style={{ marginTop: 8, maxHeight: 220, overflow: 'auto', borderTop: '1px solid #F1F3F8' }}>
+                {missing.map((t: any) => (
+                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 2px', borderBottom: '1px solid #F7F8FB', fontSize: 13, color: '#334155' }}>
+                    <span>{t.full_name}</span>
+                    <span style={{ color: '#94A3B8', fontSize: 12 }}>{t.unit ? `Apt ${t.unit}` : '—'}</span>
+                  </div>
+                ))}
+                {missing.length === 0 && <Empty>—</Empty>}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Kpi({ label, value, hint, accent }: { label: string; value: number; hint?: string; accent?: boolean }) {
+  return (
+    <div style={{ background: accent ? NAVY : '#fff', border: accent ? `1px solid ${GOLD}` : '1px solid #E5E0D8', borderRadius: 12, padding: '12px 13px' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: accent ? GOLD : NAVY, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: accent ? '#B7AC97' : '#94A3B8', marginTop: 4 }}>{label}</div>
+      {hint && <div style={{ fontSize: 10.5, color: accent ? '#8C8375' : '#B6BECC', marginTop: 2 }}>{hint}</div>}
+    </div>
   )
 }
 
