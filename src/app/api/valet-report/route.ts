@@ -12,12 +12,12 @@ const GOLD = rgb(0.863, 0.722, 0.471)
 
 type Ev = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null; session_id: string | null; employee_id: string | null
+  vehicle_id: string | null; session_id: string | null; employee_id: string | null; email_attempts?: number | null
   valet_customers: { full_name: string; email: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
 }
 const EV_SELECT =
-  'id, action, event_at, note, vehicle_id, session_id, employee_id, valet_customers(full_name, email, valet_units(unit_number)), valet_vehicles(license_plate)'
+  'id, action, event_at, note, vehicle_id, session_id, employee_id, email_attempts, valet_customers(full_name, email, valet_units(unit_number)), valet_vehicles(license_plate)'
 
 async function requireValet(req: NextRequest): Promise<boolean> {
   const auth = req.headers.get('authorization') || ''
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   const tenantEmail = (ev as Ev).valet_customers?.email || ''
   if (!tenantEmail) {
-    await svc.from('valet_events').update({ email_error: 'No email on file for this customer.' }).eq('id', event_id)
+    await svc.from('valet_events').update({ email_error: 'No email on file for this customer.', email_retryable: false }).eq('id', event_id)
     return NextResponse.json({ ok: true, emailed: false, reason: 'no tenant email' })
   }
 
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     const bytes = await buildPDF(svc, park, retrieve, empMap)
     pdfB64 = Buffer.from(bytes).toString('base64')
   } catch (e: any) {
-    await svc.from('valet_events').update({ email_error: 'Report PDF could not be generated: ' + (e?.message || 'error') }).eq('id', event_id)
+    await svc.from('valet_events').update({ email_error: 'Report PDF could not be generated: ' + (e?.message || 'error'), email_retryable: true, email_attempts: (((ev as Ev).email_attempts || 0) + 1) }).eq('id', event_id)
     return NextResponse.json({ error: 'PDF build failed: ' + (e?.message || 'error') }, { status: 500 })
   }
 
@@ -175,8 +175,9 @@ export async function POST(req: NextRequest) {
 
   let emailed = false
   let failReason = ''
+  let retryable = true            // transient failures are worth retrying; config/address errors are not
   const key = process.env.RESEND_API_KEY
-  if (!key) failReason = 'Email service is not configured (missing RESEND_API_KEY in Vercel).'
+  if (!key) { failReason = 'Email service is not configured (missing RESEND_API_KEY in Vercel).'; retryable = false }
   if (key) {
     const GOLD = '#DCB878', CHAR = '#1E1B17', INK = '#3F3A32', MUTE = '#8C8375'
     const row = (label: string, value: string) => value
@@ -293,27 +294,37 @@ export async function POST(req: NextRequest) {
         } catch { /* non-JSON body */ }
         if (r.status === 403) {
           failReason = `Resend rejected the send (403). Usually the sending domain isn't verified.${detail ? ' — ' + detail : ''}`
+          retryable = false       // won't fix itself — verify the domain, then retry manually
         } else if (r.status === 401) {
           failReason = 'Resend rejected the API key (401). Check RESEND_API_KEY in Vercel.'
+          retryable = false
         } else if (r.status === 422) {
           failReason = `Resend couldn't accept the message (422).${detail ? ' — ' + detail : ''}`
+          retryable = false       // usually a bad address or payload
         } else if (r.status === 429) {
-          failReason = 'Resend rate limit reached (429). Try again shortly.'
+          failReason = 'Resend rate limit reached (429) — will retry automatically.'
+          retryable = true
+        } else if (r.status >= 500) {
+          failReason = `Resend server error ${r.status} — will retry automatically.${detail ? ' — ' + detail : ''}`
+          retryable = true
         } else {
           failReason = `Resend error ${r.status}.${detail ? ' — ' + detail : ''}`
+          retryable = false
         }
       }
     } catch (e: any) {
       emailed = false
-      failReason = 'Could not reach the email service: ' + (e?.message || 'network error')
+      failReason = 'Could not reach the email service — will retry automatically. ' + (e?.message || 'network error')
+      retryable = true
     }
   }
 
   // reported_at is the audit marker — only stamped on a real send. Otherwise store why it failed.
+  const attempts = ((ev as Ev).email_attempts || 0) + 1
   await svc.from('valet_events').update(
     emailed
-      ? { reported_at: new Date().toISOString(), email_error: null }
-      : { email_error: failReason || 'The report email did not send.' }
+      ? { reported_at: new Date().toISOString(), email_error: null, email_retryable: true, email_attempts: attempts }
+      : { email_error: failReason || 'The report email did not send.', email_retryable: retryable, email_attempts: attempts }
   ).eq('id', event_id)
-  return NextResponse.json({ ok: true, emailed, reason: emailed ? null : failReason })
+  return NextResponse.json({ ok: true, emailed, reason: emailed ? null : failReason, retryable, attempts })
 }
