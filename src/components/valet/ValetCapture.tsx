@@ -222,7 +222,6 @@ export default function ValetCapture() {
         .select('id')
         .is('reported_at', null)
         .eq('email_retryable', true)
-        .gt('email_attempts', 0)
         .lt('email_attempts', 5)
         .gte('event_at', cutoff)
         .order('event_at', { ascending: false })
@@ -477,16 +476,38 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
   )
 }
 
-function EmailTag({ e, lang }: { e: any; lang: string }) {
-  if (!e) return null
+const MAX_TRIES = 5
+
+export function emailStatus(e: any, lang: string) {
   const es = lang === 'es'
-  let label: string, fg: string, bg: string
-  if (e.reported_at) { label = es ? 'ENVIADO ✓' : 'EMAILED ✓'; fg = '#166534'; bg = '#DCFCE7' }
-  else if (!e.valet_customers?.email) { label = es ? 'SIN CORREO' : 'NO EMAIL'; fg = '#64748B'; bg = '#F1F5F9' }
-  else if (!e.email_error) { label = es ? 'NO ENVIADO' : 'NOT SENT'; fg = '#64748B'; bg = '#F1F5F9' }
-  else { label = es ? 'NO ENVIADO' : 'NOT SENT'; fg = '#B7791F'; bg = '#FEF3C7' }
+  if (!e) return null
+  if (e.reported_at) return { key: 'sent', label: es ? 'ENVIADO ✓' : 'EMAILED ✓', fg: '#166534', bg: '#DCFCE7', reason: '' }
+  if (!e.valet_customers?.email) {
+    return { key: 'none', label: es ? 'SIN CORREO' : 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9',
+      reason: es ? 'Sin correo registrado — no hay a dónde enviar.' : 'No email on file — nothing to send.' }
+  }
+  const tries = e.email_attempts || 0
+  if (e.email_retryable === false) {
+    return { key: 'stuck', label: es ? 'REQUIERE ARREGLO' : 'NEEDS FIX', fg: '#B91C1C', bg: '#FEE2E2',
+      reason: (e.email_error || '') + (es ? ' No se reintentará solo.' : ' This will not retry on its own.') }
+  }
+  if (tries >= MAX_TRIES) {
+    return { key: 'stuck', label: es ? 'SE DETUVO' : 'GAVE UP', fg: '#B91C1C', bg: '#FEE2E2',
+      reason: (e.email_error || '') + (es ? ` Se intentó ${tries} veces.` : ` Tried ${tries} times and stopped.`) }
+  }
+  if (tries === 0) {
+    return { key: 'queued', label: es ? 'EN COLA' : 'QUEUED', fg: '#B7791F', bg: '#FEF3C7',
+      reason: es ? 'Se enviará automáticamente en breve.' : 'Will be emailed automatically shortly.' }
+  }
+  return { key: 'retrying', label: es ? 'REINTENTANDO' : 'RETRYING', fg: '#B7791F', bg: '#FEF3C7',
+    reason: (e.email_error || '') + (es ? ` Reintentando (${tries}/${MAX_TRIES}).` : ` Will retry automatically (${tries}/${MAX_TRIES}).`) }
+}
+
+function EmailTag({ e, lang }: { e: any; lang: string }) {
+  const s = emailStatus(e, lang)
+  if (!s) return null
   return (
-    <span title={e.email_error || ''} style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.3, color: fg, background: bg, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap' }}>{label}</span>
+    <span title={s.reason} style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.3, color: s.fg, background: s.bg, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap' }}>{s.label}</span>
   )
 }
 
@@ -973,10 +994,7 @@ function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClos
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
           <EmailTag e={e} lang={lang} />
           <span style={{ fontSize: 11.5, color: '#94A3B8' }}>
-            {e.reported_at ? `${lang === 'es' ? 'Enviado a' : 'Sent to'} ${email}`
-              : e.email_error ? e.email_error
-              : email === '—' ? (lang === 'es' ? 'Sin correo registrado' : 'No email on file')
-              : ''}
+            {e.reported_at ? `${lang === 'es' ? 'Enviado a' : 'Sent to'} ${email}` : (emailStatus(e, lang)?.reason || '')}
           </span>
         </div>
         <Block title={t('park')} ev={park} pics={parkPics} />
