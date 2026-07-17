@@ -3,6 +3,10 @@
     {
       "path": "/api/interview-agenda",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/valet-report-retry",
+      "schedule": "0 * * * *"
     }
   ]
 }
