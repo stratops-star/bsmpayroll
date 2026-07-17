@@ -84,7 +84,7 @@ type Vehicle = { id: string; license_plate: string; window_sticker?: string | nu
 type Customer = { id: string; full_name: string; phone: string | null; email: string | null; valet_units?: { unit_number: string } | null; valet_vehicles: Vehicle[] }
 type EventRow = {
   id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null
-  vehicle_id: string | null; session_id?: string | null; customer_id?: string | null
+  vehicle_id: string | null; session_id?: string | null; customer_id?: string | null; reported_at?: string | null; email_error?: string | null
   valet_customers: { full_name: string; email?: string | null } | null
   valet_vehicles: { license_plate: string } | null
 }
@@ -152,7 +152,7 @@ export default function ValetCapture() {
 
       const { data: evs, error: ee } = await supabase
         .from('valet_events')
-        .select('id, action, event_at, note, vehicle_id, session_id, customer_id, valet_customers(full_name, email), valet_vehicles(license_plate)')
+        .select('id, action, event_at, note, reported_at, email_error, vehicle_id, session_id, customer_id, valet_customers(full_name, email), valet_vehicles(license_plate)')
         .order('event_at', { ascending: false }).limit(60)
       if (ee) throw ee
       const ev = (evs as EventRow[]) || []
@@ -218,7 +218,7 @@ export default function ValetCapture() {
   }, [supabase, refresh, sync])
 
   // ---- currently parked (latest event per vehicle is a park) ----
-  const parked: { vehicle_id: string; name: string; plate: string; since: string; session_id: string | null; customer_id: string | null }[] = []
+  const parked: { vehicle_id: string; name: string; plate: string; since: string; session_id: string | null; customer_id: string | null; ev: EventRow }[] = []
   const seen = new Set<string>()
   for (const e of events) {
     if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
@@ -231,6 +231,7 @@ export default function ValetCapture() {
         since: e.event_at,
         session_id: e.session_id || null,
         customer_id: e.customer_id || null,
+        ev: e,
       })
     }
   }
@@ -381,6 +382,7 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={parkedBadge}>{lang === 'es' ? 'ESTACIONADO' : 'PARKED'}</span>
                 <span><b style={{ color: NAVY }}>{p.plate}</b> · {p.name}</span>
+                <EmailTag e={p.ev} lang={lang} />
               </div>
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('parkedSince')} {timeAgo(p.since, lang)} ›</div>
             </button>
@@ -403,12 +405,26 @@ function Home({ t, parked, events, lang, onPark, onRetrieve, onPickParked, onRep
                   {e.action === 'park' ? t('park') : t('retrieve')}
                 </span>
                 <b style={{ color: NAVY }}>{e.valet_vehicles?.license_plate || '—'}</b> · {e.valet_customers?.full_name || '—'}
+                <span style={{ marginLeft: 8 }}><EmailTag e={e} lang={lang} /></span>
               </div>
               <div style={{ fontSize: 12, color: '#94A3B8' }}>{timeAgo(e.event_at, lang)} ›</div>
             </button>
           ))}
       </Accordion>
     </div>
+  )
+}
+
+function EmailTag({ e, lang }: { e: any; lang: string }) {
+  if (!e) return null
+  const es = lang === 'es'
+  let label: string, fg: string, bg: string
+  if (e.reported_at) { label = es ? 'ENVIADO ✓' : 'EMAILED ✓'; fg = '#166534'; bg = '#DCFCE7' }
+  else if (!e.valet_customers?.email) { label = es ? 'SIN CORREO' : 'NO EMAIL'; fg = '#64748B'; bg = '#F1F5F9' }
+  else if (!e.email_error) { label = es ? 'NO ENVIADO' : 'NOT SENT'; fg = '#64748B'; bg = '#F1F5F9' }
+  else { label = es ? 'NO ENVIADO' : 'NOT SENT'; fg = '#B7791F'; bg = '#FEF3C7' }
+  return (
+    <span title={e.email_error || ''} style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.3, color: fg, background: bg, padding: '2px 6px', borderRadius: 5, whiteSpace: 'nowrap' }}>{label}</span>
   )
 }
 
@@ -890,6 +906,15 @@ function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClos
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <b style={{ color: NAVY, fontSize: 17 }}>{plate} · {name}</b>
           <button onClick={onClose} style={{ background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{t('close')}</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
+          <EmailTag e={e} lang={lang} />
+          <span style={{ fontSize: 11.5, color: '#94A3B8' }}>
+            {e.reported_at ? `${lang === 'es' ? 'Enviado a' : 'Sent to'} ${email}`
+              : e.email_error ? e.email_error
+              : email === '—' ? (lang === 'es' ? 'Sin correo registrado' : 'No email on file')
+              : ''}
+          </span>
         </div>
         <Block title={t('park')} ev={park} pics={parkPics} />
         <Block title={t('retrieve')} ev={ret} pics={retPics} />
