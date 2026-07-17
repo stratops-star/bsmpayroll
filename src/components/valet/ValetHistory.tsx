@@ -8,7 +8,7 @@ const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
 
 type Ev = {
-  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null; reported_at?: string | null; email_error?: string | null
+  id: string; action: 'park' | 'retrieve'; event_at: string; note: string | null; reported_at?: string | null; email_error?: string | null; email_attempts?: number | null; email_retryable?: boolean | null
   vehicle_id: string | null; session_id?: string | null; customer_id: string | null; employee_id: string | null
   valet_customers: { full_name: string; customer_type?: string; email?: string | null; valet_units: { unit_number: string } | null } | null
   valet_vehicles: { license_plate: string } | null
@@ -35,7 +35,7 @@ export default function ValetHistory() {
   const [openStays, setOpenStays] = useState<{ vehicle_id: string; customer_id: string | null; since: string }[]>([])
   const [tenants, setTenants] = useState<{ id: string; full_name: string; unit: string }[]>([])
 
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3500) }
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), m.length > 60 ? 9000 : 3500) }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -47,7 +47,7 @@ export default function ValetHistory() {
     const end = new Date(to + 'T23:59:59').toISOString()
     const { data } = await supabase
       .from('valet_events')
-      .select('id, action, event_at, note, reported_at, email_error, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
+      .select('id, action, event_at, note, reported_at, email_error, email_attempts, email_retryable, vehicle_id, session_id, customer_id, employee_id, valet_customers(full_name, customer_type, email, valet_units(unit_number)), valet_vehicles(license_plate)')
       .neq('voided', true)
       .gte('event_at', start).lte('event_at', end)
       .order('event_at', { ascending: false }).limit(1000)
@@ -248,6 +248,26 @@ export default function ValetHistory() {
     setBusy(false)
   }
 
+  async function sendReport(e: Ev) {
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const r = await fetch('/api/valet-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ event_id: e.id }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (d?.emailed) flash('Report emailed to the tenant ✓')
+      else flash(d?.reason || d?.error || 'The report email did not send.')
+    } catch (err: any) {
+      flash('Could not reach the server: ' + (err?.message || 'error'))
+    }
+    setBusy(false)
+    setSel(null)
+    load()
+  }
+
   function dl(bytes: Uint8Array, name: string) {
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
     const a = document.createElement('a'); a.href = url; a.download = name; a.click()
@@ -328,17 +348,31 @@ export default function ValetHistory() {
       <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>{filtered.length} of {events.length} records</p>
 
       {sel && <Detail e={sel} emp={emp} stayFor={stayFor} photosFor={photosFor} fmt={fmt}
-        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)}
+        onClose={() => setSel(null)} onPDF={() => downloadStayPDF(sel)} onSend={() => sendReport(sel)}
         onVoid={() => voidCapture(sel)} onForceClose={() => forceClose(sel)} busy={busy} />}
     </div>
   )
 }
 
-export function emailState(e: any): { key: 'sent' | 'none' | 'failed' | 'pending'; label: string; fg: string; bg: string; reason: string } {
+const MAX_TRIES = 5
+
+export function emailState(e: any): { key: 'sent' | 'none' | 'queued' | 'retrying' | 'stuck'; label: string; fg: string; bg: string; reason: string } {
   if (e?.reported_at) return { key: 'sent', label: 'EMAILED ✓', fg: '#166534', bg: '#DCFCE7', reason: '' }
-  if (!e?.valet_customers?.email) return { key: 'none', label: 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9', reason: e?.email_error || 'No email on file for this customer.' }
-  if (!e?.email_error) return { key: 'pending', label: 'NOT SENT', fg: '#64748B', bg: '#F1F5F9', reason: 'No send was attempted for this record.' }
-  return { key: 'failed', label: 'NOT SENT', fg: '#B7791F', bg: '#FEF3C7', reason: e.email_error }
+  if (!e?.valet_customers?.email) {
+    return { key: 'none', label: 'NO EMAIL', fg: '#64748B', bg: '#F1F5F9', reason: 'No email on file for this customer — nothing to send. Add an email on the Tenants tab.' }
+  }
+  const tries = e?.email_attempts || 0
+  const retryable = e?.email_retryable !== false
+  if (!retryable) {
+    return { key: 'stuck', label: 'NEEDS FIX', fg: '#B91C1C', bg: '#FEE2E2', reason: `${e?.email_error || 'The report email did not send.'} This will not retry on its own — fix the cause, then press Send report.` }
+  }
+  if (tries >= MAX_TRIES) {
+    return { key: 'stuck', label: 'GAVE UP', fg: '#B91C1C', bg: '#FEE2E2', reason: `${e?.email_error || 'The report email did not send.'} Tried ${tries} times and stopped — press Send report to try again.` }
+  }
+  if (tries === 0) {
+    return { key: 'queued', label: 'QUEUED', fg: '#B7791F', bg: '#FEF3C7', reason: 'Not sent yet — the app will email this automatically the next time an attendant opens it.' }
+  }
+  return { key: 'retrying', label: 'RETRYING', fg: '#B7791F', bg: '#FEF3C7', reason: `${e?.email_error || 'Did not send.'} Will retry automatically (${tries} of ${MAX_TRIES} tries used).` }
 }
 
 function EmailBadge({ e }: { e: any }) {
@@ -430,7 +464,7 @@ function Kpi({ label, value, hint, accent }: { label: string; value: number; hin
   )
 }
 
-function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onVoid, onForceClose, busy }: any) {
+function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onSend, onVoid, onForceClose, busy }: any) {
   const { park, retrieve } = stayFor(e)
   const [parkPics, setParkPics] = useState<any[]>([])
   const [retPics, setRetPics] = useState<any[]>([])
@@ -481,6 +515,12 @@ function Detail({ e, emp, stayFor, photosFor, fmt, onClose, onPDF, onVoid, onFor
         <Photos title="PARK — intake" ev={park} pics={parkPics} />
         <Photos title="RETRIEVE — return" ev={retrieve} pics={retPics} />
         <button onClick={onPDF} disabled={busy} style={{ ...primaryBtn, marginTop: 16 }}>⬇ Download report PDF</button>
+        {e.valet_customers?.email && (
+          <button onClick={onSend} disabled={busy}
+            style={{ ...primaryBtn, background: '#fff', color: NAVY, border: `1.5px solid ${NAVY}`, marginTop: 8 }}>
+            {busy ? 'Sending…' : emailState(e).key === 'sent' ? 'Send the report again' : 'Send report to tenant — see why it failed'}
+          </button>
+        )}
         {stillParked && (
           <button onClick={() => { if (confirm('Mark this car as retrieved without photos?')) onForceClose() }} disabled={busy}
             style={{ ...primaryBtn, background: '#fff', color: '#B7791F', border: '1.5px solid #E7CfA0', marginTop: 8 }}>
@@ -505,6 +545,6 @@ const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', borde
 const primaryBtn: React.CSSProperties = { width: '100%', background: NAVY, color: '#fff', border: 'none', borderRadius: 12, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }
 const tinyBtn: React.CSSProperties = { background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const rowBtn: React.CSSProperties = { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', padding: '11px 8px', cursor: 'pointer', textAlign: 'left' }
-const toastStyle: React.CSSProperties = { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: NAVY, color: '#fff', padding: '10px 18px', borderRadius: 999, fontSize: 14, zIndex: 60, boxShadow: '0 8px 24px rgba(0,0,0,.3)' }
+const toastStyle: React.CSSProperties = { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: NAVY, color: '#fff', padding: '12px 18px', borderRadius: 14, fontSize: 13.5, zIndex: 60, boxShadow: '0 8px 24px rgba(0,0,0,.3)', maxWidth: 'min(92vw, 460px)', lineHeight: 1.45, textAlign: 'center' }
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(13,27,53,.45)', display: 'grid', placeItems: 'end center', zIndex: 55 }
 const sheet: React.CSSProperties = { background: '#fff', width: '100%', maxWidth: 560, borderRadius: '16px 16px 0 0', padding: 18, maxHeight: '90vh', overflow: 'auto' }
