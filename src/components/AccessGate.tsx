@@ -40,6 +40,9 @@ export default function AccessGate({
       const role = me?.role || ''
       if (me?.active && SCOPED_HOME[role]) { router.replace(SCOPED_HOME[role]); return }
 
+      // Admins may enter any department-gated area.
+      if (me?.active && role === 'admin') { setState('ok'); return }
+
       const depts = (me?.active && me.departments) || []
       const allowed = requireDepartment ? depts.includes(requireDepartment) : depts.length > 0
       setState(allowed ? 'ok' : 'no-department')
