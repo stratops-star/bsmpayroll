@@ -40,7 +40,16 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
   const [isAdmin, setIsAdmin] = useState(false)
   const [email, setEmail] = useState('')
   const [open, setOpen] = useState(false)
+  const [areaOverride, setAreaOverride] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+
+  // A page can set the header area by dispatching a 'bsm:area' event.
+  useEffect(() => {
+    const onArea = (e: any) => setAreaOverride(e?.detail ?? null)
+    window.addEventListener('bsm:area', onArea as any)
+    return () => window.removeEventListener('bsm:area', onArea as any)
+  }, [])
+  const shownArea = areaOverride ?? area
 
   useEffect(() => {
     (async () => {
@@ -78,7 +87,7 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
           title={canSwitch ? 'Switch module' : 'Home'}>
           <Mark />
           <span className="flex flex-col items-start leading-tight min-w-0">
-            <span className="text-white text-[15px] font-bold truncate">BSM{area ? ` — ${area}` : ''}</span>
+            <span className="text-white text-[15px] font-bold truncate">BSM{shownArea ? ` — ${shownArea}` : ''}</span>
             {canSwitch && <span className="text-[#DCB878] text-[11px] flex items-center gap-1">tap to switch <span className="opacity-60">▾</span></span>}
           </span>
         </button>
