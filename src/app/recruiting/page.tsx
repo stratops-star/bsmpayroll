@@ -78,8 +78,7 @@ export default function NewQueuePage() {
   useEffect(() => {
     setActions(
       <>
-        {isAdmin && <a href="/recruiting/import" className="text-sm bg-[var(--surface-2)] text-[var(--text)]/10 hover:bg-[var(--surface)]/20 text-white border border-white/15 font-medium rounded-lg px-3 py-1.5 whitespace-nowrap">⭳ {t('import')}</a>}
-        {canAct && <button onClick={() => setShowAdd(true)} className="text-sm bg-[var(--gold)] text-[var(--on-gold)] font-semibold rounded-lg px-3 py-1.5 whitespace-nowrap">+ {t('add_candidate')}</button>}
+        {canAct && <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 whitespace-nowrap text-sm bg-[var(--gold)] text-[var(--on-gold)] font-semibold rounded-lg w-full justify-start px-3 py-2.5 sm:w-auto sm:justify-center sm:py-1.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>{t('add_candidate')}</button>}
         <ShareCareers />
       </>
     )
@@ -192,7 +191,7 @@ export default function NewQueuePage() {
                       <div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} /></div><div className="text-xs text-[var(--muted)]">{[c.borough, c.city, c.state].filter(Boolean).join(', ') || '—'}</div></div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-3">{(c.positions || []).slice(0, 3).map(p => <span key={p} className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{p}</span>)}</div>
-                    <div className="flex items-center justify-between text-[11px] text-[var(--faint)] border-t border-[var(--border)] pt-2.5"><span>{c.preferred_lang === 'es' ? '🇪🇸' : '🇺🇸'} · {payText(c)} · {fmtDate(c.created_at)}</span><span>{ago(c.created_at)}</span></div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--faint)] border-t border-[var(--border)] pt-2.5"><span className="inline-flex items-center gap-1"><span className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--gold)]">{c.preferred_lang === 'es' ? 'ES' : 'EN'}</span> · {payText(c)} · {fmtDate(c.created_at)}</span><span>{ago(c.created_at)}</span></div>
                   </button>
                 ))}
               </div>}
@@ -201,8 +200,8 @@ export default function NewQueuePage() {
 
       {sel && (
         <>
-          <div className="fixed inset-0 bg-black/60 z-20" onClick={close} />
-          <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-30 shadow-2xl flex flex-col">
+          <div className="fixed inset-0 bg-black/60 z-[60]" onClick={close} />
+          <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-[70] shadow-2xl flex flex-col">
             <div className="p-5 border-b border-[var(--border)] relative">
               <button onClick={close} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
               <div className="flex items-center gap-3"><Avatar name={sel.full_name} src={photos[sel.id]} size={48} />
@@ -239,7 +238,7 @@ export default function NewQueuePage() {
       {showAdd && <AddCandidate supabase={supabase} onClose={() => setShowAdd(false)} onAdded={(c) => { setRows(rs => [c, ...rs]); setShowAdd(false); flash(t('add_candidate')) }} />}
 
       {overrideOpen && (
-        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={() => setOverrideOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4" onClick={() => setOverrideOpen(false)}>
           <div className="bg-[var(--surface)] rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2"><h2 className="text-lg font-semibold text-[var(--text)]">{t('override_title')}</h2><button onClick={() => setOverrideOpen(false)} className="w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button></div>
             <p className="text-xs text-[var(--muted)] mb-4">{t('override_desc')}</p>
@@ -256,7 +255,7 @@ export default function NewQueuePage() {
           </div>
         </div>
       )}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[90]"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
     </div>
   )
 }
@@ -282,7 +281,7 @@ function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: 
     setBusy(false); if (error) { setErr(error.message); return }; onAdded(data as Candidate)
   }
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-[var(--surface)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-[var(--text)]">{L(TR.addCandidate)}</h2>
