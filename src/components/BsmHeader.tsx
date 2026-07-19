@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
+import { ThemeToggle } from '@/components/theme'
 
 // ── Module map: department → destination ──────────────────────────────
 type Mod = { key: string; label: string; href: string }
@@ -116,9 +117,10 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
         )}
       </div>
 
-      {/* right: page actions (lang toggle, share, etc.) + identity */}
+      {/* right: page actions (lang toggle, share, etc.) + theme + identity */}
       <div className="flex items-center gap-3 flex-shrink-0">
         {right}
+        <ThemeToggle />
         <div className="w-px h-4 bg-white/15 hidden sm:block" />
         <span className="text-white/30 text-xs truncate max-w-[150px] hidden sm:block">{email}</span>
         <button onClick={signOut} className="text-white/40 text-xs hover:text-white transition-colors">Sign out</button>
