@@ -1,5 +1,6 @@
 import AccessGate from '@/components/AccessGate'
-import NavBar from '@/components/NavBar'
+import BsmHeader from '@/components/BsmHeader'
+import RecruitingHeaderActions from '@/components/RecruitingHeaderActions'
 import { RecruitingChromeProvider } from '@/components/RecruitingChrome'
 import { RecruitingLangProvider } from '@/components/recruiting-i18n'
 
@@ -8,7 +9,7 @@ export default function RecruitingLayout({ children }: { children: React.ReactNo
     <AccessGate requireDepartment="recruiting">
       <RecruitingLangProvider>
         <RecruitingChromeProvider>
-          <NavBar />
+          <BsmHeader area="Recruiting" right={<RecruitingHeaderActions />} />
           {children}
         </RecruitingChromeProvider>
       </RecruitingLangProvider>
