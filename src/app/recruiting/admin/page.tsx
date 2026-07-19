@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 
 // Hub dark palette
-const CHAR = '#1E1B17', PANEL = '#211E1A', HOVER = '#26221D', RAISE = '#2A241D'
-const GOLD = '#DCB878'
-const INK = '#EDE7DD', MUTE = '#8C8375', FAINT = '#6E665C'
-const BORDER = '#3A342B', BORDER_GOLD = 'rgba(220,184,120,.28)'
+const CHAR = 'var(--bg)', PANEL = 'var(--surface)', HOVER = 'var(--surface-2)', RAISE = 'var(--raise)'
+const GOLD = 'var(--gold)'
+const INK = 'var(--text)', MUTE = 'var(--muted)', FAINT = 'var(--faint)'
+const BORDER = 'var(--border)', BORDER_GOLD = 'rgba(220,184,120,.28)'
 
 type AppUser = {
   id: string
