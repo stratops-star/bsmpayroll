@@ -101,24 +101,24 @@ export default function InterviewStage({ kind }: { kind: 'virtual' | 'inperson' 
   const interviewerName = (id: string | null) => id ? (userMap[id]?.full_name || userMap[id]?.email || 'Assigned') : null
 
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
+    <div className="min-h-screen bsm-app">
       <div className="max-w-5xl mx-auto px-6 py-5">
-        <div className="mb-4"><h1 className="text-xl font-semibold text-[#0D1B35]">{kind === 'inperson' ? t('tab_inperson') : t('tab_virtual')} · {t('tab_interview')}</h1><p className="text-xs text-gray-500">{kind === 'inperson' ? t('inperson_sub') : t('virtual_sub')}</p></div>
+        <div className="mb-4"><h1 className="text-xl font-semibold text-[var(--text-strong)]">{kind === 'inperson' ? t('tab_inperson') : t('tab_virtual')} · {t('tab_interview')}</h1><p className="text-xs text-[var(--muted)]">{kind === 'inperson' ? t('inperson_sub') : t('virtual_sub')}</p></div>
         <RecruitingTabs />
-        {loading ? <p className="text-gray-400 text-sm">{t('loading')}</p>
-          : rows.length === 0 ? <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-500">{kind === 'inperson' ? t('no_inperson') : t('no_virtual')}</div>
+        {loading ? <p className="text-[var(--faint)] text-sm">{t('loading')}</p>
+          : rows.length === 0 ? <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-10 text-center text-[var(--muted)]">{kind === 'inperson' ? t('no_inperson') : t('no_virtual')}</div>
           : GROUPS.filter(([k]) => grouped[k]?.length).map(([k, label]) => (
             <div key={k} className="mb-6">
-              <div className="flex items-center gap-2 mb-2.5"><h2 className="text-sm font-bold text-[#0D1B35]">{t(label)}</h2><span className="text-xs text-gray-400">{grouped[k].length}</span></div>
+              <div className="flex items-center gap-2 mb-2.5"><h2 className="text-sm font-bold text-[var(--text)]">{t(label)}</h2><span className="text-xs text-[var(--faint)]">{grouped[k].length}</span></div>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))' }}>
                 {grouped[k].map(c => (
-                  <button key={c.id} onClick={() => open(c)} className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                  <button key={c.id} onClick={() => open(c)} className="text-left bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="w-10 h-10 rounded-full grid place-items-center text-white text-xs font-semibold" style={{ background: hue(c.email || c.full_name) }}>{ini(c.full_name)}</span>
-                      <div><div className="font-semibold text-[#0D1B35] flex items-center gap-2">{c.full_name}<SourceBadge channel={(c as any).intake_channel} /></div><div className="text-xs text-gray-500">{(c.positions || [])[0] || '—'}</div></div>
+                      <div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={(c as any).intake_channel} /></div><div className="text-xs text-[var(--muted)]">{(c.positions || [])[0] || '—'}</div></div>
                     </div>
                     <div className={`text-xs font-medium px-2.5 py-1 rounded-lg inline-block ${c.interview_at ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{c.interview_at ? `📅 ${k === 'today' || k === 'tomorrow' ? fmtTime(c.interview_at) : fmtWhen(c.interview_at)}` : `⏳ ${t('not_scheduled')}`}</div>
-                    <div className="text-[11px] text-gray-500 mt-1.5">{interviewerName(c.interviewer_id) ? <>👤 {interviewerName(c.interviewer_id)}</> : <span className="text-amber-600">{t('no_interviewer')}</span>}</div>
+                    <div className="text-[11px] text-[var(--muted)] mt-1.5">{interviewerName(c.interviewer_id) ? <>👤 {interviewerName(c.interviewer_id)}</> : <span className="text-amber-600">{t('no_interviewer')}</span>}</div>
                   </button>
                 ))}
               </div>
@@ -128,84 +128,84 @@ export default function InterviewStage({ kind }: { kind: 'virtual' | 'inperson' 
 
       {sel && (
         <>
-          <div className="fixed inset-0 bg-[#0D1B35]/40 z-20" onClick={() => setSel(null)} />
-          <aside className="fixed top-0 right-0 h-screen w-[460px] max-w-[96vw] bg-white z-30 shadow-2xl flex flex-col">
-            <div className="p-5 border-b border-gray-100 relative">
-              <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
+          <div className="fixed inset-0 bg-black/60 z-20" onClick={() => setSel(null)} />
+          <aside className="fixed top-0 right-0 h-screen w-[460px] max-w-[96vw] bg-[var(--surface)] z-30 shadow-2xl flex flex-col">
+            <div className="p-5 border-b border-[var(--border)] relative">
+              <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
               <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{media.photo ? <img src={media.photo} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[#0D1B35]">{sel.full_name}</h2><div className="text-xs text-gray-500 flex items-center gap-2">{(sel.positions || []).join(', ')}<SourceBadge channel={(sel as any).intake_channel} /></div></div></div>
+                <div><h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.full_name}</h2><div className="text-xs text-[var(--muted)] flex items-center gap-2">{(sel.positions || []).join(', ')}<SourceBadge channel={(sel as any).intake_channel} /></div></div></div>
             </div>
             <div className="overflow-auto flex-1">
               {canAct && (
-                <div className="p-5 border-b border-gray-100 space-y-3">
+                <div className="p-5 border-b border-[var(--border)] space-y-3">
                   <div>
-                    <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2">{t('schedule_interview')}</div>
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2">{t('schedule_interview')}</div>
                     <div className="flex gap-2">
-                      <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                      <button disabled={busy} onClick={scheduleAndNotify} className="bg-[#0D1B35] text-white text-sm font-semibold px-4 rounded-lg disabled:opacity-50">{t('save_notify')}</button>
+                      <input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} className="flex-1 border border-[var(--border)] rounded-lg px-3 py-2 text-sm" />
+                      <button disabled={busy} onClick={scheduleAndNotify} className="bg-[var(--gold)] text-[var(--on-gold)] text-sm font-semibold px-4 rounded-lg disabled:opacity-50">{t('save_notify')}</button>
                     </div>
                     {sel.interview_at && <div className="text-xs text-blue-700 mt-2">📅 {fmtWhen(sel.interview_at)}</div>}
                   </div>
                   <div>
-                    <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-1.5">{t('interviewer')}</div>
-                    <select value={sel.interviewer_id || ''} onChange={e => save({ interviewer_id: e.target.value || null } as any)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-1.5">{t('interviewer')}</div>
+                    <select value={sel.interviewer_id || ''} onChange={e => save({ interviewer_id: e.target.value || null } as any)} className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-[var(--surface)]">
                       <option value="">{t('unassigned')}</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.full_name || u.email}</option>)}
                     </select>
                     {sel.interviewer_id && isAdmin && !userMap[sel.interviewer_id]?.phone && (
                       <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2">
                         <div className="text-[11px] text-amber-800 mb-1">{t('add_phone_hint')}</div>
-                        <input placeholder={t('phone_num_ph')} onBlur={e => e.target.value && setInterviewerPhone(sel.interviewer_id!, e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm" />
+                        <input placeholder={t('phone_num_ph')} onBlur={e => e.target.value && setInterviewerPhone(sel.interviewer_id!, e.target.value)} className="w-full border border-[var(--border)] rounded-lg px-2 py-1.5 text-sm" />
                       </div>
                     )}
-                    {sel.interviewer_id && userMap[sel.interviewer_id]?.phone && <div className="text-[11px] text-gray-400 mt-1">{t('agenda_to')} {userMap[sel.interviewer_id]?.email} · {userMap[sel.interviewer_id]?.phone}</div>}
+                    {sel.interviewer_id && userMap[sel.interviewer_id]?.phone && <div className="text-[11px] text-[var(--faint)] mt-1">{t('agenda_to')} {userMap[sel.interviewer_id]?.email} · {userMap[sel.interviewer_id]?.phone}</div>}
                   </div>
                 </div>
               )}
 
-              <div className="p-5 border-b border-gray-100 bg-amber-50/40">
+              <div className="p-5 border-b border-[var(--border)] bg-amber-50/40">
                 <div className="text-[11px] uppercase tracking-wide text-[#92400E] font-bold mb-2.5">{t('s_internal')}</div>
                 {canAct ? (
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="text-xs text-gray-600">{t('l_gender')}<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
-                      <label className="text-xs text-gray-600">{t('l_age')}<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" /></label>
-                      <div className="text-xs text-gray-600">{t('l_nationality')}<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder={t('ph_nationality')} /></div></div>
-                      <div className="text-xs text-gray-600">{t('l_ethnicity')}<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder={t('ph_ethnicity')} /></div></div>
-                      <div className="text-xs text-gray-600 col-span-2">{t('l_time_usa')}<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} yearsLabel={t('years')} monthsLabel={t('months')} /></div></div>
+                      <label className="text-xs text-[var(--muted)]">{t('l_gender')}<select defaultValue={sel.gender || ''} onBlur={e => e.target.value !== (sel.gender || '') && save({ gender: e.target.value || null } as any)} className="w-full mt-1 border border-[var(--border)] rounded-lg px-2 py-1.5 text-sm"><option value=""></option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label>
+                      <label className="text-xs text-[var(--muted)]">{t('l_age')}<input type="number" defaultValue={sel.age ?? ''} onBlur={e => Number(e.target.value) !== (sel.age ?? NaN) && save({ age: e.target.value ? Number(e.target.value) : null } as any)} className="w-full mt-1 border border-[var(--border)] rounded-lg px-2 py-1.5 text-sm" /></label>
+                      <div className="text-xs text-[var(--muted)]">{t('l_nationality')}<div className="mt-1"><SearchSelect value={sel.nationality} onChange={v => save({ nationality: v || null } as any)} options={NATIONALITIES} placeholder={t('ph_nationality')} /></div></div>
+                      <div className="text-xs text-[var(--muted)]">{t('l_ethnicity')}<div className="mt-1"><SearchSelect value={sel.ethnicity} onChange={v => save({ ethnicity: v || null } as any)} options={ETHNICITIES} placeholder={t('ph_ethnicity')} /></div></div>
+                      <div className="text-xs text-[var(--muted)] col-span-2">{t('l_time_usa')}<div className="mt-1"><YearsMonths value={sel.time_in_usa} onSave={v => save({ time_in_usa: v || null } as any)} yearsLabel={t('years')} monthsLabel={t('months')} /></div></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       {([[t('l_taxid'), 'has_tax_id'], [t('l_ss'), 'has_ss'], [t('l_bank'), 'has_bank_account']] as [string, keyof Candidate][]).map(([label, key]) => (
-                        <div key={key}><div className="text-xs text-gray-600 mb-1">{label}</div><div className="flex gap-1.5">{[[t('tax_yes'), true], [t('tax_no'), false]].map(([l, v]) => <button key={l as string} onClick={() => save({ [key]: v } as any)} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${sel[key] === v ? 'bg-[#0D1B35] text-white border-[#0D1B35]' : 'border-gray-200 text-gray-500'}`}>{l}</button>)}</div></div>
+                        <div key={key}><div className="text-xs text-[var(--muted)] mb-1">{label}</div><div className="flex gap-1.5">{[[t('tax_yes'), true], [t('tax_no'), false]].map(([l, v]) => <button key={l as string} onClick={() => save({ [key]: v } as any)} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${sel[key] === v ? 'bg-[var(--gold)] text-[var(--on-gold)] border-[var(--gold)]' : 'border-[var(--border)] text-[var(--muted)]'}`}>{l}</button>)}</div></div>
                       ))}
                     </div>
                   </div>
-                ) : <div className="text-xs text-gray-600 space-y-1"><div>{t('l_gender')}: {sel.gender || '—'} · {t('l_age')}: {sel.age ?? '—'} · {sel.nationality || '—'} / {sel.ethnicity || '—'}</div><div>{t('l_time_usa')}: {sel.time_in_usa || '—'} · {t('l_taxid')}: {yn(sel.has_tax_id) || '—'} · {t('l_ss')}: {yn(sel.has_ss) || '—'} · {t('l_bank')}: {yn(sel.has_bank_account) || '—'}</div></div>}
+                ) : <div className="text-xs text-[var(--muted)] space-y-1"><div>{t('l_gender')}: {sel.gender || '—'} · {t('l_age')}: {sel.age ?? '—'} · {sel.nationality || '—'} / {sel.ethnicity || '—'}</div><div>{t('l_time_usa')}: {sel.time_in_usa || '—'} · {t('l_taxid')}: {yn(sel.has_tax_id) || '—'} · {t('l_ss')}: {yn(sel.has_ss) || '—'} · {t('l_bank')}: {yn(sel.has_bank_account) || '—'}</div></div>}
               </div>
 
               {canAct && (
-                <div className="p-5 border-b border-gray-100">
-                  <div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2.5">{t('l_photo_video')}</div>
+                <div className="p-5 border-b border-[var(--border)]">
+                  <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2.5">{t('l_photo_video')}</div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>{media.photo ? <img src={media.photo} alt="" className="w-full h-32 object-cover rounded-lg mb-1.5" /> : <div className="w-full h-32 bg-[#F5F6FA] rounded-lg grid place-items-center text-gray-400 text-xs mb-1.5">{t('no_photo')}</div>}<label className="text-xs text-[#0D1B35] font-medium cursor-pointer">{media.photo ? t('replace_photo') : t('add_photo')}<input type="file" accept="image/*" className="hidden" onChange={e => uploadMedia('photo', e.target.files?.[0] || null)} /></label></div>
-                    <div>{media.video ? <video src={media.video} controls className="w-full h-32 object-cover rounded-lg mb-1.5 bg-black" /> : <div className="w-full h-32 bg-[#F5F6FA] rounded-lg grid place-items-center text-gray-400 text-xs mb-1.5">{t('no_video')}</div>}<label className="text-xs text-[#0D1B35] font-medium cursor-pointer">{media.video ? t('replace_video') : t('add_video')}<input type="file" accept="video/*" className="hidden" onChange={e => uploadMedia('video', e.target.files?.[0] || null)} /></label></div>
+                    <div>{media.photo ? <img src={media.photo} alt="" className="w-full h-32 object-cover rounded-lg mb-1.5" /> : <div className="w-full h-32 bg-[var(--raise)] rounded-lg grid place-items-center text-[var(--faint)] text-xs mb-1.5">{t('no_photo')}</div>}<label className="text-xs text-[var(--text)] font-medium cursor-pointer">{media.photo ? t('replace_photo') : t('add_photo')}<input type="file" accept="image/*" className="hidden" onChange={e => uploadMedia('photo', e.target.files?.[0] || null)} /></label></div>
+                    <div>{media.video ? <video src={media.video} controls className="w-full h-32 object-cover rounded-lg mb-1.5 bg-black" /> : <div className="w-full h-32 bg-[var(--raise)] rounded-lg grid place-items-center text-[var(--faint)] text-xs mb-1.5">{t('no_video')}</div>}<label className="text-xs text-[var(--text)] font-medium cursor-pointer">{media.video ? t('replace_video') : t('add_video')}<input type="file" accept="video/*" className="hidden" onChange={e => uploadMedia('video', e.target.files?.[0] || null)} /></label></div>
                   </div>
                 </div>
               )}
 
               <Sec title={t('s_job_fit')}><Rw k={t('l_expected_pay')} v={sel.expected_pay || (sel.pay_min != null ? `$${sel.pay_min}–${sel.pay_max}/hr` : '—')} /><Rw k={t('l_availability')} v={sel.availability} /><Rw k={t('l_transportation')} v={sel.transportation} /><Rw k={t('l_english')} v={sel.english_level} /><Rw k={t('l_lives_in')} v={[sel.borough, sel.city].filter(Boolean).join(', ')} /></Sec>
-              {sel.experience && <Sec title={t('s_experience')}><p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">{sel.experience}</p></Sec>}
+              {sel.experience && <Sec title={t('s_experience')}><p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-line">{sel.experience}</p></Sec>}
 
-              {canAct && <div className="p-5 flex gap-2 sticky bottom-0 bg-white border-t border-gray-100">{kind === 'virtual' ? <button disabled={busy} onClick={moveToInPerson} className="flex-1 bg-[#0D1B35] text-white font-semibold py-2.5 rounded-lg disabled:opacity-50">→ {t('move_to_inperson')}</button> : <button disabled={busy} onClick={moveToPool} className="flex-1 bg-[#D4A843] text-[#0D1B35] font-semibold py-2.5 rounded-lg disabled:opacity-50">✓ {t('move_to_pool')}</button>}<button disabled={busy} onClick={reject} className="bg-white border border-red-200 text-red-600 font-semibold px-4 rounded-lg disabled:opacity-50">{t('reject')}</button></div>}
+              {canAct && <div className="p-5 flex gap-2 sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)]">{kind === 'virtual' ? <button disabled={busy} onClick={moveToInPerson} className="flex-1 bg-[var(--gold)] text-[var(--on-gold)] font-semibold py-2.5 rounded-lg disabled:opacity-50">→ {t('move_to_inperson')}</button> : <button disabled={busy} onClick={moveToPool} className="flex-1 bg-[var(--gold)] text-[var(--on-gold)] font-semibold py-2.5 rounded-lg disabled:opacity-50">✓ {t('move_to_pool')}</button>}<button disabled={busy} onClick={reject} className="bg-[var(--surface)] border border-red-200 text-red-600 font-semibold px-4 rounded-lg disabled:opacity-50">{t('reject')}</button></div>}
             </div>
           </aside>
         </>
       )}
 
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
     </div>
   )
 }
 
-function Sec({ title, children }: { title: string; children: React.ReactNode }) { return <div className="p-5 border-b border-gray-100"><div className="text-[11px] uppercase tracking-wide text-[#0D1B35] font-bold mb-2.5">{title}</div>{children}</div> }
-function Rw({ k, v }: { k: string; v: string | null | undefined }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-gray-500">{k}</span><span className="text-gray-800 font-medium text-right">{v || '—'}</span></div> }
+function Sec({ title, children }: { title: string; children: React.ReactNode }) { return <div className="p-5 border-b border-[var(--border)]"><div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2.5">{title}</div>{children}</div> }
+function Rw({ k, v }: { k: string; v: string | null | undefined }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-[var(--muted)]">{k}</span><span className="text-[var(--text)] font-medium text-right">{v || '—'}</span></div> }
