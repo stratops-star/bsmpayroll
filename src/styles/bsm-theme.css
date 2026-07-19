@@ -76,3 +76,21 @@
 @media (prefers-reduced-motion: no-preference) {
   .bsm-app, .bsm-app * { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
 }
+
+/* native control theming (date pickers, scrollbars) follow the theme */
+[data-theme='dark']  { color-scheme: dark; }
+[data-theme='light'] { color-scheme: light; }
+
+/* All form controls inside the app inherit theme surfaces automatically.
+   Higher specificity than Tailwind's bg-white/border-gray utilities, so
+   individual inputs don't each need restyling. */
+.bsm-app input,
+.bsm-app select,
+.bsm-app textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+.bsm-app input::placeholder,
+.bsm-app textarea::placeholder { color: var(--faint); }
+.bsm-app select option { background: var(--surface); color: var(--text); }
