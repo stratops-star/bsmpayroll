@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 
-const NAVY = '#0D1B35'
-const GOLD = '#D4A843'
+const NAVY = '#1E1B17'
+const GOLD = '#DCB878'
 
 type AppUser = {
   id: string
@@ -17,7 +17,7 @@ type AppUser = {
 }
 
 const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'pool', 'viewer']
-const DEPTS = ['recruiting', 'payroll', 'valet']
+const DEPTS = ['recruiting', 'payroll']
 const ROLE_DEPTS: Record<string, string[]> = {
   admin: ['recruiting', 'payroll'],
   payroll: ['payroll'],
@@ -26,7 +26,7 @@ const ROLE_DEPTS: Record<string, string[]> = {
   manager: [],
   pool: [],
 }
-const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706', '#4F46E5', '#BE123C']
+const AV = ['#1E1B17', '#8A6D2F', '#3F3A32', '#96723C', '#5C5346', '#B7791F', '#2B2721', '#7C6A3E']
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const hue = (s: string) => AV[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AV.length]
 const fieldStyle: React.CSSProperties = { padding: '6px 9px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'inherit', outline: 'none', width: '100%' }
