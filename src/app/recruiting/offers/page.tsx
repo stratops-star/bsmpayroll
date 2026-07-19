@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import RecruitingTabs from '@/components/RecruitingTabs'
 
-const NAVY = '#0D1B35', GOLD = '#D4A843'
-const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white'
-const lbl = 'block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1'
+const NAVY = 'var(--text-strong)', GOLD = 'var(--gold)'
+const inp = 'w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-[var(--surface)]'
+const lbl = 'block text-[11px] uppercase tracking-wide text-[var(--muted)] font-bold mb-1'
 
 type Cand = { id: string; full_name: string; email: string | null; phone: string | null; preferred_lang: string | null; positions: string[] | null; man_power_request_id: string | null; onboarding_status: string | null }
 type Req = { id: string; seq: number; position: string | null; start_date: string | null; work_days: string | null; work_hours: string | null; building: string | null; site: string | null; location: string | null; compensation: number | null; supervisor_name: string | null }
@@ -19,10 +19,10 @@ type Offer = {
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  draft: { label: 'Draft', cls: 'bg-gray-100 text-gray-600' },
+  draft: { label: 'Draft', cls: 'bg-[var(--raise)] text-[var(--text)]' },
   sent: { label: 'Awaiting signature', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
   signed: { label: 'Signed', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  withdrawn: { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-400' },
+  withdrawn: { label: 'Withdrawn', cls: 'bg-[var(--raise)] text-[var(--faint)]' },
 }
 const AV = ['#2C4066', '#7C3AED', '#0891B2', '#DB2777', '#059669', '#D97706']
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -147,15 +147,15 @@ export default function OffersPage() {
   const tmplFor = (id: string | null) => tmpls.find(t => t.id === id)
 
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
+    <div className="min-h-screen bsm-app">
       <div className="max-w-6xl mx-auto px-6 py-5">
         <div className="mb-4 flex items-start justify-between gap-4">
-          <div><h1 className="text-xl font-semibold text-[#0D1B35]">Offers</h1><p className="text-xs text-gray-500">Conditional offer letters · build, send, track signatures</p></div>
-          <a href="/recruiting/offers/settings" className="text-sm border border-gray-200 bg-white rounded-lg px-3 py-2 font-semibold text-[#0D1B35] whitespace-nowrap">⚙ Settings</a>
+          <div><h1 className="text-xl font-semibold text-[var(--text-strong)]">Offers</h1><p className="text-xs text-[var(--muted)]">Conditional offer letters · build, send, track signatures</p></div>
+          <a href="/recruiting/offers/settings" className="text-sm border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3 py-2 font-semibold text-[var(--text)] whitespace-nowrap">⚙ Settings</a>
         </div>
         <RecruitingTabs />
 
-        {loading ? <p className="text-gray-400 text-sm">Loading…</p> : (<>
+        {loading ? <p className="text-[var(--faint)] text-sm">Loading…</p> : (<>
           {/* Awaiting an offer */}
           <Section title="Ready for an offer" count={pending.length}>
             {pending.length === 0 ? <Empty>No selected candidates waiting on an offer. Managers send them here by selecting a candidate on a manpower request.</Empty> : (
@@ -163,10 +163,10 @@ export default function OffersPage() {
                 {pending.map(c => {
                   const r = c.man_power_request_id ? reqs[c.man_power_request_id] : null
                   return (
-                    <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                    <div key={c.id} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
                       <div className="flex items-center gap-3 mb-3">
                         <span className="w-10 h-10 rounded-full grid place-items-center text-white text-xs font-semibold" style={{ background: hue(c.full_name) }}>{ini(c.full_name)}</span>
-                        <div className="min-w-0"><div className="font-semibold text-[#0D1B35] truncate">{c.full_name}</div><div className="text-xs text-gray-500 truncate">{r ? `#${r.seq} · ${r.position}` : (c.positions || [])[0] || '—'}</div></div>
+                        <div className="min-w-0"><div className="font-semibold text-[var(--text)] truncate">{c.full_name}</div><div className="text-xs text-[var(--muted)] truncate">{r ? `#${r.seq} · ${r.position}` : (c.positions || [])[0] || '—'}</div></div>
                       </div>
                       {canAct && <button onClick={() => openBuilder(c)} className="w-full text-sm font-semibold py-2 rounded-lg" style={{ background: GOLD, color: NAVY }}>Create offer letter</button>}
                     </div>
@@ -178,21 +178,21 @@ export default function OffersPage() {
 
           {(['sent', 'signed', 'draft', 'withdrawn'] as const).filter(k => grouped[k]?.length).map(k => (
             <Section key={k} title={STATUS_META[k].label} count={grouped[k].length}>
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200">
+                  <thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--muted)] bg-gray-50 border-b border-[var(--border)]">
                     <th className="px-4 py-3">Candidate</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Rate</th><th className="px-4 py-3">Start</th><th className="px-4 py-3">Lang</th><th className="px-4 py-3">{k === 'signed' ? 'Signed' : 'Sent'}</th><th className="px-4 py-3"></th>
                   </tr></thead>
                   <tbody>{grouped[k].map(o => { const c = cands[o.candidate_id]; return (
-                    <tr key={o.id} className="border-b border-gray-100 last:border-0">
-                      <td className="px-4 py-3"><div className="flex items-center gap-2.5"><span className="w-8 h-8 rounded-full grid place-items-center text-white text-[10px] font-semibold" style={{ background: hue(c?.full_name || '') }}>{ini(c?.full_name || '?')}</span><span className="font-semibold text-[#0D1B35]">{c?.full_name || '—'}</span></div></td>
-                      <td className="px-4 py-3 text-gray-600">{o.position || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">{o.hourly_rate != null ? `$${o.hourly_rate}/hr` : '—'}</td>
-                      <td className="px-4 py-3 text-gray-500">{fmt(o.start_date)}</td>
-                      <td className="px-4 py-3"><span className="text-[10px] font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{(o.lang || 'en').toUpperCase()}</span></td>
-                      <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{fmt((o.signed_at || o.sent_at || '').slice(0, 10) || null)}</td>
+                    <tr key={o.id} className="border-b border-[var(--border)] last:border-0">
+                      <td className="px-4 py-3"><div className="flex items-center gap-2.5"><span className="w-8 h-8 rounded-full grid place-items-center text-white text-[10px] font-semibold" style={{ background: hue(c?.full_name || '') }}>{ini(c?.full_name || '?')}</span><span className="font-semibold text-[var(--text)]">{c?.full_name || '—'}</span></div></td>
+                      <td className="px-4 py-3 text-[var(--muted)]">{o.position || '—'}</td>
+                      <td className="px-4 py-3 text-[var(--muted)]">{o.hourly_rate != null ? `$${o.hourly_rate}/hr` : '—'}</td>
+                      <td className="px-4 py-3 text-[var(--muted)]">{fmt(o.start_date)}</td>
+                      <td className="px-4 py-3"><span className="text-[10px] font-semibold bg-[var(--raise)] text-[var(--text)] px-1.5 py-0.5 rounded">{(o.lang || 'en').toUpperCase()}</span></td>
+                      <td className="px-4 py-3 text-[var(--faint)] whitespace-nowrap">{fmt((o.signed_at || o.sent_at || '').slice(0, 10) || null)}</td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        {canAct && o.status === 'draft' && <button onClick={() => c && openBuilder(c, o)} className="text-xs font-semibold text-[#0D1B35] mr-3">Edit</button>}
+                        {canAct && o.status === 'draft' && <button onClick={() => c && openBuilder(c, o)} className="text-xs font-semibold text-[var(--text)] mr-3">Edit</button>}
                         {o.status === 'sent' && <><button onClick={() => copyLink(o)} className="text-xs font-semibold text-blue-600 mr-3">Copy link</button><button onClick={() => withdraw(o)} className="text-xs text-red-500 mr-3">Withdraw</button></>}
                         {o.status === 'signed' && <a href={`/offer/${o.token}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600">View</a>}
                       </td>
@@ -207,17 +207,17 @@ export default function OffersPage() {
 
       {/* Builder */}
       {draft && (<>
-        <div className="fixed inset-0 bg-[#0D1B35]/40 z-20" onClick={() => setDraft(null)} />
-        <aside className="fixed top-0 right-0 h-screen w-[480px] max-w-[96vw] bg-white z-30 shadow-2xl flex flex-col">
-          <div className="p-5 border-b border-gray-100 relative">
-            <button onClick={() => setDraft(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-gray-100 text-gray-500">✕</button>
-            <div className="text-xs font-bold text-[#0D1B35]">Offer letter</div>
-            <h2 className="text-lg font-semibold text-[#0D1B35]">{draft._cand.full_name}</h2>
-            <div className="text-xs text-gray-500">{draft._cand.email || <span className="text-red-500">No email on file</span>}</div>
+        <div className="fixed inset-0 bg-black/60 z-20" onClick={() => setDraft(null)} />
+        <aside className="fixed top-0 right-0 h-screen w-[480px] max-w-[96vw] bg-[var(--surface)] z-30 shadow-2xl flex flex-col">
+          <div className="p-5 border-b border-[var(--border)] relative">
+            <button onClick={() => setDraft(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
+            <div className="text-xs font-bold text-[var(--text)]">Offer letter</div>
+            <h2 className="text-lg font-semibold text-[var(--text-strong)]">{draft._cand.full_name}</h2>
+            <div className="text-xs text-[var(--muted)]">{draft._cand.email || <span className="text-red-500">No email on file</span>}</div>
           </div>
 
           <div className="overflow-auto flex-1 p-5 space-y-4">
-            <div className="bg-[#F5F6FA] rounded-lg p-3 text-[11px] text-gray-500">Pre-filled from the candidate and their manpower request. Edit anything for this letter — the shared wording lives in <a href="/recruiting/offers/settings" className="text-blue-600 font-medium">Settings</a>.</div>
+            <div className="bg-[var(--raise)] rounded-lg p-3 text-[11px] text-[var(--muted)]">Pre-filled from the candidate and their manpower request. Edit anything for this letter — the shared wording lives in <a href="/recruiting/offers/settings" className="text-blue-600 font-medium">Settings</a>.</div>
 
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lbl}>Language</label><select className={inp} value={draft.lang} onChange={e => setD('lang', e.target.value)}><option value="en">English</option><option value="es">Español</option></select></div>
@@ -245,21 +245,21 @@ export default function OffersPage() {
             <div><label className={lbl}>Sign by</label><input type="date" className={inp} value={draft.sign_by || ''} onChange={e => setD('sign_by', e.target.value)} /></div>
           </div>
 
-          <div className="p-5 border-t border-gray-100 flex gap-2">
-            <button disabled={busy} onClick={() => saveDraft(false)} className="flex-1 bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-lg disabled:opacity-50">Save draft</button>
+          <div className="p-5 border-t border-[var(--border)] flex gap-2">
+            <button disabled={busy} onClick={() => saveDraft(false)} className="flex-1 bg-[var(--surface)] border border-[var(--border)] text-[var(--muted)] font-semibold py-2.5 rounded-lg disabled:opacity-50">Save draft</button>
             <button disabled={busy} onClick={() => saveDraft(true)} className="flex-1 font-semibold py-2.5 rounded-lg disabled:opacity-50" style={{ background: GOLD, color: NAVY }}>{busy ? 'Sending…' : '✉ Send to candidate'}</button>
           </div>
         </aside>
       </>)}
 
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
     </div>
   )
 }
 
 function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  return <div className="mb-6"><div className="flex items-center gap-2 mb-2.5"><h2 className="text-sm font-bold text-[#0D1B35]">{title}</h2><span className="text-xs text-gray-400">{count}</span></div>{children}</div>
+  return <div className="mb-6"><div className="flex items-center gap-2 mb-2.5"><h2 className="text-sm font-bold text-[var(--text)]">{title}</h2><span className="text-xs text-[var(--faint)]">{count}</span></div>{children}</div>
 }
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="bg-white border border-gray-100 rounded-xl p-8 text-center text-gray-500 text-sm">{children}</div>
+  return <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 text-center text-[var(--muted)] text-sm">{children}</div>
 }
