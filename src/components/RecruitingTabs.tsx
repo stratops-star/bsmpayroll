@@ -44,15 +44,15 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
   const isActive = (h: string) => h === '/recruiting' ? path === '/recruiting' : (path?.startsWith(h) ?? false)
 
   return (
-    <div className="flex gap-1 border-b-2 border-gray-200 mb-5 overflow-x-auto flex-wrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+    <div className="flex gap-1 border-b border-[#E5E0D8] mb-5 overflow-x-auto flex-wrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
       {TABS.map(([key, href]) => {
         const on = isActive(href)
         const n = counts[key]
         return (
           <a key={href} href={href}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-0.5 flex items-center gap-1.5 whitespace-nowrap ${on ? 'text-[#0D1B35] border-[#D4A843]' : 'text-gray-500 border-transparent hover:text-[#0D1B35]'}`}>
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-0.5 flex items-center gap-1.5 whitespace-nowrap ${on ? 'text-[#1E1B17] border-[#DCB878]' : 'text-[#8C8375] border-transparent hover:text-[#1E1B17]'}`}>
             {t(key)}
-            {n != null && n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${on ? 'bg-[#D4A843] text-[#0D1B35]' : 'bg-gray-200 text-gray-600'}`}>{n}</span>}
+            {n != null && n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${on ? 'bg-[#DCB878] text-[#1E1B17]' : 'bg-[#F0EDE7] text-[#8C8375]'}`}>{n}</span>}
           </a>
         )
       })}
