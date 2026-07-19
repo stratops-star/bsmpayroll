@@ -35,6 +35,8 @@ const daysIn = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 const funnelColor = (d: number) => d > 21 ? 'bg-red-50 text-red-600' : d > 7 ? 'bg-amber-50 text-amber-700' : 'bg-[var(--raise)] text-[var(--muted)]'
 const yn = (b: boolean | null) => b === true ? 'Yes' : b === false ? 'No' : '—'
+// Grid/panel render a small transformed thumbnail (fast); the lightbox loads the original.
+const THUMB = { width: 400, height: 400, resize: 'cover' as const, quality: 72 }
 
 const FILTERS = [
   { key: 'tier', label: 'Tier', opts: [['all', 'All tiers'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']] },
@@ -77,6 +79,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
   const [panelOpen, setPanelOpen] = useState(false)
   const [view, setView] = useState<'list' | 'photos'>('list')
   const [sort, setSort] = useState<'recent' | 'longest'>('recent')
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -89,7 +92,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
     const { data } = await supabase.from('candidates').select('*').eq('status', 'in_pool').order('created_at', { ascending: false })
     const list = data ?? []; setRows(list); setLoading(false)
     const map: Record<string, string> = {}
-    await Promise.all(list.filter((c: Candidate) => c.photo_path).map(async (c: Candidate) => { const { data: s } = await supabase.storage.from('candidate-photos').createSignedUrl(c.photo_path!, 600); if (s?.signedUrl) map[c.id] = s.signedUrl }))
+    await Promise.all(list.filter((c: Candidate) => c.photo_path).map(async (c: Candidate) => { const { data: s } = await supabase.storage.from('candidate-photos').createSignedUrl(c.photo_path!, 600, { transform: THUMB }); if (s?.signedUrl) map[c.id] = s.signedUrl }))
     setPhotos(map)
     if (canAssignProp) { const { data: rq } = await supabase.from('man_power_requests').select('id,seq,supervisor_name,department,site,status,gender_pref,transportation,position').order('seq', { ascending: false }); setReqs(rq ?? []) }
   }
@@ -97,6 +100,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
   const { setActions } = useRecruitingChrome()
   const { t, lang, setLang } = useRecruitingLang()
   useEffect(() => { if (!standalone) { setActions(<ShareCareers />); return () => setActions(null) } }, [])
+  useEffect(() => { if (!lightbox) return; const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [lightbox])
 
   function flash(m: string) { setToast(m); setTimeout(() => setToast(''), 2200) }
   const setF1 = (k: string, v: string) => setF(p => ({ ...p, [k]: v }))
@@ -113,6 +117,10 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
   }, [rows, q, F, sort])
 
   async function openFile(bucket: string, path: string | null) { if (!path) return; const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 120); if (data?.signedUrl) window.open(data.signedUrl, '_blank') }
+  // Lightbox: sign the ORIGINAL (no transform) on demand and show it full-size.
+  async function openPhoto(path: string | null | undefined) { if (!path) return; const { data } = await supabase.storage.from('candidate-photos').createSignedUrl(path, 600); if (data?.signedUrl) setLightbox(data.signedUrl) }
+  // If Supabase image transforms aren't enabled, the thumbnail URL 404s — fall back to the untransformed original so photos still show.
+  async function photoFallback(id: string, path: string | null | undefined) { if (!path) return; const { data } = await supabase.storage.from('candidate-photos').createSignedUrl(path, 600); if (data?.signedUrl) setPhotos(p => (p[id] === data.signedUrl ? p : { ...p, [id]: data.signedUrl })) }
   async function save(patch: Partial<Candidate>) { if (!sel) return; const { error } = await supabase.from('candidates').update(patch).eq('id', sel.id); if (error) { flash(t('error') + ': ' + error.message); return }; const u = { ...sel, ...patch }; setSel(u); setRows(rs => rs.map(r => r.id === sel.id ? u : r)); flash(t('saved')) }
 
   async function assignToRequest() {
@@ -209,17 +217,17 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
           : view === 'photos' ? (
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))' }}>
               {filtered.map(c => { const d = daysIn(c.created_at); return (
-                <button key={c.id} onClick={() => openCand(c)} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden text-left hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                  <div className="h-36 grid place-items-center text-white text-3xl font-semibold relative" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}<span className={`absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${funnelColor(d)}`}>{d}d</span></div>
+                <div key={c.id} role="button" tabIndex={0} onClick={() => openCand(c)} className="group bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden text-left hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
+                  <div className="h-36 grid place-items-center text-white text-3xl font-semibold relative" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" loading="lazy" decoding="async" onError={() => photoFallback(c.id, c.photo_path)} className="w-full h-full object-cover" /> : ini(c.full_name)}{photos[c.id] && <button onClick={e => { e.stopPropagation(); openPhoto(c.photo_path) }} title={lang === 'es' ? 'Ver foto' : 'View photo'} className="absolute top-2 left-2 w-7 h-7 rounded-lg bg-black/45 text-white grid place-items-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>}<span className={`absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${funnelColor(d)}`}>{d}d</span></div>
                   <div className="p-3"><div className="font-semibold text-sm text-[var(--text)]">{c.full_name}</div><div className="text-xs text-[var(--muted)] mt-0.5">{(c.positions || [])[0] || '—'} · {c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() + c.gender.slice(1) : '—'}</div><div className="flex gap-1.5 mt-2">{tierPill(c.profile_tier)}<span className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{stageLabel[c.stage]}</span></div></div>
-                </button>) })}
+                </div>) })}
             </div>
           ) : (
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
               <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--muted)] bg-gray-50 border-b border-[var(--border)]"><th className="px-4 py-3">{t('th_candidate')}</th><th className="px-4 py-3">{t('th_position')}</th><th className="px-4 py-3">{t('th_age_sex')}</th><th className="px-4 py-3">{t('th_tier')}</th><th className="px-4 py-3">{t('th_stage')}</th><th className="px-4 py-3">{t('th_added')}</th><th className="px-4 py-3">{t('th_in_funnel')}</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
                   <tr key={c.id} onClick={() => openCand(c)} className="border-b border-[var(--border)] last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} />{c.man_power_request_id && reqMap[c.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--gold)]/20 text-[#8A6D1E] border border-[var(--gold)]/40">#{reqMap[c.man_power_request_id].seq}</span>}</div><div className="text-xs text-[var(--muted)]">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" loading="lazy" decoding="async" onError={() => photoFallback(c.id, c.photo_path)} className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} />{c.man_power_request_id && reqMap[c.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--gold)]/20 text-[#8A6D1E] border border-[var(--gold)]/40">#{reqMap[c.man_power_request_id].seq}</span>}</div><div className="text-xs text-[var(--muted)]">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
                     <td className="px-4 py-3 text-[var(--muted)]">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-[var(--muted)]">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -234,11 +242,11 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
 
       {sel && (
         <>
-          <div className="fixed inset-0 bg-black/60 z-20" onClick={() => setSel(null)} />
-          <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-30 shadow-2xl flex flex-col">
+          <div className="fixed inset-0 bg-black/60 z-[60]" onClick={() => setSel(null)} />
+          <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-[70] shadow-2xl flex flex-col">
             <div className="p-5 border-b border-[var(--border)] relative">
               <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
-              <div className="flex items-center gap-3"><span className="w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden" style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
+              <div className="flex items-center gap-3"><span onClick={() => sel.photo_path && openPhoto(sel.photo_path)} className={`w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden ${sel.photo_path ? 'cursor-zoom-in' : ''}`} style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" onError={() => photoFallback(sel.id, sel.photo_path)} className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
                 <div><h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} />{sel.man_power_request_id && reqMap[sel.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--gold)]/20 text-[#8A6D1E] border border-[var(--gold)]/40">#{reqMap[sel.man_power_request_id].seq}</span>}</div></div></div>
               <div className="text-xs text-[var(--muted)] mt-2">{t('th_added')} {fmtDate(sel.created_at)} · <b className="text-[var(--text)]">{daysIn(sel.created_at)} {lang==='es'?'días':'days'}</b> {t('th_in_funnel').toLowerCase()}</div>
               {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ {t('view_in_asana')}</a>}
@@ -344,7 +352,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
                   <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2.5">{t('l_photo_video')}</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      {media.photo ? <img src={media.photo} alt="" className="w-full h-32 object-cover rounded-lg mb-1.5" /> : <div className="w-full h-32 bg-[var(--raise)] rounded-lg grid place-items-center text-[var(--faint)] text-xs mb-1.5">{t('no_photo')}</div>}
+                      {media.photo ? <img src={media.photo} alt="" loading="lazy" onClick={() => openPhoto(sel.photo_path)} onError={async () => { if (!sel.photo_path) return; const { data } = await supabase.storage.from('candidate-photos').createSignedUrl(sel.photo_path, 600); if (data?.signedUrl) setMedia(m => ({ ...m, photo: data.signedUrl })) }} className="w-full h-32 object-cover rounded-lg mb-1.5 cursor-zoom-in" title={lang === 'es' ? 'Ver a tamaño completo' : 'View full size'} /> : <div className="w-full h-32 bg-[var(--raise)] rounded-lg grid place-items-center text-[var(--faint)] text-xs mb-1.5">{t('no_photo')}</div>}
                       <label className="text-xs text-[var(--text)] font-medium cursor-pointer">{media.photo ? t('replace_photo') : t('add_photo')}<input type="file" accept="image/*" className="hidden" onChange={e => uploadMedia('photo', e.target.files?.[0] || null)} /></label>
                     </div>
                     <div>
@@ -365,7 +373,14 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
           </aside>
         </>
       )}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[80]"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
+      {lightbox && (
+        <div className="fixed inset-0 z-[90] bg-black/90 grid place-items-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
+          <button onClick={() => setLightbox(null)} title={lang === 'es' ? 'Cerrar' : 'Close'} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white grid place-items-center hover:bg-white/20"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          <a href={lightbox} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="absolute bottom-4 right-4 text-white/80 text-xs bg-white/10 rounded-lg px-3 py-2 hover:bg-white/20">{lang === 'es' ? 'Abrir original' : 'Open original'} ↗</a>
+        </div>
+      )}
     </div>
   )
 }
