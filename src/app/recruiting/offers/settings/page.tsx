@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 import RecruitingTabs from '@/components/RecruitingTabs'
 
-const NAVY = '#0D1B35', GOLD = '#D4A843'
-const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white'
-const lbl = 'block text-[11px] uppercase tracking-wide text-gray-500 font-bold mb-1'
+const NAVY = 'var(--text-strong)', GOLD = 'var(--gold)'
+const inp = 'w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-[var(--surface)]'
+const lbl = 'block text-[11px] uppercase tracking-wide text-[var(--muted)] font-bold mb-1'
 
 type Settings = Record<string, any>
 type Tmpl = { id: string; position_name: string; duties_intro_en: string | null; duties_intro_es: string | null; duties_en: string[]; duties_es: string[]; active: boolean; sort: number }
@@ -69,17 +69,17 @@ export default function OfferSettingsPage() {
 
   const patchT = (id: string, p: Partial<Tmpl>) => setTmpls(ts => ts.map(t => t.id === id ? { ...t, ...p } : t))
 
-  if (loading) return <div className="min-h-screen bg-[#F5F6FA] p-6"><p className="text-gray-400 text-sm">Loading…</p></div>
+  if (loading) return <div className="min-h-screen bsm-app p-6"><p className="text-[var(--faint)] text-sm">Loading…</p></div>
 
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
+    <div className="min-h-screen bsm-app">
       <div className="max-w-5xl mx-auto px-6 py-5">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-[#0D1B35]">Offer letter settings</h1>
-            <p className="text-xs text-gray-500">Repetitive wording, edited once · used by every new letter</p>
+            <h1 className="text-xl font-semibold text-[var(--text-strong)]">Offer letter settings</h1>
+            <p className="text-xs text-[var(--muted)]">Repetitive wording, edited once · used by every new letter</p>
           </div>
-          <a href="/recruiting/offers" className="text-sm text-gray-500 hover:text-[#0D1B35] whitespace-nowrap">← Offers</a>
+          <a href="/recruiting/offers" className="text-sm text-[var(--muted)] hover:text-[var(--text)] whitespace-nowrap">← Offers</a>
         </div>
         <RecruitingTabs />
 
@@ -111,7 +111,7 @@ export default function OfferSettingsPage() {
 
         {/* Bilingual boilerplate */}
         <Card title="Letter wording">
-          <p className="text-[11px] text-gray-400 mb-3">Placeholders auto-fill: <code className="bg-gray-100 px-1 rounded">{'{position}'}</code> <code className="bg-gray-100 px-1 rounded">{'{name}'}</code> <code className="bg-gray-100 px-1 rounded">{'{sign_by}'}</code> <code className="bg-gray-100 px-1 rounded">{'{questions_phone}'}</code></p>
+          <p className="text-[11px] text-[var(--faint)] mb-3">Placeholders auto-fill: <code className="bg-[var(--raise)] px-1 rounded">{'{position}'}</code> <code className="bg-[var(--raise)] px-1 rounded">{'{name}'}</code> <code className="bg-[var(--raise)] px-1 rounded">{'{sign_by}'}</code> <code className="bg-[var(--raise)] px-1 rounded">{'{questions_phone}'}</code></p>
           <div className="space-y-4">
             {TEXTS.map(([label, key, kind]) => (
               <div key={key}>
@@ -119,7 +119,7 @@ export default function OfferSettingsPage() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   {(['en', 'es'] as const).map(L => (
                     <div key={L}>
-                      <div className="text-[10px] font-semibold text-gray-400 mb-1">{L === 'en' ? 'ENGLISH' : 'ESPAÑOL'}</div>
+                      <div className="text-[10px] font-semibold text-[var(--faint)] mb-1">{L === 'en' ? 'ENGLISH' : 'ESPAÑOL'}</div>
                       {kind === 'area'
                         ? <textarea rows={key === 'overtime' ? 6 : 3} className={inp} value={s?.[`${key}_${L}`] || ''} onChange={e => set(`${key}_${L}`, e.target.value)} />
                         : <input className={inp} value={s?.[`${key}_${L}`] || ''} onChange={e => set(`${key}_${L}`, e.target.value)} />}
@@ -135,22 +135,22 @@ export default function OfferSettingsPage() {
 
         {/* Per-tier templates */}
         <Card title="Position templates">
-          <p className="text-[11px] text-gray-400 mb-3">Each position tier has its own <b>Duties &amp; Responsibilities</b> block. Everything else comes from the settings above.</p>
+          <p className="text-[11px] text-[var(--faint)] mb-3">Each position tier has its own <b>Duties &amp; Responsibilities</b> block. Everything else comes from the settings above.</p>
           <div className="space-y-2">
             {tmpls.map(t => {
               const open = openTmpl === t.id
               const filled = (t.duties_en || []).length > 0
               return (
-                <div key={t.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                  <button onClick={() => setOpenTmpl(open ? null : t.id)} className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
-                    <span className="font-semibold text-sm text-[#0D1B35]">{t.position_name}</span>
+                <div key={t.id} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                  <button onClick={() => setOpenTmpl(open ? null : t.id)} className="w-full flex items-center justify-between px-4 py-3 bg-[var(--surface)] hover:bg-gray-50">
+                    <span className="font-semibold text-sm text-[var(--text)]">{t.position_name}</span>
                     <span className="flex items-center gap-2">
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${filled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{filled ? 'Ready' : 'Needs duties'}</span>
-                      <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
+                      <span className="text-[var(--faint)] text-xs">{open ? '▲' : '▼'}</span>
                     </span>
                   </button>
                   {open && (
-                    <div className="p-4 bg-[#F9FAFB] border-t border-gray-100 space-y-4">
+                    <div className="p-4 bg-[#F9FAFB] border-t border-[var(--border)] space-y-4">
                       <div className="grid sm:grid-cols-2 gap-3">
                         <F label="Duties intro — English"><input className={inp} placeholder="As a Porter, your primary responsibilities will include, but are not limited to:" value={t.duties_intro_en || ''} onChange={e => patchT(t.id, { duties_intro_en: e.target.value })} /></F>
                         <F label="Duties intro — Español"><input className={inp} placeholder="Como Porter, sus responsabilidades principales incluirán, entre otras:" value={t.duties_intro_es || ''} onChange={e => patchT(t.id, { duties_intro_es: e.target.value })} /></F>
@@ -160,7 +160,7 @@ export default function OfferSettingsPage() {
                         <ListEditor label="Duties — Español" items={t.duties_es} onChange={v => patchT(t.id, { duties_es: v })} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={t.active} onChange={e => patchT(t.id, { active: e.target.checked })} /> Active</label>
+                        <label className="flex items-center gap-2 text-xs text-[var(--muted)]"><input type="checkbox" checked={t.active} onChange={e => patchT(t.id, { active: e.target.checked })} /> Active</label>
                         <button disabled={busy} onClick={() => saveTmpl(t)} className="text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50" style={{ background: NAVY, color: '#fff' }}>Save {t.position_name}</button>
                       </div>
                     </div>
@@ -172,14 +172,14 @@ export default function OfferSettingsPage() {
         </Card>
       </div>
 
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0D1B35] text-white px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[#D4A843]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-40"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
     </div>
   )
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
-    <h2 className="text-sm font-bold text-[#0D1B35] mb-3">{title}</h2>{children}
+  return <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 mb-4">
+    <h2 className="text-sm font-bold text-[var(--text)] mb-3">{title}</h2>{children}
   </div>
 }
 function F({ label, children }: { label: string; children: React.ReactNode }) { return <div><label className={lbl}>{label}</label>{children}</div> }
@@ -193,7 +193,7 @@ function ListEditor({ label, items, onChange }: { label: string; items: string[]
         {list.map((it, i) => (
           <div key={i} className="flex gap-1.5">
             <input className={inp} value={it} onChange={e => { const n = [...list]; n[i] = e.target.value; onChange(n) }} />
-            <button onClick={() => onChange(list.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500 px-1.5 text-sm">✕</button>
+            <button onClick={() => onChange(list.filter((_, j) => j !== i))} className="text-[var(--faint)] hover:text-red-500 px-1.5 text-sm">✕</button>
           </div>
         ))}
         <button onClick={() => onChange([...list, ''])} className="text-xs text-blue-600 font-medium">+ Add line</button>
