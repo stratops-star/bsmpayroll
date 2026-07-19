@@ -50,9 +50,9 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
         const n = counts[key]
         return (
           <a key={href} href={href}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-0.5 flex items-center gap-1.5 whitespace-nowrap ${on ? 'text-[#1E1B17] border-[#DCB878]' : 'text-[#8C8375] border-transparent hover:text-[#1E1B17]'}`}>
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-0.5 flex items-center gap-1.5 whitespace-nowrap ${on ? 'text-[var(--text-strong)] border-[var(--gold)]' : 'text-[var(--muted)] border-transparent hover:text-[var(--text-strong)]'}`}>
             {t(key)}
-            {n != null && n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${on ? 'bg-[#DCB878] text-[#1E1B17]' : 'bg-[#F0EDE7] text-[#8C8375]'}`}>{n}</span>}
+            {n != null && n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${on ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'bg-[#F0EDE7] text-[var(--muted)]'}`}>{n}</span>}
           </a>
         )
       })}
