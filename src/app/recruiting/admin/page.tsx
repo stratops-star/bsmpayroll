@@ -45,6 +45,11 @@ export default function AdminPage() {
   const [toast, setToast] = useState('')
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('bsm:area', { detail: 'User Access' }))
+    return () => window.dispatchEvent(new CustomEvent('bsm:area', { detail: null }))
+  }, [])
+
+  useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setStatus('denied'); return }
