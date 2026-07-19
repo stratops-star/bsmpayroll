@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import '@/styles/bsm-theme.css'
+import { ThemeProvider, themeInitScript } from '@/components/theme'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,7 +21,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <head><script dangerouslySetInnerHTML={{ __html: themeInitScript }} /></head>
+      <body className={inter.className}>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   )
 }
