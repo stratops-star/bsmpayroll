@@ -40,9 +40,11 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
   const [mods, setMods] = useState<Mod[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [email, setEmail] = useState('')
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false)   // module switcher
+  const [gear, setGear] = useState(false)   // mobile gear menu
   const [areaOverride, setAreaOverride] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const gearRef = useRef<HTMLDivElement>(null)
 
   // A page can set the header area by dispatching a 'bsm:area' event.
   useEffect(() => {
@@ -70,7 +72,10 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
   }, [])
 
   useEffect(() => {
-    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (gearRef.current && !gearRef.current.contains(e.target as Node)) setGear(false)
+    }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
@@ -78,75 +83,78 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
   const canSwitch = mods.length > 1 || isAdmin
   async function signOut() { await supabase.auth.signOut(); router.push('/login') }
 
-  // The brand + switcher block (shared between the layouts below).
-  const brand = (
-    <div className="flex items-center gap-3 min-w-0" ref={ref}>
-      <button
-        onClick={() => canSwitch ? setOpen(o => !o) : router.push(mods[0]?.href || '/hub')}
-        className="flex items-center gap-3 min-w-0"
-        title={canSwitch ? 'Switch module' : 'Home'}>
-        <Mark />
-        <span className="flex flex-col items-start leading-tight min-w-0">
-          <span className="text-white text-[15px] font-bold truncate">BSM{shownArea ? ` — ${shownArea}` : ''}</span>
-          {canSwitch && <span className="text-[#DCB878] text-[11px] flex items-center gap-1">tap to switch <span className="opacity-60">▾</span></span>}
-        </span>
-      </button>
-
-      {canSwitch && open && (
-        <div className="absolute top-[48px] left-0 bg-[#211E1A] border border-[#DCB878]/25 rounded-[14px] p-[7px] w-[246px] z-[60] shadow-[0_24px_50px_-18px_rgba(0,0,0,.7)]">
-          <div className="text-[10px] font-bold tracking-[.18em] text-[#8C8375] uppercase px-2.5 pt-2 pb-1.5">Switch workspace</div>
-          {mods.map(m => (
-            <button key={m.href} onClick={() => { setOpen(false); router.push(m.href) }}
-              className="w-full text-left flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[#EDE7DD] text-sm font-medium hover:bg-[#26221D]">
-              <Ring k={m.key} /> {m.label}
-            </button>
-          ))}
-          {isAdmin && (<>
-            <div className="h-px bg-white/[.08] mx-2 my-1.5" />
-            <button onClick={() => { setOpen(false); router.push('/recruiting/admin') }}
-              className="w-full text-left flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[#EDE7DD] text-sm font-medium hover:bg-[#26221D]">
-              <Ring k="shield" /> User Access
-            </button>
-            <button onClick={() => { setOpen(false); router.push('/hub') }}
-              className="w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-[9px] text-[#8C8375] text-xs hover:bg-[#26221D]">
-              <Ring k="hub" /> Open full hub
-            </button>
-          </>)}
-        </div>
-      )}
-    </div>
-  )
-
-  // Account cluster (theme + email + sign out). Email/divider are desktop-only,
-  // so on mobile this collapses to just the theme toggle + Sign out.
-  const account = (
-    <div className="flex items-center gap-3 flex-shrink-0">
-      <ThemeToggle />
-      <div className="w-px h-4 bg-white/15 hidden sm:block" />
-      <span className="text-white/30 text-xs truncate max-w-[150px] hidden sm:block">{email}</span>
-      <button onClick={signOut} className="text-white/40 text-xs hover:text-white transition-colors">Sign out</button>
-    </div>
-  )
-
   return (
-    <header className="bg-[#1E1B17] px-[18px] relative z-50">
-      {/* Row 1 — brand + account. On desktop the page actions live inline here too. */}
-      <div className="h-[52px] flex items-center justify-between gap-3">
-        {brand}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Desktop: actions inline with the account (unchanged from before). */}
-          <div className="hidden sm:flex items-center gap-3">{right}</div>
-          {account}
-        </div>
+    <header className="bg-[#1E1B17] h-[52px] px-[18px] flex items-center justify-between gap-3 relative z-50">
+      {/* left: mark + switcher */}
+      <div className="flex items-center gap-3 min-w-0" ref={ref}>
+        <button
+          onClick={() => canSwitch ? setOpen(o => !o) : router.push(mods[0]?.href || '/hub')}
+          className="flex items-center gap-3 min-w-0"
+          title={canSwitch ? 'Switch module' : 'Home'}>
+          <Mark />
+          <span className="flex flex-col items-start leading-tight min-w-0">
+            {/* mobile: just the area · desktop: BSM — area */}
+            <span className="text-white text-[15px] font-bold truncate">
+              <span className="sm:hidden">{shownArea || 'BSM'}</span>
+              <span className="hidden sm:inline">BSM{shownArea ? ` — ${shownArea}` : ''}</span>
+            </span>
+            {canSwitch && <span className="text-[#DCB878] text-[11px] flex items-center gap-1">tap to switch <span className="opacity-60">▾</span></span>}
+          </span>
+        </button>
+
+        {canSwitch && open && (
+          <div className="absolute top-[48px] left-0 bg-[#211E1A] border border-[#DCB878]/25 rounded-[14px] p-[7px] w-[246px] z-[60] shadow-[0_24px_50px_-18px_rgba(0,0,0,.7)]">
+            <div className="text-[10px] font-bold tracking-[.18em] text-[#8C8375] uppercase px-2.5 pt-2 pb-1.5">Switch workspace</div>
+            {mods.map(m => (
+              <button key={m.href} onClick={() => { setOpen(false); router.push(m.href) }}
+                className="w-full text-left flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[#EDE7DD] text-sm font-medium hover:bg-[#26221D]">
+                <Ring k={m.key} /> {m.label}
+              </button>
+            ))}
+            {isAdmin && (<>
+              <div className="h-px bg-white/[.08] mx-2 my-1.5" />
+              <button onClick={() => { setOpen(false); router.push('/recruiting/admin') }}
+                className="w-full text-left flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[#EDE7DD] text-sm font-medium hover:bg-[#26221D]">
+                <Ring k="shield" /> User Access
+              </button>
+              <button onClick={() => { setOpen(false); router.push('/hub') }}
+                className="w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-[9px] text-[#8C8375] text-xs hover:bg-[#26221D]">
+                <Ring k="hub" /> Open full hub
+              </button>
+            </>)}
+          </div>
+        )}
       </div>
 
-      {/* Row 2 — mobile only: the page actions drop to their own row so nothing
-          overlaps the title. Rendered here for < sm; the copy above covers sm+. */}
-      {right && (
-        <div className="flex sm:hidden justify-end pb-2 -mt-0.5 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {right}
+      {/* right */}
+      <div className="flex items-center gap-3 flex-shrink-0">
+        {/* desktop: page actions inline */}
+        <div className="hidden sm:flex items-center gap-3">{right}</div>
+        <ThemeToggle />
+        {/* desktop: divider + email + sign out */}
+        <div className="w-px h-4 bg-white/15 hidden sm:block" />
+        <span className="text-white/30 text-xs truncate max-w-[150px] hidden sm:block">{email}</span>
+        <button onClick={signOut} className="text-white/40 text-xs hover:text-white transition-colors hidden sm:block">Sign out</button>
+
+        {/* mobile: gear menu holds the page actions + language + sign out */}
+        <div className="sm:hidden relative" ref={gearRef}>
+          <button onClick={() => setGear(g => !g)} title="Menu"
+            className={`w-9 h-9 grid place-items-center rounded-lg border text-[#DCB878] ${gear ? 'border-[#DCB878]/50 bg-[#241f19]' : 'border-white/15 bg-white/5'}`}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+          </button>
+          {gear && (
+            <div className="absolute right-0 top-[44px] w-[252px] bg-[#1E1B17] border border-[#DCB878]/40 rounded-2xl p-[7px] z-[60] shadow-[0_26px_54px_-18px_rgba(0,0,0,.8)]">
+              <div className="text-[10px] font-bold tracking-[.18em] text-[#8C8375] uppercase px-2.5 pt-1.5 pb-1">Actions</div>
+              {right}
+              <div className="h-px bg-white/10 mx-2 my-1.5" />
+              <button onClick={signOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e88b8b] text-sm font-medium hover:bg-white/5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </header>
   )
 }
