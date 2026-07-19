@@ -1,0 +1,78 @@
+/* ══════════════════════════════════════════════════════════════════
+   BSM theme tokens. Every screen references these variables, never raw
+   hex — so dark/light flips globally from one place.
+   Applied via <html data-theme="dark|light">. Default: dark.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root, [data-theme='dark'] {
+  --bg:            #1E1B17;
+  --bg-grid:       rgba(220,184,120,.05);
+  --surface:       #211E1A;   /* cards, panels, drawers */
+  --surface-2:     #26221D;   /* inputs, hover */
+  --raise:         #2A241D;   /* chips, avatars bg, inset boxes */
+  --header:        #16130F;   /* top bar */
+
+  --text:          #EDE7DD;
+  --text-strong:   #FFFFFF;
+  --muted:         #8C8375;
+  --faint:         #6E665C;
+
+  --border:        #3A342B;
+  --border-strong: #4A4237;
+  --border-gold:   rgba(220,184,120,.28);
+
+  --gold:          #DCB878;
+  --gold-hover:    #E7CB9A;
+  --on-gold:       #16130F;   /* text on a gold fill */
+
+  --ok:            #7FB08A;
+  --ok-bg:         rgba(127,176,138,.12);
+  --danger:        #C97A6A;
+  --danger-bg:     #2A2320;
+
+  --shadow:        0 24px 50px -18px rgba(0,0,0,.7);
+  --shadow-card:   0 2px 14px rgba(0,0,0,.35);
+}
+
+[data-theme='light'] {
+  --bg:            #F5F3EF;
+  --bg-grid:       rgba(150,114,60,.05);
+  --surface:       #FFFFFF;
+  --surface-2:     #FBF8F2;
+  --raise:         #F0EDE7;
+  --header:        #16130F;   /* header stays charcoal in both themes */
+
+  --text:          #2B2721;
+  --text-strong:   #16130F;
+  --muted:         #6E665C;
+  --faint:         #9C9384;
+
+  --border:        #E5E0D8;
+  --border-strong: #D8D1C5;
+  --border-gold:   rgba(150,114,60,.30);
+
+  --gold:          #96723C;   /* deeper gold: passes on white */
+  --gold-hover:    #83632F;
+  --on-gold:       #FFFFFF;
+
+  --ok:            #3F7A4C;
+  --ok-bg:         rgba(63,122,76,.10);
+  --danger:        #B4432E;
+  --danger-bg:     #FDF3F1;
+
+  --shadow:        0 20px 50px -20px rgba(30,27,23,.28);
+  --shadow-card:   0 2px 14px rgba(30,27,23,.08);
+}
+
+/* page base */
+.bsm-app {
+  background: var(--bg);
+  color: var(--text);
+  background-image: radial-gradient(circle at 1px 1px, var(--bg-grid) 1px, transparent 0);
+  background-size: 22px 22px;
+  min-height: 100vh;
+}
+/* smooth flip (respect reduced motion) */
+@media (prefers-reduced-motion: no-preference) {
+  .bsm-app, .bsm-app * { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
+}
