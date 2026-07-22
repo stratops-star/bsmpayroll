@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#1E1B17',
+  colorScheme: 'light',   // stop iOS Dark Mode from inverting form fields
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
