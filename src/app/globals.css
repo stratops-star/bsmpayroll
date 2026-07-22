@@ -3,8 +3,50 @@
 @tailwind utilities;
 
 @layer base {
+  /* The platform is a light UI. Without this, iOS/macOS Safari in Dark Mode
+     auto-darkens native form controls while our CSS keeps the text dark —
+     which renders inputs as unreadable black-on-black boxes. */
+  :root { color-scheme: light; }
+
   html { font-size: 14px; }
   body { background: #F5F6FA; color: #1a1a2e; }
+
+  /* Explicit, non-negotiable field styling so no OS setting can invert them. */
+  input, textarea, select {
+    background-color: #FFFFFF;
+    color: #1E1B17;
+    -webkit-text-fill-color: #1E1B17;   /* iOS honours this over `color` */
+    caret-color: #1E1B17;
+  }
+  input::placeholder, textarea::placeholder { color: #8C8375; -webkit-text-fill-color: #8C8375; opacity: 1; }
+
+  /* iOS/Safari autofill repaints the field — force it back. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #1E1B17;
+    -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset;
+    box-shadow: 0 0 0 1000px #FFFFFF inset;
+  }
+
+  /* Date pickers on iOS render their own indicator — keep it visible. */
+  input[type="date"]::-webkit-calendar-picker-indicator { opacity: 1; filter: none; }
+
+  /* The dark login screens style their own fields; keep those readable. */
+  .bsm-inp {
+    background-color: #191612 !important;
+    color: #F2EDE3 !important;
+    -webkit-text-fill-color: #F2EDE3 !important;
+    caret-color: #DCB878;
+  }
+  .bsm-inp::placeholder { color: #6E6558; -webkit-text-fill-color: #6E6558; }
+  .bsm-inp:-webkit-autofill,
+  .bsm-inp:-webkit-autofill:hover,
+  .bsm-inp:-webkit-autofill:focus {
+    -webkit-text-fill-color: #F2EDE3;
+    -webkit-box-shadow: 0 0 0 1000px #191612 inset;
+    box-shadow: 0 0 0 1000px #191612 inset;
+  }
 }
 
 @layer components {
