@@ -220,21 +220,21 @@ export default function CareersPage() {
   if (done) {
     return (
       <div className="min-h-screen bsm-app flex items-center justify-center px-4">
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--gold)]/20 shadow-2xl max-w-md w-full p-8 text-center">
+        <div className="bg-[var(--surface)] rounded-2xl border border-[color-mix(in_srgb,var(--gold)_38%,transparent)] shadow-2xl max-w-md w-full p-8 text-center">
           <div className="w-14 h-14 rounded-full border border-[var(--gold)] grid place-items-center mx-auto mb-4">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[var(--gold)]" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
           </div>
           <h1 className="text-xl font-semibold text-[var(--text-strong)] mb-2">{tt.okTitle}</h1>
           <p className="text-[var(--muted)] text-sm mb-6">{tt.okBody}</p>
-          <button onClick={() => location.reload()} className="text-sm text-[var(--gold)] font-medium border border-[var(--gold)]/40 rounded-lg px-4 py-2 hover:bg-[var(--surface-2)]">{tt.another}</button>
+          <button onClick={() => location.reload()} className="text-sm text-[var(--gold)] font-medium border border-[color-mix(in_srgb,var(--gold)_45%,transparent)] rounded-lg px-4 py-2 hover:bg-[var(--surface-2)]">{tt.another}</button>
         </div>
       </div>
     )
   }
 
-  const input = 'w-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-strong)] placeholder:text-[var(--faint)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold)]/30 focus:border-[var(--gold)]'
+  const input = 'w-full bg-[var(--surface-2)] border border-[color-mix(in_srgb,var(--gold)_20%,transparent)] text-[var(--text-strong)] placeholder:text-[var(--faint)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--gold)_35%,transparent)] focus:border-[var(--gold)]'
   const label = 'block text-sm font-medium text-[var(--text)] mb-1'
-  const pill = (on: boolean) => `text-xs font-medium px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${on ? 'bg-[var(--gold)] text-[var(--on-gold)] border-[var(--gold)]' : 'bg-transparent text-[var(--muted)] border-[var(--border)] hover:border-[var(--gold)]/50'}`
+  const pill = (on: boolean) => `text-xs font-medium px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${on ? 'bg-[var(--gold)] text-[var(--on-gold)] border-[var(--gold)]' : 'bg-transparent text-[var(--muted)] border-[var(--border)] hover:border-[color-mix(in_srgb,var(--gold)_55%,transparent)]'}`
   const catCount = (c: Cat) => c.jobs.filter(j => has(j.n)).length
 
   return (
@@ -249,7 +249,7 @@ export default function CareersPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex bg-[var(--surface)] border border-[var(--border)] rounded-lg p-0.5">
+            <div className="flex bg-[var(--surface)] border border-[color-mix(in_srgb,var(--gold)_26%,transparent)] rounded-lg p-0.5">
               {(['en', 'es'] as Lang[]).map(l => (
                 <button key={l} onClick={() => setLang(l)} className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${lang === l ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'text-[var(--muted)]'}`}>{l === 'en' ? 'EN' : 'ES'}</button>
               ))}
@@ -258,7 +258,7 @@ export default function CareersPage() {
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--gold)]/18 shadow-2xl p-6">
+        <div className="bg-[var(--surface)] rounded-2xl border border-[color-mix(in_srgb,var(--gold)_38%,transparent)] shadow-2xl p-6">
           <h1 className="text-xl font-semibold text-[var(--text-strong)]">{tt.title}</h1>
           <div className="w-11 h-0.5 bg-[var(--gold)] mt-2.5 mb-3" />
           <p className="text-sm text-[var(--muted)] mb-5">{tt.subtitle}</p>
@@ -297,9 +297,9 @@ export default function CareersPage() {
                     const cc = catCount(c)
                     return (
                       <button key={c.name} type="button" onClick={() => setActiveCat(i)}
-                        className={`rounded-xl border p-4 text-center transition-colors ${cc ? 'border-[var(--gold)] bg-[var(--gold)]/[.07]' : 'border-[var(--border)] hover:border-[var(--gold)]/60'}`}>
+                        className={`rounded-xl border p-4 text-center transition-colors ${cc ? 'border-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_9%,transparent)]' : 'border-[var(--border)] hover:border-[color-mix(in_srgb,var(--gold)_65%,transparent)]'}`}>
                         <div className="grid place-items-center mb-1.5">
-                          <span className="w-10 h-10 rounded-full border border-[var(--gold)]/60 grid place-items-center"><CatIcon k={c.icon} /></span>
+                          <span className="w-10 h-10 rounded-full border border-[color-mix(in_srgb,var(--gold)_65%,transparent)] grid place-items-center"><CatIcon k={c.icon} /></span>
                         </div>
                         <div className="text-sm font-semibold text-[var(--text-strong)]">{lang === 'es' ? c.es : c.name}</div>
                         <div className={`text-xs mt-0.5 ${cc ? 'text-[var(--gold)]' : 'text-[var(--faint)]'}`}>{cc ? `${cc} ${tt.selected}` : `${c.jobs.length} ${tt.jobsIn}`}</div>
@@ -317,7 +317,7 @@ export default function CareersPage() {
                       const locked = jobLocked(j)
                       return (
                         <button key={j.n} type="button" disabled={locked} onClick={() => toggleJob(j.n)}
-                          className={`w-full text-left rounded-xl border p-3 transition-colors ${on ? 'border-[var(--gold)] bg-[var(--gold)]/[.07]' : locked ? 'border-[var(--border)] opacity-40 cursor-not-allowed' : 'border-[var(--border)] hover:border-[var(--gold)]/60'}`}>
+                          className={`w-full text-left rounded-xl border p-3 transition-colors ${on ? 'border-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_9%,transparent)]' : locked ? 'border-[var(--border)] opacity-40 cursor-not-allowed' : 'border-[var(--border)] hover:border-[color-mix(in_srgb,var(--gold)_65%,transparent)]'}`}>
                           <div className="flex items-center gap-2">
                             <span className={`w-4 h-4 rounded border flex-shrink-0 grid place-items-center ${on ? 'bg-[var(--gold)] border-[var(--gold)]' : 'border-[var(--border)]'}`}>
                               {on && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[var(--on-gold)]" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}
@@ -337,7 +337,7 @@ export default function CareersPage() {
 
               {/* Security license (appears once Security is selected, wherever you are) */}
               {has('Security') && (
-                <div className="mt-3 border border-[var(--border)] rounded-xl p-3 bg-[var(--surface-2)]">
+                <div className="mt-3 border border-[color-mix(in_srgb,var(--gold)_26%,transparent)] rounded-xl p-3 bg-[var(--surface-2)]">
                   <label className="flex items-center gap-2 text-xs font-medium text-[var(--text)] mb-1.5"><CatIcon k="security" size={15} /> {tt.licensed}</label>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setSecurityLicensed('yes')} className={pill(securityLicensed === 'yes')}>{tt.yesLic}</button>
@@ -347,7 +347,7 @@ export default function CareersPage() {
                     <div className="mt-2">
                       <label className="block text-xs font-medium text-[var(--text)] mb-1">{tt.licenseUpload}</label>
                       <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setLicense(e.target.files?.[0] || null)}
-                        className="text-sm text-[var(--muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-[var(--border)] file:bg-[var(--surface-2)] file:text-[var(--text)] file:text-sm" />
+                        className="text-sm text-[var(--muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-[color-mix(in_srgb,var(--gold)_26%,transparent)] file:bg-[var(--surface-2)] file:text-[var(--text)] file:text-sm" />
                     </div>
                   )}
                 </div>
@@ -415,11 +415,11 @@ export default function CareersPage() {
             <div>
               <label className={label}>{tt.resume}</label>
               <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={e => setResume(e.target.files?.[0] || null)}
-                className="text-sm text-[var(--muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-[var(--border)] file:bg-[var(--surface-2)] file:text-[var(--text)] file:text-sm" />
+                className="text-sm text-[var(--muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-[color-mix(in_srgb,var(--gold)_26%,transparent)] file:bg-[var(--surface-2)] file:text-[var(--text)] file:text-sm" />
             </div>
 
             {/* ── SMS consent (optional, unchecked by default) ── */}
-            <div className="border border-[var(--border)] rounded-xl p-3.5 bg-[var(--surface-2)]">
+            <div className="border border-[color-mix(in_srgb,var(--gold)_26%,transparent)] rounded-xl p-3.5 bg-[var(--surface-2)]">
               <div className="text-[10px] font-bold tracking-[.18em] uppercase text-[var(--gold)] mb-2">{tt.smsTitle}</div>
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={smsConsent} onChange={e => setSmsConsent(e.target.checked)}
