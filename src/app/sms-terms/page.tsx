@@ -20,15 +20,15 @@ export default function SmsTermsPage() {
         </Section>
 
         <Section title="Program description">
-          <p>BSM Recruiting Notifications is an internal operational text message program for BSM Facility Solutions employees and authorized staff interviewers. Messages contain work information such as your daily schedule of assigned candidate interviews, interview times, schedule changes, and reminders. This program does not send marketing or promotional messages.</p>
+          <p>BSM Recruiting Notifications is an operational text message program for BSM Facility Solutions job applicants and employees. Job applicants who opt in receive messages about their application, interview scheduling and confirmations, appointment reminders, and hiring status. Employees and staff interviewers who opt in receive their daily schedule of assigned candidate interviews, schedule changes, and reminders. This program does not send marketing or promotional messages.</p>
         </Section>
 
         <Section title="How to join">
-          <p>This program is available only to BSM employees and authorized staff. There is no public sign-up. Employees join by completing a written internal communications authorization form during onboarding, on which they provide their mobile number and agree to receive recurring SMS notifications from BSM Facility Solutions. Only employees who have signed this authorization receive messages.</p>
+          <p>There are two ways to join, and both require your explicit consent.</p><p><b>Job applicants:</b> when you apply at bsmfacilitysolutions.app/careers, you may check an optional consent box agreeing to receive text messages about your application, interview scheduling, and hiring status. This box is unchecked by default. <b>Consent is optional and is not required to apply or to be considered for employment.</b></p><p><b>Employees and staff:</b> you join by completing a written internal communications authorization form during onboarding, on which you provide your mobile number and agree to receive recurring SMS about your work schedule and assigned interviews.</p><p>Only people who have opted in through one of these methods receive messages.</p>
         </Section>
 
         <Section title="Message frequency">
-          <p>Message frequency varies. Recipients typically receive approximately one message per workday, and additional messages when a schedule changes.</p>
+          <p>Message frequency varies. Applicants typically receive a small number of messages while their application is active, such as an interview confirmation and a reminder. Employees typically receive approximately one message per workday, plus additional messages when a schedule changes.</p>
         </Section>
 
         <Section title="Message and data rates">
@@ -40,8 +40,8 @@ export default function SmsTermsPage() {
         </Section>
 
         <Section title="How to opt out">
-          <p>Reply <b>STOP</b> to any message at any time to cancel and stop receiving messages from this program. After you reply STOP, you will receive one confirmation message and no further messages will be sent. You may also withdraw consent by notifying your supervisor or Human Resources. Opting out of this program does not affect your employment.</p>
-          <p>If you opt out and later wish to resume receiving notifications, contact your supervisor or Human Resources to be re-enrolled.</p>
+          <p>Reply <b>STOP</b> to any message at any time to cancel and stop receiving messages from this program. After you reply STOP, you will receive one confirmation message and no further messages will be sent. You may also withdraw consent by contacting us at the number or email below, or, for employees, by notifying a supervisor or Human Resources. <b>Opting out does not affect your job application or your employment</b> — we will still contact you by phone or email as needed.</p>
+          <p>If you opt out and later wish to resume receiving notifications, contact us using the details below, or, for employees, your supervisor or Human Resources.</p>
         </Section>
 
         <Section title="Supported carriers">
