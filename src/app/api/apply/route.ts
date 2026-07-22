@@ -32,6 +32,10 @@ export async function POST(req: NextRequest) {
     const licRaw = get('security_licensed')
     const security_licensed = licRaw === 'true' ? true : licRaw === 'false' ? false : null
 
+    // Optional SMS consent from the careers form. Store the timestamp too —
+    // A2P/TCPA compliance means being able to show WHEN a number opted in.
+    const sms_consent = get('sms_consent') === 'true'
+
     const payMin = get('pay_min') ? Number(get('pay_min')) : null
     const payMax = get('pay_max') ? Number(get('pay_max')) : null
     const expected_pay = payMin != null && payMax != null ? `$${payMin}–${payMax}/hr` : null
@@ -74,6 +78,8 @@ export async function POST(req: NextRequest) {
       english_level: get('english_level') || null,
       referral_source: get('referral_source') || null,
       experience: get('experience') || null,
+      sms_consent,
+      sms_consent_at: sms_consent ? new Date().toISOString() : null,
       resume_path, license_path,
     }).select('id').single()
 
