@@ -174,7 +174,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
   const chipLabel = (v: string) => ({ u30: 'Under 30', '30-45': '30–45', '45p': '45+' } as Record<string, string>)[v] || stageLabel[v] || (v[0].toUpperCase() + v.slice(1))
   const FLABEL: Record<string, string> = { tier: t('tier'), stage: t('stage'), gender: t('f_gender'), age: t('f_age'), trans: t('f_transport'), lives: t('f_lives'), open: t('f_open'), pos: t('f_position'), resume: t('f_resume'), video: t('f_video'), profile: t('f_profile') }
 
-  if (standalone && gate !== 'ok') return <div className="min-h-screen grid place-items-center bg-[var(--raise)] p-6"><div className="bg-[var(--surface)] rounded-2xl p-8 max-w-md text-center shadow-xl border-t-4 border-[var(--gold)]"><div className="text-4xl mb-3">{gate === 'pending' ? '⏳' : '🔒'}</div><h1 className="text-lg font-bold text-[var(--text)]">{gate === 'pending' ? 'Access pending approval' : 'Sign in required'}</h1><p className="text-sm text-[var(--muted)] mt-2">{gate === 'pending' ? 'An administrator needs to grant you pool access.' : 'Please sign in to continue.'}</p></div></div>
+  if (standalone && gate !== 'ok') return <div className="min-h-screen grid place-items-center bg-[var(--raise)] p-6"><div className="bg-[var(--surface)] rounded-2xl p-8 max-w-md text-center shadow-xl border-t-4 border-[var(--gold)]"><div className="mb-3 grid place-items-center text-[var(--gold)]">{gate === 'pending' ? <Ico d="clock" size={38} sw={1.4} /> : <Ico d="lock" size={38} sw={1.4} />}</div><h1 className="text-lg font-bold text-[var(--text)]">{gate === 'pending' ? 'Access pending approval' : 'Sign in required'}</h1><p className="text-sm text-[var(--muted)] mt-2">{gate === 'pending' ? 'An administrator needs to grant you pool access.' : 'Please sign in to continue.'}</p></div></div>
 
   return (
     <div className="min-h-screen bsm-app">
@@ -183,7 +183,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
           <div className="max-w-6xl mx-auto flex items-center gap-3">
             <span className="w-8 h-8 rounded-lg grid place-items-center font-bold text-sm bg-[var(--gold)] text-[var(--on-gold)]">B</span>
             <div className="flex-1"><div className="text-sm font-semibold">{t('tab_pool')}</div><div className="text-[11px] text-white/50">{meName}</div></div>
-            <button onClick={() => setLang(lang === 'es' ? 'en' : 'es')} className="text-xs bg-[var(--surface)]/10 border border-white/15 rounded-lg px-2.5 py-1.5 font-medium">{lang === 'es' ? 'EN' : 'ES'}</button>
+            <button onClick={() => setLang(lang === 'es' ? 'en' : 'es')} className="text-xs bg-[color-mix(in_srgb,var(--gold)_12%,transparent)] border border-white/15 rounded-lg px-2.5 py-1.5 font-medium">{lang === 'es' ? 'EN' : 'ES'}</button>
             <button onClick={async () => { await supabase.auth.signOut(); location.href = '/login' }} className="text-xs text-white/50 hover:text-white">{t('sign_out')}</button>
           </div>
         </div>
@@ -192,13 +192,13 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
         <div className="mb-4"><h1 className="text-xl font-semibold text-[var(--text-strong)]">{t('tab_pool')}</h1><p className="text-xs text-[var(--muted)]">{t('pool_sub')}</p></div>
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search_ph')} className="border border-[var(--border)] rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
-          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3.5 py-2 text-sm font-semibold text-[var(--text)]">⛃ {t('filters')} {activeCount > 0 && <span className="bg-[var(--gold)] text-[var(--on-gold)] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
+          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3.5 py-2 text-sm font-semibold text-[var(--text)]"><span className="inline-flex items-center gap-1.5"><Ico d="filter" size={15} /> {t('filters')}</span> {activeCount > 0 && <span className="bg-[var(--gold)] text-[var(--on-gold)] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
           <select value={sort} onChange={e => setSort(e.target.value as any)} className="border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3 py-2 text-sm text-[var(--muted)]"><option value="recent">{t('sort_recent')}</option><option value="longest">{t('sort_longest')}</option></select>
-          {(() => { const n = rows.filter(c => missingFields(c).length > 0).length; return <button onClick={() => setF1('profile', F.profile === 'missing' ? 'all' : 'missing')} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border ${F.profile === 'missing' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[var(--surface)] text-amber-700 border-amber-200'}`}>⚠ {t('missing_info')}{n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${F.profile === 'missing' ? 'bg-[var(--surface)]/25' : 'bg-amber-100'}`}>{n}</span>}</button> })()}
-          <div className="ml-auto flex gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg p-0.5">{(['list', 'photos'] as const).map(v => <button key={v} onClick={() => setView(v)} className={`text-xs font-semibold px-3 py-1.5 rounded-md ${view === v ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'text-[var(--muted)]'}`}>{v === 'list' ? `▤ ${t('list')}` : `▦ ${t('photos')}`}</button>)}</div>
+          {(() => { const n = rows.filter(c => missingFields(c).length > 0).length; return <button onClick={() => setF1('profile', F.profile === 'missing' ? 'all' : 'missing')} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border ${F.profile === 'missing' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[var(--surface)] text-amber-700 border-amber-200'}`}><span className="inline-flex items-center gap-1.5"><Ico d="warn" size={14} /> {t('missing_info')}</span>{n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${F.profile === 'missing' ? 'bg-[color-mix(in_srgb,var(--gold)_25%,transparent)]' : 'bg-amber-100'}`}>{n}</span>}</button> })()}
+          <div className="ml-auto flex gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg p-0.5">{(['list', 'photos'] as const).map(v => <button key={v} onClick={() => setView(v)} className={`text-xs font-semibold px-3 py-1.5 rounded-md ${view === v ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'text-[var(--muted)]'}`}><span className="inline-flex items-center gap-1.5">{v === 'list' ? <Ico d="list" size={13} /> : <Ico d="grid" size={13} />}{v === 'list' ? t('list') : t('photos')}</span></button>)}</div>
         </div>
 
-        {activeCount > 0 && <div className="flex flex-wrap gap-2 mb-3 items-center">{Object.entries(F).filter(([, v]) => v !== 'all').map(([k, v]) => <span key={k} className="bg-[var(--gold)] text-[var(--on-gold)] text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">{FLABEL[k] || FILTERS.find(f => f.key === k)?.label}: {chipLabel(v)}<button onClick={() => setF1(k, 'all')} className="opacity-70">✕</button></span>)}<button onClick={clearAll} className="text-xs text-[var(--muted)] underline">{t('clear_filters')}</button></div>}
+        {activeCount > 0 && <div className="flex flex-wrap gap-2 mb-3 items-center">{Object.entries(F).filter(([, v]) => v !== 'all').map(([k, v]) => <span key={k} className="bg-[var(--gold)] text-[var(--on-gold)] text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5">{FLABEL[k] || FILTERS.find(f => f.key === k)?.label}: {chipLabel(v)}<button onClick={() => setF1(k, 'all')} className="opacity-70"><Ico d="x" size={13} sw={2.2} /></button></span>)}<button onClick={clearAll} className="text-xs text-[var(--muted)] underline">{t('clear_filters')}</button></div>}
 
         {panelOpen && (
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 mb-4">
@@ -223,11 +223,37 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
                 </div>) })}
             </div>
           ) : (
-            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
-              <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--muted)] bg-gray-50 border-b border-[var(--border)]"><th className="px-4 py-3">{t('th_candidate')}</th><th className="px-4 py-3">{t('th_position')}</th><th className="px-4 py-3">{t('th_age_sex')}</th><th className="px-4 py-3">{t('th_tier')}</th><th className="px-4 py-3">{t('th_stage')}</th><th className="px-4 py-3">{t('th_added')}</th><th className="px-4 py-3">{t('th_in_funnel')}</th></tr></thead>
+            <>
+            {/* mobile: stacked cards */}
+            <div className="sm:hidden grid gap-2.5">
+              {filtered.map(c => { const d = daysIn(c.created_at); return (
+                <div key={c.id} onClick={() => openCand(c)} role="button" tabIndex={0}
+                  className="bg-[var(--surface)] border border-[var(--border)] border-l-[3px] border-l-[var(--gold)] rounded-xl p-3.5 cursor-pointer">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden flex-shrink-0" style={{ background: hue(c.email || c.full_name) }}>
+                      {photos[c.id] ? <img src={photos[c.id]} alt="" loading="lazy" decoding="async" onError={() => photoFallback(c.id, c.photo_path)} className="w-full h-full object-cover" /> : ini(c.full_name)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-[var(--text)] flex items-center gap-2 flex-wrap">{c.full_name}<SourceBadge channel={c.intake_channel} /></div>
+                      <div className="text-xs text-[var(--muted)]">{[c.borough, c.city].filter(Boolean).join(', ') || '—'}</div>
+                    </div>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${funnelColor(d)}`}>{d}d</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-[var(--border)]">
+                    {tierPill(c.profile_tier)}
+                    <span className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{stageLabel[c.stage]}</span>
+                    <span className="text-[11px] text-[var(--muted)]">{(c.positions || [])[0] || '—'}</span>
+                    <span className="text-[11px] text-[var(--faint)] ml-auto">{fmtDate(c.created_at)}</span>
+                  </div>
+                  {missingFields(c).length > 0 && <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5"><Ico d="warn" size={11} /> {t('missing_label')}: {missingFields(c).join(', ')}</div>}
+                </div>) })}
+            </div>
+            {/* desktop: table */}
+            <div className="hidden sm:block bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden">
+              <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--on-gold)] bg-[var(--gold)] border-b border-[var(--border)]"><th className="px-4 py-3">{t('th_candidate')}</th><th className="px-4 py-3">{t('th_position')}</th><th className="px-4 py-3">{t('th_age_sex')}</th><th className="px-4 py-3">{t('th_tier')}</th><th className="px-4 py-3">{t('th_stage')}</th><th className="px-4 py-3">{t('th_added')}</th><th className="px-4 py-3">{t('th_in_funnel')}</th></tr></thead>
                 <tbody>{filtered.map(c => { const d = daysIn(c.created_at); return (
-                  <tr key={c.id} onClick={() => openCand(c)} className="border-b border-[var(--border)] last:border-0 hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" loading="lazy" decoding="async" onError={() => photoFallback(c.id, c.photo_path)} className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} />{c.man_power_request_id && reqMap[c.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--gold)]/20 text-[#8A6D1E] border border-[var(--gold)]/40">#{reqMap[c.man_power_request_id].seq}</span>}</div><div className="text-xs text-[var(--muted)]">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">⚠ {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
+                  <tr key={c.id} onClick={() => openCand(c)} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--raise)] cursor-pointer">
+                    <td className="px-4 py-3"><div className="flex items-center gap-3"><span className="w-9 h-9 rounded-full grid place-items-center text-white text-xs font-semibold overflow-hidden" style={{ background: hue(c.email || c.full_name) }}>{photos[c.id] ? <img src={photos[c.id]} alt="" loading="lazy" decoding="async" onError={() => photoFallback(c.id, c.photo_path)} className="w-full h-full object-cover" /> : ini(c.full_name)}</span><div><div className="font-semibold text-[var(--text)] flex items-center gap-2">{c.full_name}<SourceBadge channel={c.intake_channel} />{c.man_power_request_id && reqMap[c.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--gold)_20%,transparent)] text-[#8A6D1E] border border-[color-mix(in_srgb,var(--gold)_40%,transparent)]">#{reqMap[c.man_power_request_id].seq}</span>}</div><div className="text-xs text-[var(--muted)]">{[c.borough, c.city].filter(Boolean).join(', ')}</div>{missingFields(c).length > 0 && <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5"><Ico d="warn" size={11} /> {t('missing_label')}: {missingFields(c).join(', ')}</div>}</div></div></td>
                     <td className="px-4 py-3 text-[var(--muted)]">{(c.positions || [])[0] || '—'}{(c.positions || []).length > 1 ? ` +${(c.positions || []).length - 1}` : ''}</td>
                     <td className="px-4 py-3 text-[var(--muted)]">{c.age ?? '—'} · {c.gender ? c.gender[0].toUpperCase() : '—'}</td>
                     <td className="px-4 py-3">{tierPill(c.profile_tier)}</td>
@@ -237,6 +263,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
                   </tr>) })}
                 </tbody></table>
             </div>
+            </>
           )}
       </div>
 
@@ -245,18 +272,18 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
           <div className="fixed inset-0 bg-black/60 z-[60]" onClick={() => setSel(null)} />
           <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-[70] shadow-2xl flex flex-col">
             <div className="p-5 border-b border-[var(--border)] relative">
-              <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
+              <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]"><Ico d="x" size={13} sw={2.2} /></button>
               <div className="flex items-center gap-3"><span onClick={() => sel.photo_path && openPhoto(sel.photo_path)} className={`w-12 h-12 rounded-xl grid place-items-center text-white font-semibold overflow-hidden ${sel.photo_path ? 'cursor-zoom-in' : ''}`} style={{ background: hue(sel.email || sel.full_name) }}>{photos[sel.id] ? <img src={photos[sel.id]} alt="" onError={() => photoFallback(sel.id, sel.photo_path)} className="w-full h-full object-cover" /> : ini(sel.full_name)}</span>
-                <div><h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} />{sel.man_power_request_id && reqMap[sel.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[var(--gold)]/20 text-[#8A6D1E] border border-[var(--gold)]/40">#{reqMap[sel.man_power_request_id].seq}</span>}</div></div></div>
+                <div><h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.full_name}</h2><div className="flex items-center gap-2 mt-0.5">{tierPill(sel.profile_tier)}<span className="text-[11px] bg-[var(--raise)] text-[var(--text)] px-2 py-0.5 rounded-full">{stageLabel[sel.stage]}</span><SourceBadge channel={sel.intake_channel} />{sel.man_power_request_id && reqMap[sel.man_power_request_id] && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--gold)_20%,transparent)] text-[#8A6D1E] border border-[color-mix(in_srgb,var(--gold)_40%,transparent)]">#{reqMap[sel.man_power_request_id].seq}</span>}</div></div></div>
               <div className="text-xs text-[var(--muted)] mt-2">{t('th_added')} {fmtDate(sel.created_at)} · <b className="text-[var(--text)]">{daysIn(sel.created_at)} {lang==='es'?'días':'days'}</b> {t('th_in_funnel').toLowerCase()}</div>
-              {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5">↗ {t('view_in_asana')}</a>}
+              {sel.asana_url && <a href={sel.asana_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1.5"><Ico d="ext" size={12} /> {t('view_in_asana')}</a>}
             </div>
             <div className="overflow-auto flex-1">
               {canAssign && (
-                <div className="p-5 border-b border-[var(--border)] bg-[var(--raise)]/40">
+                <div className="p-5 border-b border-[var(--border)] bg-[var(--raise)]">
                   <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2">{t('assign_to_request')}</div>
                   {sel.man_power_request_id && reqMap[sel.man_power_request_id] ? (
-                    <div className="flex items-center justify-between gap-2 bg-[var(--gold)]/10 border border-[var(--gold)]/40 rounded-lg px-3 py-2">
+                    <div className="flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--gold)_12%,transparent)] border border-[color-mix(in_srgb,var(--gold)_40%,transparent)] rounded-lg px-3 py-2">
                       <div className="text-xs text-[var(--text)] font-medium">{reqLabel(reqMap[sel.man_power_request_id])}</div>
                       <button onClick={unassignRequest} className="text-xs text-red-500 font-medium flex-shrink-0">{t('remove')}</button>
                     </div>
@@ -274,7 +301,7 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
               {canAct && (
                 <div className="p-5 border-b border-[var(--border)] space-y-3">
                   <div><div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-1.5">{t('tier')}</div><div className="flex gap-2">{['high', 'medium', 'low'].map(t => <button key={t} onClick={() => save({ profile_tier: t })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${sel.profile_tier === t ? 'bg-[var(--gold)] border-[var(--gold)] text-[var(--text)]' : 'border-[var(--border)] text-[var(--muted)]'}`}>{t}</button>)}</div></div>
-                  <div><div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-1.5">{t('stage')}</div><div className="flex flex-wrap gap-2">{STAGES.map(s => <button key={s} onClick={() => save({ stage: s })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${sel.stage === s ? 'bg-[var(--gold)] border-[var(--gold)] text-[var(--on-gold)]' : 'border-[var(--border)] text-[var(--muted)]'}`}>{stageLabel[s]}</button>)}<button onClick={notInterested} className="text-xs font-semibold px-3 py-1.5 rounded-full border border-red-200 text-red-600 bg-[var(--surface)]">🚫 {t('no_longer_interested')}</button></div></div>
+                  <div><div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-1.5">{t('stage')}</div><div className="flex flex-wrap gap-2">{STAGES.map(s => <button key={s} onClick={() => save({ stage: s })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${sel.stage === s ? 'bg-[var(--gold)] border-[var(--gold)] text-[var(--on-gold)]' : 'border-[var(--border)] text-[var(--muted)]'}`}>{stageLabel[s]}</button>)}<button onClick={notInterested} className="text-xs font-semibold px-3 py-1.5 rounded-full border border-red-200 text-red-600 bg-[var(--surface)]"><span className="inline-flex items-center gap-1.5"><Ico d="ban" size={13} /> {t('no_longer_interested')}</span></button></div></div>
                 </div>
               )}
               {/* internal details — editable */}
@@ -313,9 +340,9 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
                 </div>
                 {editPos && canAct && (
                   <div className="mt-2 bg-[var(--raise)] rounded-lg p-2.5">
-                    <div className="text-[11px] text-[var(--muted)] mb-1.5">{lang === 'es' ? 'Actual — toca ✕ para quitar:' : 'Current — tap ✕ to remove:'}</div>
+                    <div className="text-[11px] text-[var(--muted)] mb-1.5">{lang === 'es' ? 'Actual — toca para quitar:' : 'Current — tap to remove:'}</div>
                     <div className="flex flex-wrap gap-1.5 mb-2.5">
-                      {(sel.positions || []).length ? (sel.positions || []).map(p => <button key={p} onClick={() => togglePos(p)} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--gold)] text-[var(--on-gold)] flex items-center gap-1">{p} <span className="opacity-70">✕</span></button>) : <span className="text-[11px] text-[var(--faint)]">{t('none')}</span>}
+                      {(sel.positions || []).length ? (sel.positions || []).map(p => <button key={p} onClick={() => togglePos(p)} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--gold)] text-[var(--on-gold)] flex items-center gap-1">{p} <span className="opacity-70"><Ico d="x" size={9} sw={2.8} /></span></button>) : <span className="text-[11px] text-[var(--faint)]">{t('none')}</span>}
                     </div>
                     <div className="text-[11px] text-[var(--muted)] mb-1.5">{lang === 'es' ? 'Agregar un puesto:' : 'Add a position:'}</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -373,12 +400,12 @@ export default function PoolBoard({ standalone = false, canAssign: canAssignProp
           </aside>
         </>
       )}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[80]"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[80]"><span className="text-[var(--gold)]"><Ico d="check" size={13} sw={2.4} /></span> {toast}</div>}
       {lightbox && (
         <div className="fixed inset-0 z-[90] bg-black/90 grid place-items-center p-4" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
           <button onClick={() => setLightbox(null)} title={lang === 'es' ? 'Cerrar' : 'Close'} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white grid place-items-center hover:bg-white/20"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-          <a href={lightbox} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="absolute bottom-4 right-4 text-white/80 text-xs bg-white/10 rounded-lg px-3 py-2 hover:bg-white/20">{lang === 'es' ? 'Abrir original' : 'Open original'} ↗</a>
+          <a href={lightbox} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="absolute bottom-4 right-4 text-white/80 text-xs bg-white/10 rounded-lg px-3 py-2 hover:bg-white/20"><span className="inline-flex items-center gap-1.5">{lang === 'es' ? 'Abrir original' : 'Open original'} <Ico d="ext" size={12} /></span></a>
         </div>
       )}
     </div>
@@ -396,4 +423,23 @@ function ESelect({ label, value, opts, onSave, flag, ml }: { label: string; valu
   const valid = opts.filter(Boolean)
   const empty = value == null || value === '' || !valid.includes(value)
   return <div className="py-1"><div className="text-[11px] text-[var(--muted)] mb-0.5">{label}{flag && empty && <Miss text={ml} />}</div><select defaultValue={valid.includes(value || '') ? (value || '') : ''} onChange={e => onSave(e.target.value)} className={`w-full border rounded-lg px-2.5 py-1.5 text-sm ${flag && empty ? 'border-red-200 bg-red-50/40' : 'border-[var(--border)]'} bg-[var(--surface)]`}>{opts.map(o => <option key={o} value={o}>{o || '—'}</option>)}</select></div>
+}
+
+// ── drawn icons (no emojis) ──
+function Ico({ d, size = 14, sw = 1.8, cls = '' }: { d: string; size?: number; sw?: number; cls?: string }) {
+  const P: Record<string, JSX.Element> = {
+    x: <path d="M6 6l12 12M18 6L6 18" />,
+    check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+    filter: <><path d="M4 6h16M7 12h10M10 18h4" /></>,
+    list: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
+    grid: <><rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" /></>,
+    warn: <><path d="M12 4.5L2.8 20h18.4z" /><path d="M12 10v4.2M12 17.2v.2" /></>,
+    ban: <><circle cx="12" cy="12" r="8.5" /><path d="M6 18L18 6" /></>,
+    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 1.8" /></>,
+    lock: <><rect x="5" y="10.5" width="14" height="9.5" rx="2" /><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" /></>,
+    ext: <><path d="M14 4h6v6" /><path d="M20 4l-8.5 8.5" /><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" /></>,
+    video: <><rect x="3" y="6.5" width="12.5" height="11" rx="2" /><path d="M15.5 11l5-2.8v7.6l-5-2.8z" /></>,
+    skip: <><path d="M5 6l8 6-8 6z" /><path d="M17 6v12" /></>,
+  }
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden="true">{P[d]}</svg>
 }
