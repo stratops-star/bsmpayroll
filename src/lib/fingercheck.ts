@@ -2,19 +2,21 @@
 // Thin client for the Fingercheck REST API.
 // Docs: https://developer.fingercheck.com/api/help
 // Auth: two headers — APIKEY (per programmer) + ClientSecretKey (per company/user).
-// Env: FINGERCHECK_API_KEY, FINGERCHECK_CLIENT_SECRET
+// Env: FINGERCHECK_API_KEY, FINGERCHECK_SECRET_KEY, FINGERCHECK_API_URL (optional)
 // Node runtime only — never import this into a client component (keys must stay server-side).
 
-const BASE = 'https://developer.fingercheck.com/api'
+// Base URL comes from env (FINGERCHECK_API_URL) with the documented default as fallback.
+// Trailing slashes are trimmed so path joins stay clean.
+const BASE = (process.env.FINGERCHECK_API_URL || 'https://developer.fingercheck.com/api').replace(/\/+$/, '')
 
 export function fingercheckConfigured(): boolean {
-  return Boolean(process.env.FINGERCHECK_API_KEY && process.env.FINGERCHECK_CLIENT_SECRET)
+  return Boolean(process.env.FINGERCHECK_API_KEY && process.env.FINGERCHECK_SECRET_KEY)
 }
 
 function headers() {
   return {
     APIKEY: process.env.FINGERCHECK_API_KEY || '',
-    ClientSecretKey: process.env.FINGERCHECK_CLIENT_SECRET || '',
+    ClientSecretKey: process.env.FINGERCHECK_SECRET_KEY || '',   // header name per Fingercheck docs
     'Content-Type': 'application/json',
   }
 }
