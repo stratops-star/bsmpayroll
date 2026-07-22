@@ -152,7 +152,7 @@ export default function NewQueuePage() {
         {/* filter bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('search_ph')} className="border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--faint)] rounded-lg px-3 py-2 text-sm w-72 max-w-full" />
-          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3.5 py-2 text-sm font-semibold text-[var(--text)]">⛃ {t('filters')} {activeCount > 0 && <span className="bg-[var(--gold)] text-[var(--on-gold)] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
+          <button onClick={() => setPanelOpen(o => !o)} className="flex items-center gap-2 border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3.5 py-2 text-sm font-semibold text-[var(--text)]"><span className="inline-flex items-center gap-1.5"><Ico d="filter" size={15} /> {t('filters')}</span> {activeCount > 0 && <span className="bg-[var(--gold)] text-[var(--on-gold)] text-[11px] font-bold rounded-full px-1.5">{activeCount}</span>}</button>
           {(activeCount > 0 || q) && <button onClick={clearAll} className="text-xs text-[var(--muted)] underline">{t('clear_filters')}</button>}
           <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />{t('live')}</span>
         </div>
@@ -203,7 +203,7 @@ export default function NewQueuePage() {
           <div className="fixed inset-0 bg-black/60 z-[60]" onClick={close} />
           <aside className="fixed top-0 right-0 h-screen w-[440px] max-w-[94vw] bg-[var(--surface)] z-[70] shadow-2xl flex flex-col">
             <div className="p-5 border-b border-[var(--border)] relative">
-              <button onClick={close} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
+              <button onClick={close} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]"><Ico d="x" size={13} sw={2.2} /></button>
               <div className="flex items-center gap-3"><Avatar name={sel.full_name} src={photos[sel.id]} size={48} />
                 <div><h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.full_name}</h2><div className="text-xs text-[var(--muted)] flex items-center gap-2">{ago(sel.created_at)} · {sel.preferred_lang === 'es' ? 'Español' : 'English'}<SourceBadge channel={sel.intake_channel} /></div></div></div>
             </div>
@@ -213,11 +213,11 @@ export default function NewQueuePage() {
                   <div className="text-xs text-[var(--muted)] mb-1.5">{t('profile_tier')}</div>
                   <div className="flex gap-2 mb-3">{['high', 'medium', 'low'].map(tk => <button key={tk} onClick={() => setTier(tk)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${tier === tk ? 'bg-[var(--gold)] border-[var(--gold)] text-[var(--on-gold)]' : 'border-[var(--border)] text-[var(--muted)]'}`}>{tk}</button>)}</div>
                   <div className="flex gap-2">
-                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[var(--gold)] text-[var(--on-gold)] text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">🎥 {t('send_to_virtual')}</button>
-                    <button disabled={busy} onClick={reject} className="flex-1 bg-transparent border border-[#5C3A34] text-[#C97A6A] text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">✕ {t('reject')}</button>
+                    <button disabled={busy} onClick={toInterview} className="flex-1 bg-[var(--gold)] text-[var(--on-gold)] text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50"><span className="inline-flex items-center justify-center gap-1.5"><Ico d="video" size={15} /> {t('send_to_virtual')}</span></button>
+                    <button disabled={busy} onClick={reject} className="flex-1 bg-transparent border border-[#5C3A34] text-[#C97A6A] text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50"><span className="inline-flex items-center justify-center gap-1.5"><Ico d="x" size={14} sw={2.2} /> {t('reject')}</span></button>
                   </div>
                   <input value={reason} onChange={e => setReason(e.target.value)} placeholder={t('reject_reason_ph')} className="w-full mt-2 border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--faint)] rounded-lg px-3 py-2 text-xs" />
-                  <button disabled={busy} onClick={openOverride} className="w-full mt-2 bg-transparent border border-[#5C4A2A] text-[var(--gold)] text-xs font-semibold py-2 rounded-lg disabled:opacity-50">⏭ {t('override')}</button>
+                  <button disabled={busy} onClick={openOverride} className="w-full mt-2 bg-transparent border border-[#5C4A2A] text-[var(--gold)] text-xs font-semibold py-2 rounded-lg disabled:opacity-50"><span className="inline-flex items-center justify-center gap-1.5"><Ico d="skip" size={13} /> {t('override')}</span></button>
                 </Sec>
               ) : <Sec title={t('view_only')}><p className="text-xs text-[var(--muted)]">{t('view_only_msg')}</p></Sec>}
               <Sec title={t('s_applied_for')}>
@@ -240,7 +240,7 @@ export default function NewQueuePage() {
       {overrideOpen && (
         <div className="fixed inset-0 bg-black/40 z-[80] flex items-center justify-center p-4" onClick={() => setOverrideOpen(false)}>
           <div className="bg-[var(--surface)] rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-2"><h2 className="text-lg font-semibold text-[var(--text)]">{t('override_title')}</h2><button onClick={() => setOverrideOpen(false)} className="w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button></div>
+            <div className="flex items-center justify-between mb-2"><h2 className="text-lg font-semibold text-[var(--text)]">{t('override_title')}</h2><button onClick={() => setOverrideOpen(false)} className="w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]"><Ico d="x" size={13} sw={2.2} /></button></div>
             <p className="text-xs text-[var(--muted)] mb-4">{t('override_desc')}</p>
             {requests.length === 0 ? (
               <div className="text-sm text-[var(--gold)] bg-[var(--raise)] border border-[var(--border)] rounded-lg px-3 py-3">{t('no_open_requests')}</div>
@@ -250,12 +250,12 @@ export default function NewQueuePage() {
                 <option value="">—</option>
                 {requests.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
-              <button disabled={busy || !reqId} onClick={doOverride} className="w-full bg-[var(--gold)] text-[var(--on-gold)] font-semibold py-2.5 rounded-lg disabled:opacity-40">⏭ {t('confirm_override')}</button>
+              <button disabled={busy || !reqId} onClick={doOverride} className="w-full bg-[var(--gold)] text-[var(--on-gold)] font-semibold py-2.5 rounded-lg disabled:opacity-40"><span className="inline-flex items-center justify-center gap-1.5"><Ico d="skip" size={14} /> {t('confirm_override')}</span></button>
             </>)}
           </div>
         </div>
       )}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[90]"><span className="text-[var(--gold)]">✓</span> {toast}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] px-5 py-3 rounded-xl text-sm font-medium shadow-xl z-[90]"><span className="text-[var(--gold)]"><Ico d="check" size={13} sw={2.4} /></span> {toast}</div>}
     </div>
   )
 }
@@ -287,7 +287,7 @@ function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: 
           <h2 className="text-lg font-semibold text-[var(--text)]">{L(TR.addCandidate)}</h2>
           <div className="flex items-center gap-2">
             <div className="flex gap-0.5 bg-[var(--raise)] rounded-lg p-0.5">{(['en', 'es'] as const).map(l => <button key={l} onClick={() => setLang(l)} className={`text-xs font-semibold px-2 py-1 rounded-md ${lang === l ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'text-[var(--muted)]'}`}>{l.toUpperCase()}</button>)}</div>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]">✕</button>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)]"><Ico d="x" size={13} sw={2.2} /></button>
           </div>
         </div>
         <div className="space-y-3">
@@ -310,3 +310,22 @@ function AddCandidate({ supabase, onClose, onAdded }: { supabase: any; onClose: 
 
 function Sec({ title, children }: { title: string; children: React.ReactNode }) { return <div className="p-5 border-b border-[var(--border)]"><div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2.5">{title}</div>{children}</div> }
 function Rw({ k, v }: { k: string; v: string | null | undefined }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-[var(--muted)]">{k}</span><span className="text-[var(--text)] font-medium text-right">{v || '—'}</span></div> }
+
+// ── drawn icons (no emojis) ──
+function Ico({ d, size = 14, sw = 1.8, cls = '' }: { d: string; size?: number; sw?: number; cls?: string }) {
+  const P: Record<string, JSX.Element> = {
+    x: <path d="M6 6l12 12M18 6L6 18" />,
+    check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+    filter: <><path d="M4 6h16M7 12h10M10 18h4" /></>,
+    list: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
+    grid: <><rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" /></>,
+    warn: <><path d="M12 4.5L2.8 20h18.4z" /><path d="M12 10v4.2M12 17.2v.2" /></>,
+    ban: <><circle cx="12" cy="12" r="8.5" /><path d="M6 18L18 6" /></>,
+    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 1.8" /></>,
+    lock: <><rect x="5" y="10.5" width="14" height="9.5" rx="2" /><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7" /></>,
+    ext: <><path d="M14 4h6v6" /><path d="M20 4l-8.5 8.5" /><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" /></>,
+    video: <><rect x="3" y="6.5" width="12.5" height="11" rx="2" /><path d="M15.5 11l5-2.8v7.6l-5-2.8z" /></>,
+    skip: <><path d="M5 6l8 6-8 6z" /><path d="M17 6v12" /></>,
+  }
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls} aria-hidden="true">{P[d]}</svg>
+}
