@@ -6,11 +6,11 @@ import { createClient } from '@/lib/supabase-browser'
 
 const BSM_DOMAIN = 'bsmfacilitysolutions.com' // ← confirm / change
 
-// Scoped roles are NEVER allowed in department-gated modules — they get
-// hard-redirected to their own screen regardless of any departments set on them.
+// Where a scoped role lands when it has NOT been granted the department it tried to open.
+// This is a default home, not a cage: departments decide access (see below).
 const SCOPED_HOME: Record<string, string> = { pool: '/pool', manager: '/manpower' }
 
-type State = 'loading' | 'no-session' | 'wrong-domain' | 'no-department' | 'ok'
+type State = 'loading' | 'no-session' | 'wrong-domain' | 'inactive' | 'no-department' | 'ok'
 
 export default function AccessGate({
   requireDepartment,
@@ -36,16 +36,26 @@ export default function AccessGate({
       const { data: me } = await supabase
         .from('app_users').select('role, departments, active').eq('id', user.id).single()
 
-      // Role is the authority for scoped users: bounce them home, ignore departments.
-      const role = me?.role || ''
-      if (me?.active && SCOPED_HOME[role]) { router.replace(SCOPED_HOME[role]); return }
+      if (!me?.active) { setState('inactive'); return }
 
-      // Admins may enter any department-gated area.
-      if (me?.active && role === 'admin') { setState('ok'); return }
+      const role = me.role || ''
 
-      const depts = (me?.active && me.departments) || []
+      // 1. Admins may enter any department-gated area.
+      if (role === 'admin') { setState('ok'); return }
+
+      // 2. Departments are the authority for access. If this user has been granted the
+      //    department this area requires, they're in — whatever their role is. This is what
+      //    lets a `manager` who has the `valet` department open the Valet module instead of
+      //    being bounced to /manpower.
+      const depts: string[] = me.departments || []
       const allowed = requireDepartment ? depts.includes(requireDepartment) : depts.length > 0
-      setState(allowed ? 'ok' : 'no-department')
+      if (allowed) { setState('ok'); return }
+
+      // 3. Not granted this area. A scoped role goes to its own home screen rather than
+      //    hitting a dead end; everyone else sees the "waiting for access" message.
+      if (SCOPED_HOME[role]) { router.replace(SCOPED_HOME[role]); return }
+
+      setState('no-department')
     })()
   }, [supabase, requireDepartment, router])
 
@@ -55,6 +65,8 @@ export default function AccessGate({
     return <Screen title="Sign in required">Please sign in with your BSM email.</Screen>
   if (state === 'wrong-domain')
     return <Screen title="BSM accounts only">Only @{BSM_DOMAIN} accounts can access this app.</Screen>
+  if (state === 'inactive')
+    return <Screen title="Account inactive">Your account has been deactivated. Please contact an administrator.</Screen>
   return (
     <Screen title="You're almost in">
       Your account is signed in and waiting for a department assignment.
@@ -65,10 +77,10 @@ export default function AccessGate({
 
 function Screen({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', fontFamily: 'system-ui', padding: 24, textAlign: 'center' }}>
+    <div className="bsm-app" style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
       <div style={{ maxWidth: 440 }}>
-        {title && <h2 style={{ color: '#0D1B35', marginBottom: 8 }}>{title}</h2>}
-        <p style={{ color: '#6B7280', lineHeight: 1.5 }}>{children}</p>
+        {title && <h2 className="text-[var(--text-strong)]" style={{ marginBottom: 8, fontSize: 20, fontWeight: 600 }}>{title}</h2>}
+        <p className="text-[var(--muted)]" style={{ lineHeight: 1.55, fontSize: 14 }}>{children}</p>
       </div>
     </div>
   )
