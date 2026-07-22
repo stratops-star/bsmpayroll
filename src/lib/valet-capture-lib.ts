@@ -35,15 +35,40 @@ function loadLogo(): Promise<HTMLImageElement | null> {
   return logoPromise
 }
 
-export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob; capturedAt: string }> {
-  const w = video.videoWidth || 1280
-  const h = video.videoHeight || 720
+// Long edge of the saved photo. 1600px still resolves panel-level scratches and
+// dents; going lower starts costing evidence value.
+const MAX_EDGE = 1600
+const JPEG_QUALITY = 0.8
+// Small copy for the on-screen review strip. Displaying the full-size photos
+// there makes Safari decode ~8MB of bitmap per shot and the app crawls by
+// photo 7. This is display-only and is never uploaded.
+const THUMB_EDGE = 240
+const THUMB_QUALITY = 0.6
+
+export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob; thumb: Blob; capturedAt: string }> {
+  const vw = video.videoWidth || 1280
+  const vh = video.videoHeight || 720
+
+  // Downscale to the long edge — never upscale a smaller sensor frame.
+  const scale = Math.min(1, MAX_EDGE / Math.max(vw, vh))
+  const w = Math.round(vw * scale)
+  const h = Math.round(vh * scale)
+
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')!
+
+  // High-quality resampling matters only when we're actually shrinking the
+  // frame. At 1:1 it's wasted work, so skip it.
+  if (scale < 1) {
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+  }
   ctx.drawImage(video, 0, 0, w, h)
 
+  // The stamp is drawn AFTER the downscale, at final resolution, so the
+  // timestamp and logo stay razor sharp rather than being resampled.
   const now = new Date()
   const stamp = now.toLocaleString()
   const bar = Math.max(40, Math.round(h * 0.065))
@@ -73,9 +98,23 @@ export async function stampFrame(video: HTMLVideoElement): Promise<{ blob: Blob;
   }
 
   const blob: Blob = await new Promise(res =>
-    canvas.toBlob(b => res(b as Blob), 'image/jpeg', 0.85)
+    canvas.toBlob(b => res(b as Blob), 'image/jpeg', JPEG_QUALITY)
   )
-  return { blob, capturedAt: now.toISOString() }
+
+  // Thumbnail for the review strip — tiny, so this costs only a few ms.
+  const tScale = Math.min(1, THUMB_EDGE / Math.max(w, h))
+  const tc = document.createElement('canvas')
+  tc.width = Math.round(w * tScale)
+  tc.height = Math.round(h * tScale)
+  const tctx = tc.getContext('2d')!
+  tctx.imageSmoothingEnabled = true
+  tctx.imageSmoothingQuality = 'medium'
+  tctx.drawImage(canvas, 0, 0, tc.width, tc.height)
+  const thumb: Blob = await new Promise(res =>
+    tc.toBlob(b => res((b || blob) as Blob), 'image/jpeg', THUMB_QUALITY)
+  )
+
+  return { blob, thumb, capturedAt: now.toISOString() }
 }
 
 // ---------- Offline queue (IndexedDB) ----------
@@ -148,7 +187,7 @@ export async function removeQueued(clientRef: string): Promise<void> {
 
 // ---------- Shared server write (live + sync) ----------
 // Idempotent on client_ref so a re-synced event never double-writes.
-export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void> {
+export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<string | null> {
   // 1. Resolve customer
   let customerId = ev.customerId
   if (!customerId && ev.newCustomer) {
@@ -231,7 +270,7 @@ export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void>
   // 4. Photos — skip if this event already has them (re-sync safety)
   const { data: already } = await supabase
     .from('valet_photos').select('id').eq('event_id', eventId).limit(1)
-  if (already && already.length > 0) return
+  if (already && already.length > 0) return eventId
 
   for (const p of ev.photos) {
     const path = `${ev.locationId || 'loc'}/${eventId}/${p.sequence}_${p.slot}.jpg`
@@ -247,22 +286,23 @@ export async function serverWrite(ev: QueuedEvent, supabase: any): Promise<void>
     })
     if (pe) throw pe
   }
+  return eventId
 }
 
-// Drain everything queued. Returns how many synced.
-export async function drainQueue(supabase: any): Promise<number> {
+// Drain everything queued. Returns the created event ids (for post-sync emailing).
+export async function drainQueue(supabase: any): Promise<string[]> {
   const items = await listQueue()
-  let synced = 0
+  const ids: string[] = []
   for (const it of items) {
     try {
-      await serverWrite(it, supabase)
+      const id = await serverWrite(it, supabase)
       await removeQueued(it.clientRef)
-      synced++
+      if (id) ids.push(id)
     } catch {
       // leave it in the queue; try again next time
     }
   }
-  return synced
+  return ids
 }
 
 export function uuid(): string {
