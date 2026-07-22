@@ -99,7 +99,7 @@ type Chosen = {
   newCustomer: QueuedEvent['newCustomer']; newVehicle: QueuedEvent['newVehicle']
 }
 type Step = 'home' | 'pick' | 'capture' | 'review'
-type Shot = { slot: string; sequence: number; blob: Blob; capturedAt: string; url: string }
+type Shot = { slot: string; sequence: number; blob: Blob; capturedAt: string; url: string; thumbUrl: string }
 
 export default function ValetCapture() {
   const [supabase] = useState(() => createClient())
@@ -109,6 +109,7 @@ export default function ValetCapture() {
   const [me, setMe] = useState<{ id: string; name: string } | null>(null)
   const [isManager, setIsManager] = useState(false)
   const [locationId, setLocationId] = useState<string | null>(null)
+  const hydratedRef = useRef(false)   // paint cached data once, on first load
   const [customers, setCustomers] = useState<Customer[]>([])
   const [events, setEvents] = useState<EventRow[]>([])
   const [pendingCount, setPendingCount] = useState(0)
@@ -161,6 +162,18 @@ export default function ValetCapture() {
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
 
   const refresh = useCallback(async () => {
+    // Cache-first: paint the last-known roster immediately so the attendant can
+    // start searching straight away, then quietly refresh from the network.
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      try {
+        const c = JSON.parse(localStorage.getItem('valet_cache_customers') || '[]')
+        if (Array.isArray(c) && c.length) setCustomers(c)
+        const e = JSON.parse(localStorage.getItem('valet_cache_events') || '[]')
+        if (Array.isArray(e) && e.length) setEvents(e)
+      } catch { /* ignore */ }
+    }
+
     try {
       const { data: cust, error: ce } = await supabase
         .from('valet_customers')
@@ -180,7 +193,7 @@ export default function ValetCapture() {
       setEvents(ev)
       try { localStorage.setItem('valet_cache_events', JSON.stringify(ev)) } catch { /* ignore */ }
     } catch {
-      // offline — restore last-known roster + parked state from cache
+      // offline — whatever was painted from cache above stands
       try { const c = JSON.parse(localStorage.getItem('valet_cache_customers') || '[]'); if (Array.isArray(c) && c.length) setCustomers(c) } catch { /* ignore */ }
       try { const e = JSON.parse(localStorage.getItem('valet_cache_events') || '[]'); if (Array.isArray(e)) setEvents(e) } catch { /* ignore */ }
     }
@@ -359,7 +372,7 @@ export default function ValetCapture() {
       } catch { online = false }
     }
     if (!online) { await enqueue(ev) }
-    shots.forEach(s => URL.revokeObjectURL(s.url))
+    shots.forEach(s => { URL.revokeObjectURL(s.url); URL.revokeObjectURL(s.thumbUrl) })
     setSaving(false)
     setStep('home'); setChosen(null); setShots([]); setNote('')
     flash(online ? t('savedOnline') : t('savedOffline'))
@@ -403,7 +416,7 @@ export default function ValetCapture() {
         )}
         {step === 'capture' && chosen && (
           <Capture t={t} lang={lang} chosen={chosen} shots={shots} setShots={setShots}
-            onDone={() => setStep('review')} onCancel={() => { shots.forEach(s => URL.revokeObjectURL(s.url)); setShots([]); setStep('home') }} />
+            onDone={() => setStep('review')} onCancel={() => { shots.forEach(s => { URL.revokeObjectURL(s.url); URL.revokeObjectURL(s.thumbUrl) }); setShots([]); setStep('home') }} />
         )}
         {step === 'review' && chosen && (
           <Review t={t} action={action} chosen={chosen} shots={shots} note={note} setNote={setNote}
@@ -699,7 +712,7 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
     ;(async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+          video: { facingMode: 'environment', width: { ideal: 1600 }, height: { ideal: 1200 } }, audio: false,
         })
         if (cancelled) { stream.getTracks().forEach(tk => tk.stop()); return }
         streamRef.current = stream
@@ -743,9 +756,10 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
     shootingRef.current = true
     setBusy(true); setHint('')
     try {
-      const { blob, capturedAt } = await stampFrame(v)
+      const { blob, thumb, capturedAt } = await stampFrame(v)
       const url = URL.createObjectURL(blob)
-      setShots((prev: Shot[]) => [...prev, { slot: slot.key, sequence: idx, blob, capturedAt, url }])
+      const thumbUrl = URL.createObjectURL(thumb)
+      setShots((prev: Shot[]) => [...prev, { slot: slot.key, sequence: idx, blob, capturedAt, url, thumbUrl }])
     } catch {
       setHint(lang === 'es' ? 'No se pudo capturar, intente de nuevo.' : 'Capture failed — try again.')
     } finally {
@@ -756,7 +770,7 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
   function retake() {
     setShots((prev: Shot[]) => {
       const last = prev[prev.length - 1]
-      if (last) URL.revokeObjectURL(last.url)
+      if (last) { URL.revokeObjectURL(last.url); URL.revokeObjectURL(last.thumbUrl) }
       return prev.slice(0, -1)
     })
   }
@@ -808,7 +822,7 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
       ) : (
         <div style={{ textAlign: 'center' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginBottom: 14 }}>
-            {shots.map((s: Shot) => <img key={s.sequence} src={s.url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
+            {shots.map((s: Shot) => <img key={s.sequence} src={s.thumbUrl} alt="" decoding="async" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
           </div>
           <button onClick={retake} style={{ ...primaryBtn, background: '#fff', color: '#64748B', border: '1.5px solid #CBD5E1', marginBottom: 8 }}>{t('retake')}</button>
           <button onClick={onDone} style={primaryBtn}>{t('review')}</button>
@@ -854,7 +868,7 @@ function Review({ t, action, chosen, shots, note, setNote, saving, onSave, onBac
         <div style={{ fontSize: 13, color: '#64748B', marginBottom: 2 }}>{action === 'park' ? t('park') : t('retrieve')}</div>
         <div style={{ fontWeight: 700, color: NAVY, fontSize: 17, marginBottom: 12 }}>{chosen.plate} · {chosen.displayName}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginBottom: 12 }}>
-          {shots.map((s: Shot) => <img key={s.sequence} src={s.url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
+          {shots.map((s: Shot) => <img key={s.sequence} src={s.thumbUrl} alt="" decoding="async" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8 }} />)}
         </div>
         <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('note')}</label>
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} style={{ ...inp, marginTop: 6, resize: 'vertical' }} />
@@ -877,12 +891,13 @@ function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClos
 
   async function loadPics(id: string): Promise<string[]> {
     const { data } = await supabase.from('valet_photos').select('storage_path, sequence').eq('event_id', id).order('sequence')
-    const urls: string[] = []
-    for (const p of (data || [])) {
-      const { data: s } = await supabase.storage.from('valet-photos').createSignedUrl(p.storage_path, 600)
-      if (s?.signedUrl) urls.push(s.signedUrl)
-    }
-    return urls
+    const paths = ((data || []) as { storage_path: string }[]).map(p => p.storage_path)
+    if (paths.length === 0) return []
+    // One batched request instead of one round trip per photo.
+    const { data: signed } = await supabase.storage.from('valet-photos').createSignedUrls(paths, 600)
+    const byPath = new Map<string, string>()
+    for (const s of ((signed || []) as any[])) if (s?.signedUrl) byPath.set(s.path, s.signedUrl)
+    return paths.map(p => byPath.get(p)).filter(Boolean) as string[]
   }
 
   useEffect(() => {
