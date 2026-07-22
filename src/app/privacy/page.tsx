@@ -38,7 +38,7 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="SMS notifications">
-          <p>BSM sends operational text messages to employees and authorized staff who have provided written consent during onboarding. These messages contain work information such as daily interview schedules, schedule changes, and reminders.</p>
+          <p>BSM sends operational text messages only to people who have explicitly opted in. Job applicants may opt in by checking an optional, unchecked consent box on our online application form; consent is not required to apply or to be considered for employment. Employees and staff opt in by signing a written internal communications authorization form during onboarding. Messages relate to applications, interview scheduling and reminders, hiring status, and work schedules. We record the date and time consent was given.</p>
           <p><b>We do not sell, rent, or share mobile phone numbers or SMS consent with any third party.</b> Mobile information collected for SMS is used solely to deliver these operational messages and is never shared with third parties or affiliates for marketing or promotional purposes.</p>
           <p>Message and data rates may apply. Message frequency varies, typically about one message per workday. Reply <b>STOP</b> at any time to stop receiving messages, or <b>HELP</b> for assistance. See our <a href="/sms-terms" style={{ color: '#96723C', fontWeight: 600 }}>SMS Terms and Conditions</a> for details.</p>
         </Section>
