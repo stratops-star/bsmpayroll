@@ -69,20 +69,29 @@ export default function ValetHistory() {
       .filter(c => c.customer_type !== 'guest')
       .map(c => ({ id: c.id, full_name: c.full_name, unit: c.valet_units?.unit_number || '' })))
 
-    // Currently parked is all-time, not range-bound: newest event per vehicle must be a park
-    const { data: allEvs } = await supabase
-      .from('valet_events')
-      .select('action, event_at, vehicle_id, customer_id')
-      .neq('voided', true)
-      .order('event_at', { ascending: false }).limit(3000)
-    const seen = new Set<string>()
-    const open: { vehicle_id: string; customer_id: string | null; since: string }[] = []
-    for (const e of ((allEvs as any[]) || [])) {
-      if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
-      seen.add(e.vehicle_id)
-      if (e.action === 'park') open.push({ vehicle_id: e.vehicle_id, customer_id: e.customer_id, since: e.event_at })
+    // Currently parked is all-time, not range-bound: newest event per vehicle must
+    // be a park. The database does this in one indexed pass and returns ~30 rows.
+    const { data: rpcOpen, error: rpcErr } = await supabase.rpc('valet_open_stays')
+    if (!rpcErr && rpcOpen) {
+      setOpenStays(((rpcOpen as any[]) || []).map(r => ({
+        vehicle_id: r.vehicle_id, customer_id: r.customer_id, since: r.since,
+      })))
+    } else {
+      // Fallback if the SQL function hasn't been installed yet — slower, same result.
+      const { data: allEvs } = await supabase
+        .from('valet_events')
+        .select('action, event_at, vehicle_id, customer_id')
+        .neq('voided', true)
+        .order('event_at', { ascending: false }).limit(3000)
+      const seen = new Set<string>()
+      const open: { vehicle_id: string; customer_id: string | null; since: string }[] = []
+      for (const e of ((allEvs as any[]) || [])) {
+        if (!e.vehicle_id || seen.has(e.vehicle_id)) continue
+        seen.add(e.vehicle_id)
+        if (e.action === 'park') open.push({ vehicle_id: e.vehicle_id, customer_id: e.customer_id, since: e.event_at })
+      }
+      setOpenStays(open)
     }
-    setOpenStays(open)
 
     setLoading(false)
   }, [supabase, from, to])
@@ -120,12 +129,14 @@ export default function ValetHistory() {
   async function photosFor(eventId: string): Promise<{ path: string; url: string; slot: string }[]> {
     const { data } = await supabase.from('valet_photos').select('slot, sequence, storage_path').eq('event_id', eventId).order('sequence')
     const rows = (data as Photo[]) || []
-    const out: { path: string; url: string; slot: string }[] = []
-    for (const p of rows) {
-      const { data: s } = await supabase.storage.from('valet-photos').createSignedUrl(p.storage_path, 600)
-      if (s?.signedUrl) out.push({ path: p.storage_path, url: s.signedUrl, slot: p.slot })
-    }
-    return out
+    if (rows.length === 0) return []
+    // One batched request instead of one round trip per photo.
+    const { data: signed } = await supabase.storage.from('valet-photos').createSignedUrls(rows.map(r => r.storage_path), 600)
+    const byPath = new Map<string, string>()
+    for (const s of ((signed || []) as any[])) if (s?.signedUrl) byPath.set(s.path, s.signedUrl)
+    return rows
+      .map(r => ({ path: r.storage_path, url: byPath.get(r.storage_path) || '', slot: r.slot }))
+      .filter(r => r.url)
   }
 
   function fmt(iso: string) { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) }
@@ -541,7 +552,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 const card: React.CSSProperties = { background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: 8 }
-const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #D1D5DB', borderRadius: 10, padding: '11px 12px', fontSize: 15, outline: 'none', background: '#fff' }
+const inp: React.CSSProperties = { background: '#fff', color: '#1E1B17', WebkitTextFillColor: '#1E1B17', width: '100%', boxSizing: 'border-box', border: '1px solid #D1D5DB', borderRadius: 10, padding: '11px 12px', fontSize: 15, outline: 'none' }
 const primaryBtn: React.CSSProperties = { width: '100%', background: NAVY, color: '#fff', border: 'none', borderRadius: 12, padding: '12px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }
 const tinyBtn: React.CSSProperties = { background: '#E4E9F2', color: NAVY, border: 'none', borderRadius: 8, padding: '7px 11px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const rowBtn: React.CSSProperties = { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', border: 'none', borderBottom: '1px solid #F1F3F8', padding: '11px 8px', cursor: 'pointer', textAlign: 'left' }
