@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (!me?.active || me.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
 
   if (!fingercheckConfigured()) {
-    return NextResponse.json({ error: 'Set FINGERCHECK_API_KEY and FINGERCHECK_CLIENT_SECRET in Vercel' }, { status: 500 })
+    return NextResponse.json({ error: 'Set FINGERCHECK_API_KEY and FINGERCHECK_SECRET_KEY in Vercel' }, { status: 500 })
   }
 
   const employeeNumber = req.nextUrl.searchParams.get('employee')
