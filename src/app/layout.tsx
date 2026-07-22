@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import '@/styles/bsm-theme.css'
-import { ThemeProvider, themeInitScript } from '@/components/theme'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -16,15 +14,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#1E1B17',
+  colorScheme: 'light',   // stop iOS/macOS Dark Mode from inverting form fields
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head><script dangerouslySetInnerHTML={{ __html: themeInitScript }} /></head>
-      <body className={inter.className}>
-        <ThemeProvider>{children}</ThemeProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   )
 }
