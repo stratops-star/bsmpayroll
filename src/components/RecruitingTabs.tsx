@@ -13,6 +13,7 @@ const TABS: [string, string][] = [
   ['tab_pool', '/recruiting/pool'],
   ['tab_requests', '/recruiting/requests'],
   ['tab_offers', '/recruiting/offers'],
+  ['tab_onboarding', '/recruiting/onboarding'],
   ['tab_rejected', '/recruiting/rejected'],
 ]
 
@@ -25,12 +26,13 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
   useEffect(() => {
     (async () => {
       const cand = () => supabase.from('candidates').select('id', { count: 'exact', head: true })
-      const [q, v, ip, rq, of] = await Promise.all([
+      const [q, v, ip, rq, of, ob] = await Promise.all([
         cand().eq('status', 'applied'),
         cand().eq('status', 'interview').neq('stage', '2nd_interview'),
         cand().eq('status', 'interview').eq('stage', '2nd_interview'),
         supabase.from('man_power_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
         cand().eq('onboarding_status', 'offer_pending'),
+        supabase.from('onboarding').select('id', { count: 'exact', head: true }).neq('stage', 'in_employee_db'),
       ])
       setCounts({
         tab_queue: q.count ?? 0,
@@ -38,6 +40,7 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
         tab_inperson: ip.count ?? 0,
         tab_requests: rq.count ?? 0,
         tab_offers: of.count ?? 0,
+        tab_onboarding: ob.count ?? 0,
       })
     })()
   }, [path])
