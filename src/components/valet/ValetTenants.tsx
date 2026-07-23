@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase-browser'
-import * as XLSX from 'xlsx'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -343,10 +342,12 @@ function ImportRoster({ onCancel, onDone, supabase, locationId, meId, resolveUni
     setErr('')
     const isXlsx = /\.(xlsx|xls)$/i.test(file.name)
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         let grid: any[][]
         if (isXlsx) {
+          // Loaded only when someone actually imports a spreadsheet.
+          const XLSX = await import('xlsx')
           const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' })
           const ws = wb.Sheets[wb.SheetNames[0]]
           grid = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' }) as any[][]
