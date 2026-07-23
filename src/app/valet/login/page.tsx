@@ -7,7 +7,12 @@ import ValetInstall from '@/components/valet/ValetInstall'
 
 const CHAR = '#1E1B17'
 const GOLD = '#DCB878'
+
+// Who may use the valet app at all.
 const VALET_ROLES = ['valet', 'valet_manager', 'admin']
+// Who may reach the manager area. Holding the `valet` department is NOT enough —
+// that only grants regular attendant access.
+const VALET_MANAGER_ROLES = ['valet_manager', 'admin']
 
 export default function ValetLogin() {
   const [email, setEmail] = useState('')
@@ -51,6 +56,8 @@ export default function ValetLogin() {
     const role = me?.role || ''
     const dept = Array.isArray((me as any)?.departments) ? (me as any).departments : []
     const hasValet = dept.includes('valet')
+
+    // May they use the valet app at all?
     if (!(VALET_ROLES.includes(role) || hasValet) || me?.active === false) {
       await supabase.auth.signOut()
       setError('This account is not authorized for the valet app.')
@@ -58,7 +65,9 @@ export default function ValetLogin() {
       return
     }
 
-    const mgr = role === 'valet_manager' || role === 'admin' || hasValet
+    // Manager area is role-gated only. Attendants (role `valet`, or anyone who simply
+    // holds the valet department) go to the regular attendant screen.
+    const mgr = VALET_MANAGER_ROLES.includes(role)
     router.replace(mgr ? '/valet/manager' : '/valet')
   }
 
