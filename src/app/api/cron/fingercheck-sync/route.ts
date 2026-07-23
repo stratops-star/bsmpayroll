@@ -57,11 +57,26 @@ export function deriveStage(row: Row, snap: OnboardingSnapshot | null): string {
   return 'active'   // fully configured, ready to push to the employee sheet
 }
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
+// Two callers are allowed: Vercel cron (Bearer CRON_SECRET) and a signed-in
+// admin hitting Refresh on the onboarding board (Bearer <session access token>).
+async function authorized(req: NextRequest): Promise<boolean> {
   const auth = req.headers.get('authorization') || ''
-  return auth === `Bearer ${secret}`
+  if (!auth.startsWith('Bearer ')) return false
+  const token = auth.slice(7)
+
+  const secret = process.env.CRON_SECRET
+  if (secret && token === secret) return true
+
+  try {
+    const supabase = createServerClient()
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return false
+    const { data: me } = await supabase.from('app_users').select('role, departments, active').eq('id', user.id).single()
+    if (!me?.active) return false
+    return me.role === 'admin' || (me.departments || []).includes('recruiting')
+  } catch {
+    return false
+  }
 }
 
 async function run() {
@@ -140,7 +155,7 @@ async function run() {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await authorized(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!fingercheckConfigured()) return NextResponse.json({ error: 'Fingercheck env vars missing' }, { status: 500 })
   const out = await run()
   return NextResponse.json(out, { status: out.ok ? 200 : 500 })
