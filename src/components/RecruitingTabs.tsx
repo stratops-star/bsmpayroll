@@ -6,6 +6,11 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { useRecruitingLang } from '@/components/recruiting-i18n'
 
+// Used when the i18n bundle has no entry for a key yet (renders the key otherwise).
+const FALLBACK: Record<string, { en: string; es: string }> = {
+  tab_onboarding: { en: 'Onboarding', es: 'Incorporación' },
+}
+
 const TABS: [string, string][] = [
   ['tab_queue', '/recruiting'],
   ['tab_virtual', '/recruiting/virtual'],
@@ -19,7 +24,7 @@ const TABS: [string, string][] = [
 
 export default function RecruitingTabs(_props: { newCount?: number } = {}) {
   const path = usePathname()
-  const { t } = useRecruitingLang()
+  const { t, lang } = useRecruitingLang()
   const [supabase] = useState(() => createClient())
   const [counts, setCounts] = useState<Record<string, number>>({})
 
@@ -45,6 +50,12 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
     })()
   }, [path])
 
+  function label(key: string) {
+    const v = t(key)
+    if (v && v !== key) return v
+    return FALLBACK[key]?.[lang === 'es' ? 'es' : 'en'] ?? key
+  }
+
   const isActive = (h: string) => h === '/recruiting' ? path === '/recruiting' : (path?.startsWith(h) ?? false)
 
   return (
@@ -55,7 +66,7 @@ export default function RecruitingTabs(_props: { newCount?: number } = {}) {
         return (
           <Link key={href} href={href}
             className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-0.5 flex items-center gap-1.5 whitespace-nowrap ${on ? 'text-[var(--text-strong)] border-[var(--gold)]' : 'text-[var(--muted)] border-transparent hover:text-[var(--text-strong)]'}`}>
-            {t(key)}
+            {label(key)}
             {n != null && n > 0 && <span className={`text-[11px] font-bold rounded-full px-1.5 ${on ? 'bg-[var(--gold)] text-[var(--on-gold)]' : 'bg-[var(--raise)] text-[var(--muted)]'}`}>{n}</span>}
           </Link>
         )
