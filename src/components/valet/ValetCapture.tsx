@@ -6,7 +6,6 @@ import {
   SLOTS, stampFrame, enqueue, listQueue, drainQueue, serverWrite, uuid,
   type QueuedEvent,
 } from '@/lib/valet-capture-lib'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import ValetTutorial, { ATTENDANT_STEPS } from '@/components/valet/ValetTutorial'
 import ValetInstall from '@/components/valet/ValetInstall'
 import ModuleSwitcher from '@/components/valet/ModuleSwitcher'
@@ -110,6 +109,8 @@ export default function ValetCapture() {
   const [isManager, setIsManager] = useState(false)
   const [locationId, setLocationId] = useState<string | null>(null)
   const hydratedRef = useRef(false)   // paint cached data once, on first load
+  const warmRef = useRef<MediaStream | null>(null)   // camera opened early, while they pick the car
+  const warmWantedRef = useRef(false)                // false once it's been taken or abandoned
   const [customers, setCustomers] = useState<Customer[]>([])
   const [events, setEvents] = useState<EventRow[]>([])
   const [pendingCount, setPendingCount] = useState(0)
@@ -159,7 +160,28 @@ export default function ValetCapture() {
     flash('Marked retrieved'); setReport(null); await refresh()
   }
 
+  useEffect(() => () => {
+    warmWantedRef.current = false
+    try { warmRef.current?.getTracks().forEach(tk => tk.stop()) } catch { /* ignore */ }
+    warmRef.current = null
+  }, [])
+
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000) }
+
+  // Capture takes ownership of the warm stream; anything left over gets released.
+  function takeWarmStream(): MediaStream | null {
+    warmWantedRef.current = false
+    const st = warmRef.current
+    warmRef.current = null
+    if (st && st.getVideoTracks().some(tk => tk.readyState === 'live')) return st
+    try { st?.getTracks().forEach(tk => tk.stop()) } catch { /* ignore */ }
+    return null
+  }
+  function dropWarmStream() {
+    warmWantedRef.current = false
+    try { warmRef.current?.getTracks().forEach(tk => tk.stop()) } catch { /* ignore */ }
+    warmRef.current = null
+  }
 
   const refresh = useCallback(async () => {
     // Cache-first: paint the last-known roster immediately so the attendant can
@@ -312,6 +334,18 @@ export default function ValetCapture() {
 
   function startFlow(a: 'park' | 'retrieve') {
     setAction(a); setChosen(null); setShots([]); setNote(''); setStep('pick')
+    // Open the camera now, while they're choosing the car, so the capture screen
+    // is live the instant they get there instead of showing "Starting camera…".
+    if (!warmRef.current && navigator.mediaDevices?.getUserMedia) {
+      warmWantedRef.current = true
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1600 }, height: { ideal: 1200 } }, audio: false })
+        .then(st => {
+          // If we've already moved on, shut it down rather than leave the camera live.
+          if (!warmWantedRef.current) { st.getTracks().forEach(tk => tk.stop()); return }
+          warmRef.current = st
+        })
+        .catch(() => { /* permission or hardware — Capture will ask again */ })
+    }
   }
 
   function chooseExisting(c: Customer, v: Vehicle, unlisted = false) {
@@ -412,10 +446,10 @@ export default function ValetCapture() {
           <Pick t={t} action={action} customers={customers} parked={parked} lang={lang}
             onExisting={chooseExisting} onParked={chooseParked}
             onNew={(nc, nv) => { setChosen({ customerId: null, vehicleId: null, displayName: nc.full_name, plate: nv.license_plate, newCustomer: nc, newVehicle: nv }); setStep('capture') }}
-            onCancel={() => setStep('home')} />
+            onCancel={() => { dropWarmStream(); setStep('home') }} />
         )}
         {step === 'capture' && chosen && (
-          <Capture t={t} lang={lang} chosen={chosen} shots={shots} setShots={setShots}
+          <Capture t={t} lang={lang} chosen={chosen} shots={shots} setShots={setShots} takeWarmStream={takeWarmStream}
             onDone={() => setStep('review')} onCancel={() => { shots.forEach(s => { URL.revokeObjectURL(s.url); URL.revokeObjectURL(s.thumbUrl) }); setShots([]); setStep('home') }} />
         )}
         {step === 'review' && chosen && (
@@ -695,7 +729,7 @@ function Pick({ t, action, customers, parked, onExisting, onParked, onNew, onCan
 }
 
 // ---------------- Capture ----------------
-function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
+function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel, takeWarmStream }: any) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const shootingRef = useRef(false)
@@ -711,7 +745,8 @@ function Capture({ t, lang, chosen, shots, setShots, onDone, onCancel }: any) {
     const preload = new Image(); preload.src = '/bsm-mark.png' // warm logo cache → first stamp is instant
     ;(async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        // Reuse the stream opened during the pick step if it's still live.
+        const stream = takeWarmStream?.() || await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1600 }, height: { ideal: 1200 } }, audio: false,
         })
         if (cancelled) { stream.getTracks().forEach(tk => tk.stop()); return }
@@ -927,6 +962,8 @@ function ReportSheet({ e, events, supabase, t, lang, me, locationId, onForceClos
   async function download() {
     setBusy(true)
     try {
+      // Loaded on demand — pdf-lib is large and most shifts never download a PDF.
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
       const doc = await PDFDocument.create()
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
