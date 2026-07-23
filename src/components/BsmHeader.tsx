@@ -28,10 +28,10 @@ const Ring = ({ k }: { k: string }) => (
 )
 
 const Mark = () => (
-  <svg width="30" height="30" viewBox="0 0 32 32" fill="none" stroke="#DCB878" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 28V13l7-4v19M11 28V9l9-5v24M20 28V12l8 4v12M4 28h26" />
-    <path d="M7 16v2M7 21v2M14 13v2M14 18v2M14 23v2M23 18v2M23 23v2" strokeWidth="1.3" />
-  </svg>
+  // The real BSM wordmark. Sits on the charcoal header, which stays charcoal in
+  // both themes, so the standard (light-on-dark) logo file is correct here.
+  <img src="/bsm-logo.png" alt="BSM Facility Solutions" height={24}
+    className="h-[24px] w-auto flex-shrink-0 object-contain" />
 )
 
 export default function BsmHeader({ area, right }: { area?: string; right?: React.ReactNode }) {
@@ -95,8 +95,7 @@ export default function BsmHeader({ area, right }: { area?: string; right?: Reac
           <span className="flex flex-col items-start leading-tight min-w-0">
             {/* mobile: just the area · desktop: BSM — area */}
             <span className="text-white text-[15px] font-bold truncate">
-              <span className="sm:hidden">{shownArea || 'BSM'}</span>
-              <span className="hidden sm:inline">BSM{shownArea ? ` — ${shownArea}` : ''}</span>
+              {shownArea || 'Operations'}
             </span>
             {canSwitch && <span className="text-[#DCB878] text-[11px] flex items-center gap-1">tap to switch <span className="opacity-60">▾</span></span>}
           </span>
