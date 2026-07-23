@@ -24,8 +24,16 @@ type Row = {
   documents_marked_at: string | null
   synced_to_sheet_at: string | null
   notes: string | null
+  source: string | null
+  fc_first_name: string | null
+  fc_last_name: string | null
   candidate: { full_name: string; email: string | null; phone: string | null; positions: string[] | null } | null
 }
+
+// A card may come from the app (candidate signed an offer) or straight from
+// Fingercheck (imported by employee number), so the name has two possible homes.
+const nameOf = (r: Row) =>
+  r.candidate?.full_name || [r.fc_first_name, r.fc_last_name].filter(Boolean).join(' ') || `#${r.fingercheck_employee_number || '—'}`
 
 // Board order. `auto` = the Fingercheck sync advances this on its own.
 const STAGES: { key: string; label: string; auto: boolean }[] = [
@@ -77,6 +85,8 @@ export default function OnboardingPage() {
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
   const [empInput, setEmpInput] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [addNum, setAddNum] = useState('')
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('bsm:area', { detail: 'Onboarding' }))
@@ -118,6 +128,30 @@ export default function OnboardingPage() {
       await load()
     } catch (e: any) {
       flash(e?.message || 'Sync failed')
+    } finally { setBusy(false) }
+  }
+
+  async function addFromFingercheck() {
+    const n = addNum.trim()
+    if (!n) return
+    setBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/cron/fingercheck-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ employeeNumber: n }),
+      })
+      const j = await res.json()
+      if (!res.ok) { flash(j?.error || 'Could not add'); return }
+      flash(`Added ${j.name || '#' + n}`)
+      setAddNum(''); setAddOpen(false)
+      await load()
+    } catch (e: any) {
+      flash(e?.message || 'Could not add')
     } finally { setBusy(false) }
   }
 
@@ -163,6 +197,10 @@ export default function OnboardingPage() {
                 <Ico d="warn" size={14} /> {attention} need{attention === 1 ? 's' : ''} attention
               </span>
             )}
+            <button onClick={() => setAddOpen(o => !o)}
+              className="text-xs font-semibold bg-[var(--gold)] text-[var(--on-gold)] rounded-lg px-3 py-2">
+              Add from Fingercheck
+            </button>
             <button onClick={refresh} disabled={busy}
               className="inline-flex items-center gap-2 text-xs text-[var(--muted)] border border-[var(--border)] bg-[var(--surface)] rounded-lg px-3 py-2 disabled:opacity-50">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--ok)' }} />
@@ -174,9 +212,29 @@ export default function OnboardingPage() {
 
         <RecruitingTabs />
 
+        {addOpen && (
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 mb-4">
+            <div className="text-[11px] uppercase tracking-wide text-[var(--text)] font-bold mb-2">Add someone already in Fingercheck</div>
+            <div className="flex gap-2 flex-wrap">
+              <input value={addNum} onChange={e => setAddNum(e.target.value)} onKeyDown={e => e.key === 'Enter' && addFromFingercheck()}
+                placeholder="Employee number, e.g. 100727"
+                className="flex-1 min-w-[200px] border border-[var(--border)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-sm" />
+              <button onClick={addFromFingercheck} disabled={busy || !addNum.trim()}
+                className="bg-[var(--gold)] text-[var(--on-gold)] text-sm font-semibold px-5 rounded-lg disabled:opacity-40">
+                {busy ? 'Adding…' : 'Add'}
+              </button>
+              <button onClick={() => setAddOpen(false)} className="text-sm text-[var(--muted)] px-3">Cancel</button>
+            </div>
+            <p className="text-[11px] text-[var(--faint)] mt-2 leading-relaxed">
+              For people onboarding in Fingercheck who never went through the offer flow here. Their stage is read straight from Fingercheck.
+            </p>
+          </div>
+        )}
+
         {loading ? <p className="text-[var(--faint)] text-sm">Loading…</p> : rows.length === 0 ? (
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-10 text-center text-[var(--muted)]">
-            Nobody is onboarding yet. Cards appear here once a candidate signs their offer letter.
+            <div className="mb-1">Nobody is on the board yet.</div>
+            <div className="text-[12.5px] text-[var(--faint)]">Cards open automatically when a candidate signs their offer letter — or use <b className="text-[var(--gold)]">Add from Fingercheck</b> for someone already onboarding there.</div>
           </div>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-3 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:bg-[var(--raise)] [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -203,10 +261,10 @@ export default function OnboardingPage() {
                           <div className="flex items-center gap-2.5">
                             <span className="w-[30px] h-[30px] rounded-full border grid place-items-center text-[10.5px] font-bold flex-shrink-0"
                               style={{ borderColor: 'var(--gold)', color: 'var(--gold)' }}>
-                              {ini(r.candidate?.full_name || '')}
+                              {ini(nameOf(r))}
                             </span>
                             <div className="min-w-0">
-                              <div className="text-[13px] font-semibold text-[var(--text)] leading-tight truncate">{r.candidate?.full_name || '—'}</div>
+                              <div className="text-[13px] font-semibold text-[var(--text)] leading-tight truncate">{nameOf(r)}</div>
                               <div className="text-[11px] text-[var(--muted)] truncate">{r.fc_position || (r.candidate?.positions || [])[0] || '—'}</div>
                             </div>
                           </div>
@@ -236,9 +294,9 @@ export default function OnboardingPage() {
             <div className="p-5 border-b border-[var(--border)] relative">
               <button onClick={() => setSel(null)} className="absolute top-4 right-5 w-8 h-8 rounded-lg bg-[var(--raise)] text-[var(--muted)] grid place-items-center"><Ico d="x" size={13} sw={2.2} /></button>
               <div className="flex items-center gap-3">
-                <span className="w-12 h-12 rounded-xl border grid place-items-center font-semibold" style={{ borderColor: 'var(--gold)', color: 'var(--gold)' }}>{ini(sel.candidate?.full_name || '')}</span>
+                <span className="w-12 h-12 rounded-xl border grid place-items-center font-semibold" style={{ borderColor: 'var(--gold)', color: 'var(--gold)' }}>{ini(nameOf(sel))}</span>
                 <div>
-                  <h2 className="text-lg font-semibold text-[var(--text-strong)]">{sel.candidate?.full_name || '—'}</h2>
+                  <h2 className="text-lg font-semibold text-[var(--text-strong)]">{nameOf(sel)}</h2>
                   <div className="text-xs text-[var(--muted)]">{sel.fc_position || (sel.candidate?.positions || [])[0] || '—'} · {daysIn(sel.stage_entered_at)}d in stage</div>
                 </div>
               </div>
