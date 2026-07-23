@@ -2,8 +2,15 @@
    BSM theme tokens. Every screen references these variables, never raw
    hex — so dark/light flips globally from one place.
    Applied via <html data-theme="dark|light">. Default: dark.
-   ══════════════════════════════════════════════════════════════════ */
 
+   BORDERS ARE TIERED GOLD. Three strengths so the hierarchy holds:
+     --border-soft   inputs, quiet dividers      (quietest)
+     --border        cards, tiles, panels        (default)
+     --border-strong card outlines, emphasis
+     --border-gold   selected / accent outlines  (loudest)
+   Because every tier is mixed from --gold, they re-tint automatically in
+   light mode (where --gold becomes the deeper #96723C).
+   ══════════════════════════════════════════════════════════════════ */
 :root, [data-theme='dark'] {
   --bg:            #1E1B17;
   --bg-grid:       rgba(220,184,120,.05);
@@ -11,29 +18,28 @@
   --surface-2:     #26221D;   /* inputs, hover */
   --raise:         #2A241D;   /* chips, avatars bg, inset boxes */
   --header:        #16130F;   /* top bar */
-
   --text:          #EDE7DD;
   --text-strong:   #FFFFFF;
   --muted:         #8C8375;
   --faint:         #6E665C;
 
-  --border:        #3A342B;
-  --border-strong: #4A4237;
-  --border-gold:   rgba(220,184,120,.28);
-
   --gold:          #DCB878;
   --gold-hover:    #E7CB9A;
   --on-gold:       #16130F;   /* text on a gold fill */
+
+  /* tiered gold borders */
+  --border-soft:   color-mix(in srgb, var(--gold) 18%, transparent);
+  --border:        color-mix(in srgb, var(--gold) 26%, transparent);
+  --border-strong: color-mix(in srgb, var(--gold) 38%, transparent);
+  --border-gold:   color-mix(in srgb, var(--gold) 52%, transparent);
 
   --ok:            #7FB08A;
   --ok-bg:         rgba(127,176,138,.12);
   --danger:        #C97A6A;
   --danger-bg:     #2A2320;
-
   --shadow:        0 24px 50px -18px rgba(0,0,0,.7);
   --shadow-card:   0 2px 14px rgba(0,0,0,.35);
 }
-
 [data-theme='light'] {
   --bg:            #F5F3EF;
   --bg-grid:       rgba(150,114,60,.05);
@@ -41,27 +47,38 @@
   --surface-2:     #FBF8F2;
   --raise:         #F0EDE7;
   --header:        #16130F;   /* header stays charcoal in both themes */
-
   --text:          #2B2721;
   --text-strong:   #16130F;
   --muted:         #6E665C;
   --faint:         #9C9384;
 
-  --border:        #E5E0D8;
-  --border-strong: #D8D1C5;
-  --border-gold:   rgba(150,114,60,.30);
-
   --gold:          #96723C;   /* deeper gold: passes on white */
   --gold-hover:    #83632F;
   --on-gold:       #FFFFFF;
+
+  /* tiered gold borders — slightly stronger mixes so they read on white */
+  --border-soft:   color-mix(in srgb, var(--gold) 22%, transparent);
+  --border:        color-mix(in srgb, var(--gold) 30%, transparent);
+  --border-strong: color-mix(in srgb, var(--gold) 42%, transparent);
+  --border-gold:   color-mix(in srgb, var(--gold) 55%, transparent);
 
   --ok:            #3F7A4C;
   --ok-bg:         rgba(63,122,76,.10);
   --danger:        #B4432E;
   --danger-bg:     #FDF3F1;
-
   --shadow:        0 20px 50px -20px rgba(30,27,23,.28);
   --shadow-card:   0 2px 14px rgba(30,27,23,.08);
+}
+
+/* Fallback for engines without color-mix(): flat borders, no gold tint.
+   Everything still renders; it just loses the warmth. */
+@supports not (color: color-mix(in srgb, red 50%, transparent)) {
+  :root, [data-theme='dark'] {
+    --border-soft: #332E26; --border: #3A342B; --border-strong: #4A4237; --border-gold: rgba(220,184,120,.28);
+  }
+  [data-theme='light'] {
+    --border-soft: #EAE4DA; --border: #E5E0D8; --border-strong: #D8D1C5; --border-gold: rgba(150,114,60,.30);
+  }
 }
 
 /* page base */
@@ -76,21 +93,27 @@
 @media (prefers-reduced-motion: no-preference) {
   .bsm-app, .bsm-app * { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
 }
-
 /* native control theming (date pickers, scrollbars) follow the theme */
 [data-theme='dark']  { color-scheme: dark; }
 [data-theme='light'] { color-scheme: light; }
-
 /* All form controls inside the app inherit theme surfaces automatically.
    Higher specificity than Tailwind's bg-white/border-gray utilities, so
-   individual inputs don't each need restyling. */
+   individual inputs don't each need restyling. Inputs use the quietest
+   border tier so they don't compete with cards and primary actions. */
 .bsm-app input,
 .bsm-app select,
 .bsm-app textarea {
   background: var(--surface-2);
   color: var(--text);
-  border-color: var(--border);
+  border-color: var(--border-soft);
 }
 .bsm-app input::placeholder,
 .bsm-app textarea::placeholder { color: var(--faint); }
 .bsm-app select option { background: var(--surface); color: var(--text); }
+
+/* Safety net: a few screens still hard-code white text that was written for
+   dark mode. In light mode that renders white-on-white. Until those pages are
+   migrated to --text-strong, force them readable rather than invisible. */
+[data-theme='light'] .bsm-app h1[style*="#fff"],
+[data-theme='light'] .bsm-app h2[style*="#fff"],
+[data-theme='light'] .bsm-app h3[style*="#fff"] { color: var(--text-strong) !important; }
