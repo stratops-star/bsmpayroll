@@ -4,8 +4,8 @@
    Applied via <html data-theme="dark|light">. Default: dark.
 
    BORDERS ARE TIERED GOLD. Three strengths so the hierarchy holds:
-     --border-soft   inputs, quiet dividers      (quietest)
-     --border        cards, tiles, panels        (default)
+     --border-soft   quiet dividers, hairlines   (quietest)
+     --border        inputs, cards, tiles        (default)
      --border-strong card outlines, emphasis
      --border-gold   selected / accent outlines  (loudest)
    Because every tier is mixed from --gold, they re-tint automatically in
@@ -44,8 +44,8 @@
   --bg:            #F5F3EF;
   --bg-grid:       rgba(150,114,60,.05);
   --surface:       #FFFFFF;
-  --surface-2:     #FBF8F2;
-  --raise:         #F0EDE7;
+  --surface-2:     #F3EFE6;   /* inputs — must read as inset against the white card */
+  --raise:         #EDE9E0;
   --header:        #16130F;   /* header stays charcoal in both themes */
   --text:          #2B2721;
   --text-strong:   #16130F;
@@ -104,11 +104,38 @@
 .bsm-app select,
 .bsm-app textarea {
   background: var(--surface-2);
-  color: var(--text);
   border-color: var(--border-soft);
 }
+
+/* Typed values must always be legible. `!important` is deliberate: it beats any
+   stale inline colour left on a page, and beats WebKit's autofill styling, which
+   silently overrides `color` via -webkit-text-fill-color. Placeholders are
+   re-dimmed below so they still read as hints rather than as values. */
+.bsm-app input,
+.bsm-app select,
+.bsm-app textarea {
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+  opacity: 1 !important;
+}
+.bsm-app input:disabled,
+.bsm-app select:disabled,
+.bsm-app textarea:disabled {
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+}
 .bsm-app input::placeholder,
-.bsm-app textarea::placeholder { color: var(--faint); }
+.bsm-app textarea::placeholder {
+  color: var(--faint) !important;
+  -webkit-text-fill-color: var(--faint) !important;
+}
+/* Chrome autofill paints its own background + text colour; pin both to the theme. */
+.bsm-app input:-webkit-autofill,
+.bsm-app input:-webkit-autofill:hover,
+.bsm-app input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-strong) !important;
+  box-shadow: 0 0 0 1000px var(--surface-2) inset !important;
+}
 .bsm-app select option { background: var(--surface); color: var(--text); }
 
 /* Safety net: a few screens still hard-code white text that was written for
