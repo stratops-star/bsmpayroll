@@ -14,8 +14,9 @@ type Ev = {
 }
 type Photo = { slot: string; sequence: number; storage_path: string }
 
-const NAVY_RGB = rgb(0.118, 0.106, 0.090)
-const GOLD_RGB = rgb(0.863, 0.722, 0.471)
+// Plain tuples — pdf-lib's rgb() is only available after the dynamic import below.
+const NAVY_C: [number, number, number] = [0.118, 0.106, 0.090]
+const GOLD_C: [number, number, number] = [0.863, 0.722, 0.471]
 
 export default function ValetHistory() {
   const [supabase] = useState(() => createClient())
@@ -146,6 +147,8 @@ export default function ValetHistory() {
     try {
       const { park, retrieve } = stayFor(e)
       const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')   // loaded on demand
+      const NAVY_RGB = rgb(...NAVY_C)
+      const GOLD_RGB = rgb(...GOLD_C)
       const doc = await PDFDocument.create()
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -227,6 +230,8 @@ export default function ValetHistory() {
     setBusy(true)
     try {
       const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')   // loaded on demand
+      const NAVY_RGB = rgb(...NAVY_C)
+      const GOLD_RGB = rgb(...GOLD_C)
       const doc = await PDFDocument.create()
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
