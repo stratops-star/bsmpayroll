@@ -7,6 +7,10 @@
     {
       "path": "/api/valet-report-retry",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fingercheck-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
