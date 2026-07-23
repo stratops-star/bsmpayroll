@@ -57,7 +57,7 @@ const Trash = ({ size = 14 }: { size?: number }) => (
 )
 
 const field: React.CSSProperties = {
-  background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9,
+  background: HOVER, border: `1px solid var(--border-strong)`, borderRadius: 9,
   padding: '9px 12px', color: INK, fontSize: 13.5, fontFamily: 'inherit', outline: 'none', width: '100%',
 }
 
@@ -173,7 +173,7 @@ export default function AdminPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={MUTE} strokeWidth="1.8" strokeLinecap="round"
             style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or email…"
-            style={{ width: '100%', background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '13px 14px 13px 42px', color: INK, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
+            style={{ width: '100%', background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '13px 14px 13px 42px', color: STRONG, WebkitTextFillColor: STRONG, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
         </div>
 
         {pending.length > 0 && (<>
@@ -223,7 +223,7 @@ function Row({ u, patch, toggleDept, changeRole, save, remove, armed, setArmed, 
         <div style={{ width: 44, height: 44, borderRadius: '50%', border: `1.5px solid ${GOLD}`, background: RAISE, color: GOLD, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{ini(name)}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <input value={u.full_name || ''} onChange={e => patch(u.id, { full_name: e.target.value })} placeholder="Full name"
-            style={{ ...field, fontWeight: 600, color: STRONG }} />
+            style={{ ...field, fontWeight: 600 }} />
           <div style={{ color: MUTE, fontSize: 12.5, margin: '5px 2px 0' }}>{u.email}</div>
           <input value={u.phone || ''} onChange={e => patch(u.id, { phone: e.target.value })} placeholder="Cellphone (for interview texts)"
             style={{ ...field, fontSize: 12.5, marginTop: 7 }} />
@@ -233,7 +233,8 @@ function Row({ u, patch, toggleDept, changeRole, save, remove, armed, setArmed, 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <select value={u.role} onChange={e => changeRole(u, e.target.value)}
           style={{
-            background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9, color: INK, fontSize: 13,
+            background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9,
+            color: STRONG, WebkitTextFillColor: STRONG, fontSize: 13, fontWeight: 600,
             padding: '9px 30px 9px 12px', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none',
             backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238C8375' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: 'right 11px center',
