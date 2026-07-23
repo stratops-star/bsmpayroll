@@ -137,6 +137,8 @@ async function run() {
       fc_location: snap.location,
       fc_supervisor_number: snap.supervisorEmployeeNumber,
       fc_modified_on: snap.modifiedOn,
+      fc_first_name: snap.name ? snap.name.split(' ')[0] : null,
+      fc_last_name: snap.name ? snap.name.split(' ').slice(1).join(' ') || null : null,
       fc_last_synced_at: new Date().toISOString(),
       fc_last_error: null,
     }).eq('id', row.id)
@@ -161,7 +163,59 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(out, { status: out.ok ? 200 : 500 })
 }
 
-// Vercel cron issues GET; POST is here so the app can trigger a manual refresh.
+// Vercel cron issues GET.
+// POST does double duty for the board:
+//   {}                          → run a sync now (Refresh button)
+//   { employeeNumber: "100727" } → open a card for someone already in Fingercheck
 export async function POST(req: NextRequest) {
-  return GET(req)
+  if (!(await authorized(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!fingercheckConfigured()) return NextResponse.json({ error: 'Fingercheck env vars missing' }, { status: 500 })
+
+  let body: any = {}
+  try { body = await req.json() } catch { /* empty body = plain sync */ }
+
+  const empNo = (body?.employeeNumber || '').toString().trim()
+  if (!empNo) {
+    const out = await run()
+    return NextResponse.json(out, { status: out.ok ? 200 : 500 })
+  }
+
+  const supabase = createServerClient()
+
+  const { data: dupe } = await supabase
+    .from('onboarding').select('id').eq('fingercheck_employee_number', empNo).maybeSingle()
+  if (dupe) return NextResponse.json({ error: `Employee #${empNo} is already on the board.` }, { status: 409 })
+
+  const res = await getEmployee(empNo)
+  if (!res.ok) return NextResponse.json({ error: `Fingercheck: ${res.error}` }, { status: 502 })
+
+  const snap = toSnapshot(res.data)
+  const seed = {
+    id: '', candidate_id: '', fingercheck_employee_number: empNo, stage: 'invited',
+    documents_ok: false, synced_to_sheet_at: null,
+    fc_cost_center_1: snap.costCenter1, fc_supervisor_number: snap.supervisorEmployeeNumber,
+  } as unknown as Row
+  const stage = deriveStage(seed, snap)
+
+  const { data: inserted, error } = await supabase.from('onboarding').insert({
+    candidate_id: null,
+    source: 'fingercheck',
+    fingercheck_employee_number: empNo,
+    stage,
+    fc_first_name: snap.name ? snap.name.split(' ')[0] : null,
+    fc_last_name: snap.name ? snap.name.split(' ').slice(1).join(' ') || null : null,
+    fc_onboarding_status: snap.onBoardingStatus,
+    fc_new_hire_status: snap.newHireStatus,
+    fc_division_status: snap.divisionEmployeeStatus,
+    fc_hire_date: snap.hireDate ? snap.hireDate.slice(0, 10) : null,
+    fc_position: snap.position,
+    fc_cost_center_1: snap.costCenter1,
+    fc_location: snap.location,
+    fc_supervisor_number: snap.supervisorEmployeeNumber,
+    fc_modified_on: snap.modifiedOn,
+    fc_last_synced_at: new Date().toISOString(),
+  }).select('id').single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, id: inserted?.id, name: snap.name, stage })
 }
