@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-browser'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 const NAVY = '#1E1B17'
 const GOLD = '#DCB878'
@@ -146,6 +145,7 @@ export default function ValetHistory() {
     setBusy(true)
     try {
       const { park, retrieve } = stayFor(e)
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')   // loaded on demand
       const doc = await PDFDocument.create()
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -226,6 +226,7 @@ export default function ValetHistory() {
   async function exportListPDF() {
     setBusy(true)
     try {
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')   // loaded on demand
       const doc = await PDFDocument.create()
       const font = await doc.embedFont(StandardFonts.Helvetica)
       const bold = await doc.embedFont(StandardFonts.HelveticaBold)
