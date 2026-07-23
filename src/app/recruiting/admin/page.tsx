@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase-browser'
 
-// Hub dark palette
+// Theme tokens
 const CHAR = 'var(--bg)', PANEL = 'var(--surface)', HOVER = 'var(--surface-2)', RAISE = 'var(--raise)'
-const GOLD = 'var(--gold)'
-const INK = 'var(--text)', MUTE = 'var(--muted)', FAINT = 'var(--faint)'
-const BORDER = 'var(--border)', BORDER_GOLD = 'rgba(220,184,120,.28)'
+const GOLD = 'var(--gold)', ON_GOLD = 'var(--on-gold)'
+const INK = 'var(--text)', STRONG = 'var(--text-strong)', MUTE = 'var(--muted)', FAINT = 'var(--faint)'
+const BORDER = 'var(--border)', BORDER_GOLD = 'color-mix(in srgb, var(--gold) 38%, transparent)'
 
 type AppUser = {
   id: string
@@ -19,17 +19,33 @@ type AppUser = {
   active: boolean
 }
 
-const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'pool', 'viewer']
+// `valet` = attendant (walled-off lane). `valet_manager` = valet supervisor.
+const ROLES = ['admin', 'payroll', 'recruiter', 'manager', 'pool', 'viewer', 'valet', 'valet_manager']
 const DEPTS = ['recruiting', 'payroll', 'valet']
-const ROLE_DEPTS: Record<string, string[]> = {
+
+// The walled-off valet lane: these roles may ONLY ever hold the valet department.
+const VALET_LANE = ['valet', 'valet_manager']
+const isValetLane = (role: string) => VALET_LANE.includes(role)
+
+// Suggested departments when a user has NONE yet. Never used to overwrite existing
+// departments — changing a role must not silently grant or revoke access.
+const ROLE_SUGGESTED_DEPTS: Record<string, string[]> = {
   admin: ['recruiting', 'payroll'],
   payroll: ['payroll'],
   recruiter: ['recruiting'],
   viewer: ['recruiting'],
+  valet: ['valet'],
+  valet_manager: ['valet'],
   manager: [],
   pool: [],
 }
+
 const ini = (n: string) => n.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+const Check = ({ size = 11 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2"
+    strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+)
 
 const field: React.CSSProperties = {
   background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9,
@@ -44,6 +60,10 @@ export default function AdminPage() {
   const [q, setQ] = useState('')
   const [toast, setToast] = useState('')
 
+  // Which group each user was in WHEN LOADED. Frozen for the life of the page so a card
+  // never jumps between "Pending" and "Active" while you're editing or saving it.
+  const groupRef = useRef<Record<string, boolean>>({})
+
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('bsm:area', { detail: 'User Access' }))
     return () => window.dispatchEvent(new CustomEvent('bsm:area', { detail: null }))
@@ -57,39 +77,65 @@ export default function AdminPage() {
       if (me?.role !== 'admin') { setStatus('denied'); return }
       const { data: all, error } = await supabase.from('app_users').select('*').order('email')
       if (error) { setMsg(error.message); return }
-      setUsers(all ?? []); setStatus('ready')
+      const list = all ?? []
+      const g: Record<string, boolean> = {}
+      list.forEach((u: AppUser) => { g[u.id] = (u.departments?.length ?? 0) > 0 })
+      groupRef.current = g
+      setUsers(list); setStatus('ready')
     })()
   }, [supabase])
 
   function patch(id: string, p: Partial<AppUser>) { setUsers(us => us.map(u => (u.id === id ? { ...u, ...p } : u))) }
+
   function toggleDept(u: AppUser, d: string) {
+    // Valet-lane users can never hold a non-valet department.
+    if (isValetLane(u.role) && d !== 'valet') { flash('Valet accounts can only hold the valet department.'); return }
     const has = u.departments?.includes(d)
     patch(u.id, { departments: has ? u.departments.filter(x => x !== d) : [...(u.departments || []), d] })
   }
+
+  function changeRole(u: AppUser, r: string) {
+    const current = u.departments || []
+    // Entering the valet lane strips everything but valet — that is the whole point of the lane.
+    if (isValetLane(r)) { patch(u.id, { role: r, departments: ['valet'] }); return }
+    // Leaving the valet lane clears valet-only access so it must be re-granted deliberately.
+    const wasLane = isValetLane(u.role)
+    if (wasLane) { patch(u.id, { role: r, departments: ROLE_SUGGESTED_DEPTS[r] ?? [] }); return }
+    // Otherwise: only suggest departments when the user has none. Never overwrite.
+    const next = current.length ? current : (ROLE_SUGGESTED_DEPTS[r] ?? [])
+    patch(u.id, { role: r, departments: next })
+  }
+
   async function save(u: AppUser) {
+    // Final server-side-shaped guard: a valet-lane account is forced to valet only.
+    const departments = isValetLane(u.role) ? ['valet'] : (u.departments || [])
     const { error } = await supabase.from('app_users')
-      .update({ role: u.role, departments: u.departments, active: u.active, full_name: u.full_name || null, phone: u.phone || null, approved: true }).eq('id', u.id)
+      .update({ role: u.role, departments, active: u.active, full_name: u.full_name || null, phone: u.phone || null, approved: true })
+      .eq('id', u.id)
+    if (!error && departments !== u.departments) patch(u.id, { departments })
     flash(error ? 'Error: ' + error.message : `Saved ${u.full_name || u.email.split('@')[0]}`)
   }
+
   let tmr: any
-  function flash(m: string) { setToast(m); clearTimeout(tmr); tmr = setTimeout(() => setToast(''), 2200) }
+  function flash(m: string) { setToast(m); clearTimeout(tmr); tmr = setTimeout(() => setToast(''), 2600) }
 
   const filtered = useMemo(() => {
     const s = q.toLowerCase()
     return users.filter(u => u.email.toLowerCase().includes(s) || (u.full_name || '').toLowerCase().includes(s))
   }, [users, q])
-  const pending = filtered.filter(u => !u.departments?.length)
-  const assigned = filtered.filter(u => u.departments?.length)
+
+  // Grouping uses the frozen snapshot, not live edits — cards stay put.
+  const pending = filtered.filter(u => groupRef.current[u.id] === false)
+  const assigned = filtered.filter(u => groupRef.current[u.id] !== false)
 
   if (status === 'loading') return <Shell>Loading…</Shell>
   if (status === 'denied') return <Shell>Admins only.{msg && ' ' + msg}</Shell>
 
   return (
-    <div style={{ minHeight: '100vh', background: CHAR, color: INK, fontFamily: 'system-ui, sans-serif',
-      backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(220,184,120,.05) 1px, transparent 0)', backgroundSize: '22px 22px' }}>
+    <div className="bsm-app" style={{ minHeight: '100vh', color: INK, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 920, margin: '0 auto', padding: '34px 20px 80px' }}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.22em', color: GOLD, textTransform: 'uppercase' }}>User Access</div>
-        <h1 style={{ fontSize: 30, fontWeight: 700, color: '#fff', margin: '10px 0 0', letterSpacing: '-.01em' }}>Manage roles &amp; departments</h1>
+        <h1 style={{ fontSize: 30, fontWeight: 700, color: STRONG, margin: '10px 0 0', letterSpacing: '-.01em' }}>Manage roles &amp; departments</h1>
         <div style={{ width: 38, height: 2, background: GOLD, margin: '14px 0 8px' }} />
         <p style={{ color: MUTE, fontSize: 14, margin: 0 }}>Assign roles, departments, and contact details. Saving grants access immediately.</p>
 
@@ -102,38 +148,40 @@ export default function AdminPage() {
 
         {pending.length > 0 && (<>
           <SectionLabel>Pending assignment · <b style={{ color: GOLD }}>{pending.length}</b></SectionLabel>
-          {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} pending />)}
+          {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} pending />)}
         </>)}
 
         <SectionLabel>Active users · <b style={{ color: GOLD }}>{assigned.length}</b></SectionLabel>
-        {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} save={save} />)}
+        {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} />)}
         {filtered.length === 0 && <p style={{ color: MUTE }}>No users match “{q}”.</p>}
 
         <div style={{ marginTop: 34, padding: '16px 18px', background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12, fontSize: 12, color: MUTE, lineHeight: 1.7 }}>
-          <b style={{ color: GOLD }}>Departments</b> unlock full modules (recruiting, payroll, valet). <b style={{ color: GOLD }}>Scoped roles</b> — pool and manager — get their own screen and need no department. Saving a user grants access immediately.
+          <b style={{ color: GOLD }}>Departments</b> unlock full modules (recruiting, payroll, valet). <b style={{ color: GOLD }}>Scoped roles</b> — pool and manager — get their own screen. <b style={{ color: GOLD }}>Valet accounts</b> (valet, valet_manager) are limited to the valet module and cannot be granted recruiting or payroll. Saving a user grants access immediately.
         </div>
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', background: PANEL, border: `1px solid ${BORDER_GOLD}`, color: INK, padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 18px 40px -10px rgba(0,0,0,.6)' }}>
-          <span style={{ color: GOLD }}>✓</span> {toast}
+        <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', background: PANEL, border: `1px solid ${BORDER_GOLD}`, color: INK, padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 18px 40px -10px rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: GOLD, display: 'inline-flex' }}><Check size={13} /></span> {toast}
         </div>
       )}
     </div>
   )
 }
 
-function Row({ u, patch, toggleDept, save, pending }: {
+function Row({ u, patch, toggleDept, changeRole, save, pending }: {
   u: AppUser
   patch: (id: string, p: Partial<AppUser>) => void
   toggleDept: (u: AppUser, d: string) => void
+  changeRole: (u: AppUser, r: string) => void
   save: (u: AppUser) => void
   pending?: boolean
 }) {
   const name = u.full_name || u.email.split('@')[0]
+  const lane = isValetLane(u.role)
   return (
     <div style={{
-      background: pending ? `linear-gradient(0deg,rgba(220,184,120,.03),rgba(220,184,120,.03)),${PANEL}` : PANEL,
+      background: PANEL,
       border: `1px solid ${pending ? BORDER_GOLD : BORDER}`, borderRadius: 16, padding: '18px 20px', marginBottom: 12,
       display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
     }}>
@@ -141,7 +189,7 @@ function Row({ u, patch, toggleDept, save, pending }: {
         <div style={{ width: 44, height: 44, borderRadius: '50%', border: `1.5px solid ${GOLD}`, background: RAISE, color: GOLD, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{ini(name)}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <input value={u.full_name || ''} onChange={e => patch(u.id, { full_name: e.target.value })} placeholder="Full name"
-            style={{ ...field, fontWeight: 600, color: '#fff' }} />
+            style={{ ...field, fontWeight: 600, color: STRONG }} />
           <div style={{ color: MUTE, fontSize: 12.5, margin: '5px 2px 0' }}>{u.email}</div>
           <input value={u.phone || ''} onChange={e => patch(u.id, { phone: e.target.value })} placeholder="Cellphone (for interview texts)"
             style={{ ...field, fontSize: 12.5, marginTop: 7 }} />
@@ -149,7 +197,7 @@ function Row({ u, patch, toggleDept, save, pending }: {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <select value={u.role} onChange={e => { const r = e.target.value; patch(u.id, { role: r, departments: ROLE_DEPTS[r] ?? u.departments }) }}
+        <select value={u.role} onChange={e => changeRole(u, e.target.value)}
           style={{
             background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9, color: INK, fontSize: 13,
             padding: '9px 30px 9px 12px', fontFamily: 'inherit', cursor: 'pointer', appearance: 'none',
@@ -161,13 +209,19 @@ function Row({ u, patch, toggleDept, save, pending }: {
 
         {DEPTS.map(d => {
           const on = u.departments?.includes(d)
+          const locked = lane && d !== 'valet'
           return (
-            <button key={d} onClick={() => toggleDept(u, d)}
+            <button key={d} onClick={() => toggleDept(u, d)} disabled={locked}
+              title={locked ? 'Valet accounts are limited to the valet module' : undefined}
               style={{
-                border: `1px solid ${on ? GOLD : BORDER}`, background: on ? GOLD : 'transparent', color: on ? CHAR : MUTE,
-                borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: '.15s',
+                border: `1px solid ${on ? GOLD : BORDER}`, background: on ? GOLD : 'transparent',
+                color: on ? ON_GOLD : (locked ? FAINT : MUTE),
+                borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                cursor: locked ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: '.15s',
+                opacity: locked ? 0.4 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
               }}>
-              {on ? '✓ ' : ''}{d}
+              {on && <Check />}{d}
             </button>
           )
         })}
@@ -177,10 +231,17 @@ function Row({ u, patch, toggleDept, save, pending }: {
         </label>
 
         <button onClick={() => save(u)}
-          style={{ background: GOLD, color: CHAR, border: 0, borderRadius: 9, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          style={{ background: GOLD, color: ON_GOLD, border: 0, borderRadius: 9, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
           Save
         </button>
       </div>
+
+      {lane && (
+        <div style={{ flexBasis: '100%', fontSize: 11.5, color: FAINT, marginTop: -4 }}>
+          Valet lane — this account can only reach the valet module.
+          {u.role === 'valet' ? ' Attendant access (no manager screens).' : ' Manager access to the valet module.'}
+        </div>
+      )}
     </div>
   )
 }
@@ -189,5 +250,5 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.2em', color: MUTE, fontWeight: 800, margin: '26px 2px 12px' }}>{children}</div>
 }
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: CHAR, color: MUTE, fontFamily: 'system-ui' }}>{children}</div>
+  return <div className="bsm-app" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: MUTE, fontFamily: 'system-ui' }}>{children}</div>
 }
