@@ -20,6 +20,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Warm the connection to Supabase so the first query skips DNS + TLS setup. */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <>
+            <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
+          </>
+        )}
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   )
