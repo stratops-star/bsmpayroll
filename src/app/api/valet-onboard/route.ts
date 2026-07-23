@@ -31,13 +31,13 @@ async function sms(to: string, body: string) {
     return r.ok
   } catch { return false }
 }
-async function email(to: string, subject: string, html: string) {
+async function email(to: string, subject: string, html: string, text?: string) {
   const key = process.env.RESEND_API_KEY; if (!key || !to) return false
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'BSM Valet <valet.fg@bsmfacilitysolutions.app>', to: [to], subject, html }),
+      body: JSON.stringify({ from: 'BSM Valet <valet.fg@bsmfacilitysolutions.app>', to: [to], subject, html, ...(text ? { text } : {}) }),
     })
     return r.ok
   } catch { return false }
@@ -57,19 +57,81 @@ async function requireManager(req: NextRequest): Promise<boolean> {
 }
 
 function notifyText(name: string, loginEmail: string, pw: string) {
+  const APP = 'https://bsmfacilitysolutions.app'
+  const GOLD = '#DCB878', CHAR = '#1E1B17', INK = '#3F3A32', MUTE = '#8C8375'
+
   const body =
     `BSM Valet access / Acceso BSM Valet\n\n` +
     `Sign in / Ingresa: ${LOGIN_URL}\n` +
     `Email: ${loginEmail}\n` +
     `Password / Contraseña: ${pw}\n\n` +
+    `Change this password after your first sign in. / Cambia esta contraseña después de entrar.\n` +
     `Keep this private. / Manténlo privado.`
-  const html =
-    `<p>Hi ${name},</p>` +
-    `<p>Your BSM Valet account is ready. / Tu cuenta de BSM Valet está lista.</p>` +
-    `<p><strong>Sign in / Ingresa:</strong> <a href="${LOGIN_URL}">${LOGIN_URL}</a><br>` +
-    `<strong>Email:</strong> ${loginEmail}<br>` +
-    `<strong>Password / Contraseña:</strong> ${pw}</p>` +
-    `<p>Please keep this private. / Por favor manténlo privado.</p><p>— BSM</p>`
+
+  const row = (label: string, value: string) =>
+    `<tr>
+       <td style="padding:9px 0;border-bottom:1px solid #F0EDE7;color:${MUTE};font-size:13px;white-space:nowrap">${label}</td>
+       <td style="padding:9px 0 9px 18px;border-bottom:1px solid #F0EDE7;color:${CHAR};font-size:14px;font-weight:600;text-align:right;word-break:break-all">${value}</td>
+     </tr>`
+
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#F5F3EF;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0">Your BSM Valet sign-in details are inside. / Tus datos de acceso están adentro.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F3EF;padding:28px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(30,27,23,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+
+        <tr><td style="background:${CHAR};padding:26px 28px;text-align:center">
+          <img src="${APP}/bsm-logo.png" alt="BSM Facility Solutions" width="150" style="height:auto;display:block;margin:0 auto 4px" />
+          <div style="color:${GOLD};font-size:11px;letter-spacing:2.5px;font-weight:700;margin-top:8px">VALET SERVICE</div>
+        </td></tr>
+        <tr><td style="height:3px;background:${GOLD};font-size:0;line-height:0">&nbsp;</td></tr>
+
+        <tr><td style="padding:30px 28px 8px">
+          <h1 style="margin:0 0 4px;color:${CHAR};font-size:21px;font-weight:700;letter-spacing:-.2px">Your account is ready</h1>
+          <div style="width:34px;height:2px;background:${GOLD};margin:12px 0 18px"></div>
+          <p style="margin:0 0 6px;color:${INK};font-size:15px">Hi ${name},</p>
+          <p style="margin:0;color:${INK};font-size:15px;line-height:1.6">
+            You can now sign in to the BSM Valet app with the details below.<br/>
+            <span style="color:${MUTE};font-size:14px">Ya puedes entrar a la app de BSM Valet con estos datos.</span>
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:22px 28px 4px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #F0EDE7">
+            ${row('Email', loginEmail)}
+            ${row('Password / Contraseña', pw)}
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:22px 28px 0" align="center">
+          <a href="${LOGIN_URL}" style="display:inline-block;background:${GOLD};color:${CHAR};text-decoration:none;font-size:15px;font-weight:800;padding:14px 34px;border-radius:12px;letter-spacing:.2px">Sign in / Ingresar</a>
+          <div style="color:${MUTE};font-size:11.5px;margin-top:10px;word-break:break-all">${LOGIN_URL}</div>
+        </td></tr>
+
+        <tr><td style="padding:20px 28px 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FBF8F2;border:1px solid #EFE6D3;border-radius:10px">
+            <tr><td style="padding:14px 16px;color:${INK};font-size:13.5px;line-height:1.55">
+              <strong style="color:${CHAR}">Change this password after your first sign in</strong>, and keep it private.<br/>
+              <span style="color:${MUTE}">Cambia esta contraseña después de entrar y manténla privada.</span>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:24px 28px 30px">
+          <p style="margin:0;color:${INK};font-size:14.5px;line-height:1.6">Welcome to the team.<br/><span style="color:${MUTE}">Bienvenido al equipo.</span></p>
+          <p style="margin:14px 0 0;color:${CHAR};font-size:14px;font-weight:700">The BSM Valet Team</p>
+        </td></tr>
+
+        <tr><td style="background:${CHAR};padding:18px 28px;text-align:center">
+          <div style="color:${GOLD};font-size:12px;font-weight:700;letter-spacing:.4px">BSM Facility Solutions</div>
+          <div style="color:#7C7266;font-size:11px;margin-top:5px;line-height:1.5">Trouble signing in? Contact your valet manager.<br/>Please do not reply to this message.</div>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
   return { body, html }
 }
 
@@ -113,7 +175,7 @@ export async function POST(req: NextRequest) {
     const { body, html } = notifyText(full_name, loginEmail, pw)
     const [s, e] = await Promise.all([
       phone ? sms(phone, body) : Promise.resolve(false),
-      email(loginEmail, 'Your BSM Valet login', html),
+      email(loginEmail, 'Your BSM Valet login — account ready', html, body),
     ])
     return NextResponse.json({ ok: true, id: userId, sms: s, email: e })
   }
@@ -134,7 +196,7 @@ export async function POST(req: NextRequest) {
     const { body, html } = notifyText(u.full_name || 'there', u.email, pw)
     const [s, e] = await Promise.all([
       u.phone ? sms(u.phone, body) : Promise.resolve(false),
-      email(u.email, 'Your BSM Valet login', html),
+      email(u.email, 'Your BSM Valet login — account ready', html, body),
     ])
     return NextResponse.json({ ok: true, sms: s, email: e })
   }
