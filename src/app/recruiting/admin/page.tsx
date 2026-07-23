@@ -47,6 +47,15 @@ const Check = ({ size = 11 }: { size?: number }) => (
     strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 )
 
+const Trash = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path d="M4 7h16" /><path d="M10 11v6M14 11v6" />
+    <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+    <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+  </svg>
+)
+
 const field: React.CSSProperties = {
   background: HOVER, border: `1px solid ${BORDER}`, borderRadius: 9,
   padding: '9px 12px', color: INK, fontSize: 13.5, fontFamily: 'inherit', outline: 'none', width: '100%',
@@ -59,6 +68,8 @@ export default function AdminPage() {
   const [msg, setMsg] = useState('')
   const [q, setQ] = useState('')
   const [toast, setToast] = useState('')
+  const [meId, setMeId] = useState('')
+  const [armed, setArmed] = useState<string | null>(null)   // row awaiting delete confirmation
 
   // Which group each user was in WHEN LOADED. Frozen for the life of the page so a card
   // never jumps between "Pending" and "Active" while you're editing or saving it.
@@ -73,6 +84,7 @@ export default function AdminPage() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setStatus('denied'); return }
+      setMeId(user.id)
       const { data: me } = await supabase.from('app_users').select('role').eq('id', user.id).single()
       if (me?.role !== 'admin') { setStatus('denied'); return }
       const { data: all, error } = await supabase.from('app_users').select('*').order('email')
@@ -116,6 +128,24 @@ export default function AdminPage() {
     flash(error ? 'Error: ' + error.message : `Saved ${u.full_name || u.email.split('@')[0]}`)
   }
 
+  async function remove(u: AppUser) {
+    if (u.id === meId) { flash('You cannot remove your own account.'); setArmed(null); return }
+    const { error } = await supabase.from('app_users').delete().eq('id', u.id)
+    if (error) {
+      // Most common cause: this user is referenced by offers / requests they created.
+      const fk = /foreign key|violates/i.test(error.message)
+      flash(fk
+        ? 'Cannot remove — this user is linked to existing records. Untick "active" instead.'
+        : 'Error: ' + error.message)
+      setArmed(null)
+      return
+    }
+    delete groupRef.current[u.id]
+    setUsers(us => us.filter(x => x.id !== u.id))
+    setArmed(null)
+    flash(`Removed ${u.full_name || u.email.split('@')[0]}`)
+  }
+
   let tmr: any
   function flash(m: string) { setToast(m); clearTimeout(tmr); tmr = setTimeout(() => setToast(''), 2600) }
 
@@ -148,11 +178,11 @@ export default function AdminPage() {
 
         {pending.length > 0 && (<>
           <SectionLabel>Pending assignment · <b style={{ color: GOLD }}>{pending.length}</b></SectionLabel>
-          {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} pending />)}
+          {pending.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} remove={remove} armed={armed === u.id} setArmed={setArmed} isSelf={u.id === meId} pending />)}
         </>)}
 
         <SectionLabel>Active users · <b style={{ color: GOLD }}>{assigned.length}</b></SectionLabel>
-        {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} />)}
+        {assigned.map(u => <Row key={u.id} u={u} patch={patch} toggleDept={toggleDept} changeRole={changeRole} save={save} remove={remove} armed={armed === u.id} setArmed={setArmed} isSelf={u.id === meId} />)}
         {filtered.length === 0 && <p style={{ color: MUTE }}>No users match “{q}”.</p>}
 
         <div style={{ marginTop: 34, padding: '16px 18px', background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12, fontSize: 12, color: MUTE, lineHeight: 1.7 }}>
@@ -169,12 +199,16 @@ export default function AdminPage() {
   )
 }
 
-function Row({ u, patch, toggleDept, changeRole, save, pending }: {
+function Row({ u, patch, toggleDept, changeRole, save, remove, armed, setArmed, isSelf, pending }: {
   u: AppUser
   patch: (id: string, p: Partial<AppUser>) => void
   toggleDept: (u: AppUser, d: string) => void
   changeRole: (u: AppUser, r: string) => void
   save: (u: AppUser) => void
+  remove: (u: AppUser) => void
+  armed: boolean
+  setArmed: (id: string | null) => void
+  isSelf: boolean
   pending?: boolean
 }) {
   const name = u.full_name || u.email.split('@')[0]
@@ -234,7 +268,40 @@ function Row({ u, patch, toggleDept, changeRole, save, pending }: {
           style={{ background: GOLD, color: ON_GOLD, border: 0, borderRadius: 9, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
           Save
         </button>
+
+        {!isSelf && (
+          <button onClick={() => setArmed(armed ? null : u.id)}
+            title="Remove user"
+            style={{
+              background: 'transparent', border: `1px solid ${BORDER}`, color: armed ? 'var(--danger)' : FAINT,
+              borderRadius: 9, padding: '9px 11px', cursor: 'pointer', fontFamily: 'inherit',
+              display: 'inline-flex', alignItems: 'center',
+            }}>
+            <Trash />
+          </button>
+        )}
       </div>
+
+      {armed && (
+        <div style={{
+          flexBasis: '100%', marginTop: 4, padding: '11px 14px', borderRadius: 10,
+          background: 'var(--danger-bg)', border: '1px solid var(--danger)',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 12.5, color: 'var(--danger)', flex: '1 1 240px', lineHeight: 1.5 }}>
+            Remove <b>{u.full_name || u.email}</b> from the app? This deletes their access record.
+            It does not delete their sign-in account — to block access instead, untick “active”.
+          </span>
+          <button onClick={() => setArmed(null)}
+            style={{ background: 'transparent', border: `1px solid ${BORDER}`, color: MUTE, borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Cancel
+          </button>
+          <button onClick={() => remove(u)}
+            style={{ background: 'var(--danger)', border: 0, color: '#fff', borderRadius: 8, padding: '7px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Remove
+          </button>
+        </div>
+      )}
 
       {lane && (
         <div style={{ flexBasis: '100%', fontSize: 11.5, color: FAINT, marginTop: -4 }}>
